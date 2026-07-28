@@ -1,638 +1,708 @@
-import sqlite3
 
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
+import sqlite3
 import hashlib
-from tkcalendar import DateEntry
-from tkinter import ttk
-
-# Colour scheme
-BG_COLOR      = "#1B2B34"   # dark background
-FRAME_COLOR   = "#2C3E50"   # section frame
-GREEN_COLOR   = "#27AE60"   # bright green
-YELLOW_COLOR  = "#F1C40F"   # golden yellow
-TEAL_COLOR    = "#1ABC9C"   # teal
-TEXT_COLOR    = "white"
-FONT_TITLE    = ("Arial", 14, "bold")
-FONT_BTN      = ("Arial", 12, "bold")
-
-# =========================
-# SECTION 1: Database Setup
-# =========================
-conn = sqlite3.connect("society.db")
-cursor = conn.cursor()
-
-cursor.execute("""CREATE TABLE IF NOT EXISTS Members (
-    MemberID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name TEXT NOT NULL,
-    Contact TEXT,
-    Role TEXT,
-    Status TEXT
-)""")
-
-cursor.execute("""CREATE TABLE IF NOT EXISTS Events (
-    EventID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Title TEXT NOT NULL,
-    Date TEXT,
-    Location TEXT,
-    Description TEXT
-)""")
-
-cursor.execute("""CREATE TABLE IF NOT EXISTS Inventory (
-    ItemID INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemName TEXT NOT NULL,
-    Quantity INTEGER,
-    Location TEXT,
-    Notes TEXT
-)""")
-
-cursor.execute("""CREATE TABLE IF NOT EXISTS BorrowedItems (
-    BorrowID INTEGER PRIMARY KEY AUTOINCREMENT,
-    ItemID INTEGER,
-    MemberID INTEGER,
-    EventID INTEGER,
-    DateBorrowed TEXT,
-    DateReturned TEXT,
-    FOREIGN KEY(ItemID) REFERENCES Inventory(ItemID),
-    FOREIGN KEY(MemberID) REFERENCES Members(MemberID),
-    FOREIGN KEY(EventID) REFERENCES Events(EventID)
-)""")
-
-cursor.execute("""CREATE TABLE IF NOT EXISTS Users (
-    UserID INTEGER PRIMARY KEY AUTOINCREMENT,
-    MemberID INTEGER,
-    Username TEXT UNIQUE NOT NULL,
-    Password TEXT,
-    Role TEXT CHECK(Role IN ('admin','member')) NOT NULL,
-    FirstLogin BOOLEAN DEFAULT 1,
-    FOREIGN KEY(MemberID) REFERENCES Members(MemberID)
-)""")
-
-# Seed default admins
-cursor.execute("SELECT * FROM Users WHERE Role='admin'")
-if not cursor.fetchone():
-    cursor.execute("INSERT INTO Users (MemberID, Username, Password, Role, FirstLogin) VALUES (?, ?, ?, ?, ?)",
-                   (None, "admin", hashlib.sha256("admin123".encode()).hexdigest(), "admin", 0))
-    print("Default admin created: username=admin, password=admin123")
-
-cursor.execute("SELECT * FROM Users WHERE Username='admin2'")
-if not cursor.fetchone():
-    cursor.execute("INSERT INTO Users (MemberID, Username, Password, Role, FirstLogin) VALUES (?, ?, ?, ?, ?)",
-                   (None, "admin2", hashlib.sha256("admin456".encode()).hexdigest(), "admin", 0))
-    print("Second admin created: username=admin2, password=admin456")
-
-conn.commit()
-conn.close()
-
-
-
-# =========================
-# SECTION 2: Helper Functions
-# =========================
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def check_login(username, password):
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT UserID, Password, Role, FirstLogin FROM Users WHERE Username=?", (username,))
-    row = cursor.fetchone()
-    conn.close()
-
-    if row:
-        user_id, stored_pw, role, first_login = row
-        if first_login == 1:
-            return ("first_login", user_id, role)
-        elif stored_pw and stored_pw == hash_password(password):
-            return ("success", user_id, role)
-    return ("fail", None, None)
-
-def reset_password(user_id, new_password):
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE Users SET Password=?, FirstLogin=0 WHERE UserID=?",
-                   (hash_password(new_password), user_id))
-    conn.commit()
-    conn.close()
-
-def force_reset(user_id):
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE Users SET Password=NULL, FirstLogin=1 WHERE UserID=?", (user_id,))
-    conn.commit()
-    conn.close()
-
-# =========================
-# SECTION 3: Database Functions
-# =========================
-def add_member(name, contact, role, status):
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO Members (Name, Contact, Role, Status) VALUES (?, ?, ?, ?)",
-                   (name, contact, role, status))
-    member_id = cursor.lastrowid
-    cursor.execute("INSERT INTO Users (MemberID, Username, Role, Password, FirstLogin) VALUES (?, ?, ?, NULL, 1)",
-                   (member_id, name.lower(), "member"))
-    conn.commit()
-    conn.close()
-    messagebox.showinfo("Success", f"Member added! Username: {name.lower()}")
-
-def borrow_item(item_id, member_id, event_id, date_borrowed):
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO BorrowedItems (ItemID, MemberID, EventID, DateBorrowed) VALUES (?, ?, ?, ?)",
-                   (item_id, member_id, event_id, date_borrowed))
-    conn.commit()
-    conn.close()
-    messagebox.showinfo("Success", "Item borrowed successfully!")
-
-def return_item(borrow_id, date_returned):
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("UPDATE BorrowedItems SET DateReturned=? WHERE BorrowID=?",
-                   (date_returned, borrow_id))
-    conn.commit()
-    conn.close()
-    messagebox.showinfo("Success", "Item return authorized!")
-def logout(root):
-    root.destroy()
-    login_gui()
-
-
-def borrow_items_gui(user_id):
-    win = tk.Toplevel(root)
-    win.title("Borrow Items")
-
-    tree = ttk.Treeview(win, columns=("ID", "Name", "Qty", "Location"), show="headings", height=10)
-    tree.pack(padx=10, pady=10)
-
-    tree.heading("ID", text="Item ID")
-    tree.heading("Name", text="Item Name")
-    tree.heading("Qty", text="Quantity")
-    tree.heading("Location", text="Location")
-
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT ItemID, ItemName, Quantity, Location FROM Inventory")
-    rows = cursor.fetchall()
-    conn.close()
-
-    for row in rows:
-        tree.insert("", "end", values=row)
-
-    tk.Label(win, text="Borrow Date").pack()
-    borrow_date = DateEntry(win, width=12, background='darkblue',
-                            foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
-    borrow_date.pack(pady=5)
-
-    def save_borrow():
-        selected = tree.selection()
-        if not selected:
-            messagebox.showerror("Error", "No items selected!")
-            return
-        for sel in selected:
-            item_id = tree.item(sel, "values")[0]
-            borrow_item(item_id, user_id, None, borrow_date.get())
-        messagebox.showinfo("Success", "Borrow successful!")
-        win.destroy()
-
-    tk.Button(win, text="Borrow Selected", command=save_borrow,
-              bg=GREEN_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(pady=10)
-
-# Other GUI functions: add_member_gui, add_event_gui, add_item_gui, list_inventory, list_members, list_events, etc.
-# (Keep your existing ones, they are fine — just ensure no duplicate borrow functions remain.)
-
-# =========================
-# SECTION 3: GUI Functions
-# =========================
-
-# Borrow Items (single or multiple via table)
-def borrow_items_gui(user_id):
-    win = tk.Toplevel(root)
-    win.title("Borrow Items")
-
-    tree = ttk.Treeview(win, columns=("ID", "Name", "Qty", "Location"), show="headings", height=10)
-    tree.pack(padx=10, pady=10)
-
-    tree.heading("ID", text="Item ID")
-    tree.heading("Name", text="Item Name")
-    tree.heading("Qty", text="Quantity")
-    tree.heading("Location", text="Location")
-
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT ItemID, ItemName, Quantity, Location FROM Inventory")
-    rows = cursor.fetchall()
-    conn.close()
-
-    for row in rows:
-        tree.insert("", "end", values=row)
-
-    tk.Label(win, text="Borrow Date").pack()
-    borrow_date = DateEntry(win, width=12, background='darkblue',
-                            foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
-    borrow_date.pack(pady=5)
-
-    def save_borrow():
-        selected = tree.selection()
-        if not selected:
-            messagebox.showerror("Error", "No items selected!")
-            return
-        for sel in selected:
-            item_id = tree.item(sel, "values")[0]
-            borrow_item(item_id, user_id, None, borrow_date.get())
-        messagebox.showinfo("Success", "Borrow successful!")
-        win.destroy()
-
-    tk.Button(win, text="Borrow Selected", command=save_borrow,
-              bg=GREEN_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(pady=10)
-
-
-# Member Management
-def add_member_gui():
-    win = tk.Toplevel(root)
-    win.title("Add Member")
-
-    tk.Label(win, text="Name").pack()
-    entry_name = tk.Entry(win)
-    entry_name.pack()
-
-    tk.Label(win, text="Contact").pack()
-    entry_contact = tk.Entry(win)
-    entry_contact.pack()
-
-    tk.Label(win, text="Role").pack()
-    entry_role = tk.Entry(win)
-    entry_role.pack()
-
-    tk.Label(win, text="Status").pack()
-    entry_status = tk.Entry(win)
-    entry_status.pack()
-
-    def save_member():
-        add_member(entry_name.get(), entry_contact.get(), entry_role.get(), entry_status.get())
-        win.destroy()
-
-    tk.Button(win, text="Save", command=save_member).pack(pady=10)
-
-
-def list_members():
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Members")
-    rows = cursor.fetchall()
-    conn.close()
-
-    win = tk.Toplevel(root)
-    win.title("Members List")
-    for row in rows:
-        tk.Label(win, text=str(row)).pack()
-
-
-# Event Management
-def add_event_gui():
-    win = tk.Toplevel(root)
-    win.title("Add Event")
-
-    tk.Label(win, text="Title").pack()
-    entry_title = tk.Entry(win)
-    entry_title.pack()
-
-    tk.Label(win, text="Date").pack()
-    entry_date = tk.Entry(win)
-    entry_date.pack()
-
-    tk.Label(win, text="Location").pack()
-    entry_location = tk.Entry(win)
-    entry_location.pack()
-
-    tk.Label(win, text="Description").pack()
-    entry_desc = tk.Entry(win)
-    entry_desc.pack()
-
-    def save_event():
-        conn = sqlite3.connect("society.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO Events (Title, Date, Location, Description) VALUES (?, ?, ?, ?)",
-                       (entry_title.get(), entry_date.get(), entry_location.get(), entry_desc.get()))
-        conn.commit()
-        conn.close()
-        messagebox.showinfo("Success", "Event added successfully!")
-        win.destroy()
-
-    tk.Button(win, text="Save", command=save_event).pack(pady=10)
-
-
-def list_events():
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Events")
-    rows = cursor.fetchall()
-    conn.close()
-
-    win = tk.Toplevel(root)
-    win.title("Events List")
-    for row in rows:
-        tk.Label(win, text=str(row)).pack()
-
-
-# Inventory Management
-def add_item_gui():
-    win = tk.Toplevel(root)
-    win.title("Add Inventory Item")
-
-    tk.Label(win, text="Item Name").pack()
-    entry_name = tk.Entry(win)
-    entry_name.pack()
-
-    tk.Label(win, text="Quantity").pack()
-    entry_qty = tk.Entry(win)
-    entry_qty.pack()
-
-    tk.Label(win, text="Location").pack()
-    entry_loc = tk.Entry(win)
-    entry_loc.pack()
-
-    tk.Label(win, text="Notes").pack()
-    entry_notes = tk.Entry(win)
-    entry_notes.pack()
-
-    def save_item():
-        conn = sqlite3.connect("society.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO Inventory (ItemName, Quantity, Location, Notes) VALUES (?, ?, ?, ?)",
-                       (entry_name.get(), entry_qty.get(), entry_loc.get(), entry_notes.get()))
-        conn.commit()
-        conn.close()
-        messagebox.showinfo("Success", "Item added successfully!")
-        win.destroy()
-
-    tk.Button(win, text="Save", command=save_item).pack(pady=10)
-
-
-def list_inventory():
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Inventory")
-    rows = cursor.fetchall()
-    conn.close()
-
-    win = tk.Toplevel(root)
-    win.title("Inventory List")
-    for row in rows:
-        tk.Label(win, text=str(row)).pack()
-
-
-# Borrowed Items
-def list_borrowed_items():
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT BorrowedItems.BorrowID, Inventory.ItemName, Members.Name, Events.Title, 
-               BorrowedItems.DateBorrowed, BorrowedItems.DateReturned
-        FROM BorrowedItems
-        LEFT JOIN Inventory ON BorrowedItems.ItemID = Inventory.ItemID
-        LEFT JOIN Members ON BorrowedItems.MemberID = Members.MemberID
-        LEFT JOIN Events ON BorrowedItems.EventID = Events.EventID
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-
-    win = tk.Toplevel(root)
-    win.title("Borrowed Items List")
-    for row in rows:
-        tk.Label(win, text=str(row)).pack()
-
-
-def list_currently_borrowed_items():
-    conn = sqlite3.connect("society.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT BorrowedItems.BorrowID, Inventory.ItemName, Members.Name, Events.Title, 
-               BorrowedItems.DateBorrowed
-        FROM BorrowedItems
-        LEFT JOIN Inventory ON BorrowedItems.ItemID = Inventory.ItemID
-        LEFT JOIN Members ON BorrowedItems.MemberID = Members.MemberID
-        LEFT JOIN Events ON BorrowedItems.EventID = Events.EventID
-        WHERE BorrowedItems.DateReturned IS NULL
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-
-    win = tk.Toplevel(root)
-    win.title("Currently Borrowed Items")
-    if rows:
-        for row in rows:
-            tk.Label(win, text=str(row)).pack()
-    else:
-        tk.Label(win, text="No items are currently borrowed.").pack()
-
-
-def return_item_gui():
-    win = tk.Toplevel(root)
-    win.title("Authorize Return")
-
-    tk.Label(win, text="Borrow ID").pack()
-    entry_borrow = tk.Entry(win)
-    entry_borrow.pack()
-
-    tk.Label(win, text="Return Date").pack()
-    entry_date = tk.Entry(win)
-    entry_date.pack()
-
-    def authorize_return():
-        return_item(entry_borrow.get(), entry_date.get())
-        win.destroy()
-
-    tk.Button(win, text="Authorize", command=authorize_return).pack(pady=10)
-
-
-# Security
-def reset_admin_password_gui():
-    win = tk.Toplevel(root)
-    win.title("Reset Admin Password")
-
-    tk.Label(win, text="New Password").pack()
-    entry_new = tk.Entry(win, show="*")
-    entry_new.pack()
-
-    tk.Label(win, text="Confirm Password").pack()
-    entry_confirm = tk.Entry(win, show="*")
-    entry_confirm.pack()
-
-    def save_password():
-        if entry_new.get() != entry_confirm.get():
-            messagebox.showerror("Error", "Passwords do not match!")
-            return
-        conn = sqlite3.connect("society.db")
-        cursor = conn.cursor()
-        cursor.execute("UPDATE Users SET Password=? WHERE Role='admin'", 
-                       (hash_password(entry_new.get()),))
-        conn.commit()
-        conn.close()
-        messagebox.showinfo("Success", "Admin password reset successfully!")
-        win.destroy()
-
-    tk.Button(win, text="Save", command=save_password).pack(pady=10)
-
-
-def master_override_gui():
-    win = tk.Toplevel(root)
-    win.title("Master Override Reset")
-
-    tk.Label(win, text="Enter Master Override Code").pack()
-    entry_code = tk.Entry(win, show="*")
-    entry_code.pack()
-
-    tk.Label(win, text="Username to Reset").pack()
-    entry_user = tk.Entry(win)
-    entry_user.pack()
-
-    tk.Label(win, text="New Password").pack()
-    entry_new = tk.Entry(win, show="*")
-
-
-# =========================
-# SECTION 5: Main Window
-# =========================
-def open_main_window(user_id, role):
-    global root
-    root = tk.Tk()
-    root.title("Society Management System")
-    root.state('zoomed')
-    root.configure(bg=BG_COLOR)
-
-    frame = tk.Frame(root)
-    frame.pack(expand=True)
-
-    if role == "member":
-        member_frame = tk.LabelFrame(frame, text="Member Actions", bg=FRAME_COLOR, fg=TEXT_COLOR, font=FONT_TITLE)
-        member_frame.grid(row=0, column=0, padx=20, pady=20)
-
-        tk.Button(member_frame, text="List Members", command=list_members,
-                  bg=GREEN_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-        tk.Button(member_frame, text="View Inventory", command=list_inventory,
-                  bg=TEAL_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-        tk.Button(member_frame, text="Borrow Items", command=lambda: borrow_items_gui(user_id),
-                  bg=YELLOW_COLOR, fg="black", font=FONT_BTN).pack(padx=10, pady=5)
-
-    elif role == "admin":
-        # Events Section
-        event_frame = tk.LabelFrame(frame, text="Events", bg=FRAME_COLOR, fg=TEXT_COLOR, font=FONT_TITLE)
-        event_frame.grid(row=0, column=0, padx=20, pady=20)
-
-        tk.Button(event_frame, text="Add Event", command=add_event_gui,
-                  bg=GREEN_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-        tk.Button(event_frame, text="List Events", command=list_events,
-                  bg=TEAL_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-
-        # Inventory Section
-        inventory_frame = tk.LabelFrame(frame, text="Inventory", bg=FRAME_COLOR, fg=TEXT_COLOR, font=FONT_TITLE)
-        inventory_frame.grid(row=0, column=1, padx=20, pady=20)
-
-        tk.Button(inventory_frame, text="Add Item", command=add_item_gui,
-                  bg=YELLOW_COLOR, fg="black", font=FONT_BTN).pack(padx=10, pady=5)
-        tk.Button(inventory_frame, text="List Inventory", command=list_inventory,
-                  bg=TEAL_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-
-        # Members Section
-        members_frame = tk.LabelFrame(frame, text="Members", bg=FRAME_COLOR, fg=TEXT_COLOR, font=FONT_TITLE)
-        members_frame.grid(row=1, column=0, padx=20, pady=20)
-
-        tk.Button(members_frame, text="List Members", command=list_members,
-                  bg=GREEN_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-        tk.Button(members_frame, text="Add Member", command=add_member_gui,
-                  bg=YELLOW_COLOR, fg="black", font=FONT_BTN).pack(padx=10, pady=5)
-
-        # Security Section
-        security_frame = tk.LabelFrame(frame, text="Security", bg=FRAME_COLOR, fg=TEXT_COLOR, font=FONT_TITLE)
-        security_frame.grid(row=1, column=1, padx=20, pady=20)
-
-        tk.Button(security_frame, text="Reset Admin Password", command=reset_admin_password_gui,
-                  bg=GREEN_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-        tk.Button(security_frame, text="Master Override Reset", command=master_override_gui,
-                  bg=TEAL_COLOR, fg=TEXT_COLOR, font=FONT_BTN).pack(padx=10, pady=5)
-
-    # Logout Button (for both roles)
-    tk.Button(frame, text="Logout", command=lambda: logout(root),
-              bg="#C0392B", fg=TEXT_COLOR, font=FONT_BTN).grid(row=6, column=0, padx=20, pady=20)
-
-    root.mainloop()
-
-
-# =========================
-# SECTION 6: Login Window
-# =========================
-def set_password_gui(user_id, role):
-    win = tk.Toplevel()
-    win.title("Set New Password")
-
-    tk.Label(win, text="Enter New Password").pack()
-    entry_pass = tk.Entry(win, show="*")
-    entry_pass.pack(pady=5)
-
-    def save_password():
-        reset_password(user_id, entry_pass.get())
-        messagebox.showinfo("Success", "Password set successfully!")
-        win.destroy()
-        open_main_window(user_id, role)
-
-    tk.Button(win, text="Save", command=save_password).pack(pady=10)
-
-
-def login_gui():
-    login_win = tk.Tk()
-    login_win.title("Login")
-
-    tk.Label(login_win, text="Username").pack()
-    entry_user = tk.Entry(login_win)
-    entry_user.pack()
-
-    tk.Label(login_win, text="Password").pack()
-    entry_pass = tk.Entry(login_win, show="*")
-    entry_pass.pack()
-
-    def attempt_login():
-        username = entry_user.get()
-        password = entry_pass.get()
-
-        # Master override check
-        if password == "28472":
-            conn = sqlite3.connect("society.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT UserID, Role FROM Users WHERE Username=?", (username.lower(),))
-            row = cursor.fetchone()
-            conn.close()
-
-            if row:
-                user_id, role = row
-                messagebox.showinfo("Override Login", f"Master override used for {username}. Please reset password.")
-                login_win.destroy()
-                set_password_gui(user_id, role)
-                return
-            else:
-                messagebox.showerror("Error", "No such user found.")
-                return
-
-        # Normal login flow
-        status, user_id, role = check_login(username, password)
-        if status == "first_login":
-            messagebox.showinfo("First Login", "Please set your new password.")
-            login_win.destroy()
-            set_password_gui(user_id, role)
-        elif status == "success":
-            messagebox.showinfo("Login Success", f"Welcome, {role}!")
-            login_win.destroy()
-            open_main_window(user_id, role)
-        else:
-            messagebox.showerror("Login Failed", "Invalid credentials")
-
-    tk.Button(login_win, text="Login", command=attempt_login).pack(pady=10)
-    login_win.mainloop()
-
-
-# =========================
-# Run Program
-# =========================
-if __name__ == "__main__":
-    login_gui()
+import os
+import csv
+from datetime import datetime
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "society.db")
+
+
+def hash_password(pw: str) -> str:
+	return hashlib.sha256(pw.encode('utf-8')).hexdigest()
+
+
+def setup_database():
+	conn = sqlite3.connect(DB_PATH)
+	cur = conn.cursor()
+
+	def table_exists(table_name):
+		cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+		return cur.fetchone() is not None
+
+	def get_columns(table_name):
+		cur.execute(f"PRAGMA table_info({table_name})")
+		return [row[1] for row in cur.fetchall()]
+
+	def migrate_members():
+		if not table_exists('Members'):
+			return
+		cols = [c.lower() for c in get_columns('Members')]
+		legacy_condition = 'memberid' in cols and 'name' in cols and any(x in cols for x in ('contact', 'role', 'status', 'itemname', 'description', 'location'))
+		new_schema_ok = {'memberid', 'name', 'class', 'roll', 'email'}.issubset(set(cols))
+		if legacy_condition and not new_schema_ok:
+			cur.execute('DROP TABLE IF EXISTS Members_old')
+			cur.execute('ALTER TABLE Members RENAME TO Members_old')
+			cur.execute('''
+			CREATE TABLE Members (
+				MemberID INTEGER PRIMARY KEY AUTOINCREMENT,
+				Name TEXT NOT NULL,
+				Class TEXT,
+				Roll TEXT,
+				Email TEXT
+			)
+			''')
+			email_field = 'Email' if 'email' in cols else ('contact' if 'contact' in cols else 'NULL')
+			class_field = 'Class' if 'class' in cols else 'NULL'
+			roll_field = 'Roll' if 'roll' in cols else 'NULL'
+			cur.execute(f'''
+			INSERT INTO Members (MemberID, Name, Class, Roll, Email)
+			SELECT memberid, name, {class_field}, {roll_field}, {email_field} FROM Members_old
+			''')
+			cur.execute('DROP TABLE Members_old')
+
+	def migrate_events():
+		if not table_exists('Events'):
+			return
+		cols = [c.lower() for c in get_columns('Events')]
+		if 'notes' not in cols and 'description' in cols:
+			cur.execute('DROP TABLE IF EXISTS Events_old')
+			cur.execute('ALTER TABLE Events RENAME TO Events_old')
+			cur.execute('''
+			CREATE TABLE Events (
+				EventID INTEGER PRIMARY KEY AUTOINCREMENT,
+				Title TEXT NOT NULL,
+				Date TEXT,
+				Location TEXT,
+				Notes TEXT
+			)
+			''')
+			cur.execute('''
+			INSERT INTO Events (EventID, Title, Date, Location, Notes)
+			SELECT EventID, Title, Date, Location, Description FROM Events_old
+			''')
+			cur.execute('DROP TABLE Events_old')
+
+	def migrate_inventory():
+		if not table_exists('Inventory'):
+			return
+		cols = [c.lower() for c in get_columns('Inventory')]
+		if 'name' not in cols and 'itemname' in cols:
+			cur.execute('DROP TABLE IF EXISTS Inventory_old')
+			cur.execute('ALTER TABLE Inventory RENAME TO Inventory_old')
+			cur.execute('''
+			CREATE TABLE Inventory (
+				ItemID INTEGER PRIMARY KEY AUTOINCREMENT,
+				Name TEXT NOT NULL,
+				Quantity INTEGER DEFAULT 0,
+				Notes TEXT
+			)
+			''')
+			cur.execute('''
+			INSERT INTO Inventory (ItemID, Name, Quantity, Notes)
+			SELECT ItemID, ItemName, Quantity, COALESCE(Notes, Location) FROM Inventory_old
+			''')
+			cur.execute('DROP TABLE Inventory_old')
+
+	def migrate_borrowed():
+		if not table_exists('BorrowedItems'):
+			return
+		cols = [c.lower() for c in get_columns('BorrowedItems')]
+		if 'borrowdate' not in cols and 'dateborrowed' in cols:
+			cur.execute('DROP TABLE IF EXISTS BorrowedItems_old')
+			cur.execute('ALTER TABLE BorrowedItems RENAME TO BorrowedItems_old')
+			cur.execute('''
+			CREATE TABLE BorrowedItems (
+				BorrowID INTEGER PRIMARY KEY AUTOINCREMENT,
+				ItemID INTEGER,
+				MemberID INTEGER,
+				BorrowDate TEXT,
+				ReturnDate TEXT,
+				Returned BOOLEAN DEFAULT 0
+			)
+			''')
+			cur.execute('''
+			INSERT INTO BorrowedItems (BorrowID, ItemID, MemberID, BorrowDate, ReturnDate, Returned)
+			SELECT BorrowID, ItemID, MemberID, DateBorrowed, DateReturned,
+			       CASE WHEN DateReturned IS NOT NULL AND DateReturned != '' THEN 1 ELSE 0 END
+			FROM BorrowedItems_old
+			''')
+			cur.execute('DROP TABLE BorrowedItems_old')
+
+	def migrate_attendance():
+		if not table_exists('Attendance'):
+			return
+		cols = [c.lower() for c in get_columns('Attendance')]
+		if 'attid' not in cols and 'attendanceid' in cols:
+			cur.execute('DROP TABLE IF EXISTS Attendance_old')
+			cur.execute('ALTER TABLE Attendance RENAME TO Attendance_old')
+			cur.execute('''
+			CREATE TABLE Attendance (
+				AttID INTEGER PRIMARY KEY AUTOINCREMENT,
+				MemberID INTEGER,
+				EventID INTEGER,
+				Present BOOLEAN DEFAULT 0,
+				Timestamp TEXT
+			)
+			''')
+			cur.execute('''
+			INSERT INTO Attendance (AttID, MemberID, EventID, Present, Timestamp)
+			SELECT AttendanceID, MemberID, EventID, Present, datetime('now') FROM Attendance_old
+			''')
+			cur.execute('DROP TABLE Attendance_old')
+
+	# Run migrations for any legacy schema before creating the expected tables.
+	migrate_members()
+	migrate_events()
+	migrate_inventory()
+	migrate_borrowed()
+	migrate_attendance()
+
+	# Users
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS Users (
+		UserID INTEGER PRIMARY KEY AUTOINCREMENT,
+		MemberID INTEGER,
+		Username TEXT UNIQUE NOT NULL,
+		Password TEXT,
+		Role TEXT CHECK(Role IN ('admin','member')) NOT NULL DEFAULT 'member',
+		FirstLogin BOOLEAN DEFAULT 1
+	)
+	''')
+	# Members
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS Members (
+		MemberID INTEGER PRIMARY KEY AUTOINCREMENT,
+		Name TEXT NOT NULL,
+		Class TEXT,
+		Roll TEXT,
+		Email TEXT
+	)
+	''')
+	# Events
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS Events (
+		EventID INTEGER PRIMARY KEY AUTOINCREMENT,
+		Title TEXT NOT NULL,
+		Date TEXT,
+		Location TEXT,
+		Notes TEXT
+	)
+	''')
+	# Inventory
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS Inventory (
+		ItemID INTEGER PRIMARY KEY AUTOINCREMENT,
+		Name TEXT NOT NULL,
+		Quantity INTEGER DEFAULT 0,
+		Notes TEXT
+	)
+	''')
+	# Borrowed
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS BorrowedItems (
+		BorrowID INTEGER PRIMARY KEY AUTOINCREMENT,
+		ItemID INTEGER,
+		MemberID INTEGER,
+		BorrowDate TEXT,
+		ReturnDate TEXT,
+		Returned BOOLEAN DEFAULT 0
+	)
+	''')
+	# Attendance
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS Attendance (
+		AttID INTEGER PRIMARY KEY AUTOINCREMENT,
+		MemberID INTEGER,
+		EventID INTEGER,
+		Present BOOLEAN DEFAULT 0,
+		Timestamp TEXT
+	)
+	''')
+
+	# seed admin
+	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
+	if not cur.fetchone():
+		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password("admin123")))
+
+	conn.commit()
+	conn.close()
+
+
+class App:
+	def __init__(self, root):
+		self.root = root
+		root.title("School Society Manager")
+		root.geometry("980x620")
+		self.style = ttk.Style(root)
+		self.style.theme_use('clam')
+		# apply visual theme
+		self.apply_theme()
+
+		self.container = ttk.Frame(root)
+		self.container.pack(fill=tk.BOTH, expand=True)
+
+		self.sidebar = ttk.Frame(self.container, width=220)
+		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+
+		self.content = ttk.Frame(self.container)
+		self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+		# Login
+		self.login_frame = ttk.Frame(self.content, padding=24)
+		self.login_frame.pack(fill=tk.BOTH, expand=True)
+		ttk.Label(self.login_frame, text="Login", font=(None, 18)).pack(pady=(0, 8))
+		form = ttk.Frame(self.login_frame)
+		form.pack()
+		ttk.Label(form, text="Username:").grid(row=0, column=0, sticky=tk.E, padx=4, pady=4)
+		self.username_var = tk.StringVar()
+		ttk.Entry(form, textvariable=self.username_var).grid(row=0, column=1, padx=4, pady=4)
+		tk.Label(form, text="Password:").grid(row=1, column=0, sticky=tk.E, padx=4, pady=4)
+		self.password_var = tk.StringVar()
+		ttk.Entry(form, textvariable=self.password_var, show="*").grid(row=1, column=1, padx=4, pady=4)
+		btn_frame = ttk.Frame(self.login_frame)
+		btn_frame.pack(pady=12)
+		ttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(btn_frame, text="Sign up", command=self.open_signup, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+
+		# sidebar buttons (hidden until login)
+		self.side_buttons = {}
+		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
+			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
+			b.pack(fill=tk.X, padx=8, pady=6)
+			self.side_buttons[key] = b
+		self.sidebar.pack_forget()
+		self.current_view = None
+
+	def try_login(self):
+		u = self.username_var.get().strip()
+		p = self.password_var.get()
+		if not u or not p:
+			messagebox.showwarning("Missing", "Enter username and password")
+			return
+		conn = sqlite3.connect(DB_PATH)
+		cur = conn.cursor()
+		cur.execute("SELECT Password, Role FROM Users WHERE Username = ?", (u,))
+		row = cur.fetchone()
+		conn.close()
+		if not row:
+			messagebox.showerror("Login failed", "Unknown username")
+			return
+		if hash_password(p) != row[0]:
+			messagebox.showerror("Login failed", "Incorrect password")
+			return
+		self.user = {'username': u, 'role': row[1] if len(row) > 1 else 'member'}
+		self.login_frame.destroy()
+		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+		self.show_view('dashboard')
+
+	def open_signup(self):
+		d = tk.Toplevel(self.root)
+		d.title('Sign up')
+		frm = ttk.Frame(d, padding=16)
+		frm.pack(fill=tk.BOTH, expand=True)
+		tk.Label(frm, text='Register Member Account', font=(None, 14)).grid(row=0, column=0, columnspan=2, pady=(0,12))
+		member_var = tk.StringVar()
+		username_var = tk.StringVar()
+		password_var = tk.StringVar()
+		tk.Label(frm, text='Existing Member ID:').grid(row=1, column=0, sticky=tk.E, padx=4, pady=4)
+		ttk.Entry(frm, textvariable=member_var).grid(row=1, column=1, padx=4, pady=4)
+		tk.Label(frm, text='Username:').grid(row=2, column=0, sticky=tk.E, padx=4, pady=4)
+		tk.Entry(frm, textvariable=username_var).grid(row=2, column=1, padx=4, pady=4)
+		tk.Label(frm, text='Password:').grid(row=3, column=0, sticky=tk.E, padx=4, pady=4)
+		tk.Entry(frm, textvariable=password_var, show='*').grid(row=3, column=1, padx=4, pady=4)
+
+		def save_signup():
+			mid = member_var.get().strip()
+			uname = username_var.get().strip()
+			pw = password_var.get()
+			if not (mid and uname and pw):
+				messagebox.showwarning('Missing', 'Enter member id, username and password')
+				return
+			if not mid.isdigit():
+				messagebox.showwarning('Invalid', 'Member ID must be numeric')
+				return
+			mid = int(mid)
+			conn = sqlite3.connect(DB_PATH)
+			cur = conn.cursor()
+			cur.execute('SELECT MemberID FROM Members WHERE MemberID=?', (mid,))
+			if not cur.fetchone():
+				conn.close()
+				messagebox.showerror('Not registered', 'Member ID not found in database')
+				return
+			cur.execute('SELECT 1 FROM Users WHERE Username=?', (uname,))
+			if cur.fetchone():
+				conn.close()
+				messagebox.showerror('Taken', 'Username already exists')
+				return
+			cur.execute('INSERT INTO Users (MemberID, Username, Password, Role) VALUES (?,?,?,?)', (mid, uname, hash_password(pw), 'member'))
+			conn.commit()
+			conn.close()
+			messagebox.showinfo('Created', 'Account created successfully. Please sign in.')
+			d.destroy()
+
+		btn = ttk.Button(frm, text='Register', command=save_signup, style='Rounded.TButton')
+		btn.grid(row=4, column=0, columnspan=2, pady=12)
+
+	def clear_content(self):
+		if self.current_view:
+			self.current_view.destroy()
+			self.current_view = None
+
+	def apply_theme(self):
+		# Modern color system
+		self.colors = {
+			'bg': '#0b1220',
+			'card': '#0f1724',
+			'fg': '#e6eef8',
+			'accent1': '#7c3aed',
+			'accent2': '#06b6d4',
+			'sidebar': '#071031'
+		}
+		bg = self.colors['bg']
+		fg = self.colors['fg']
+		accent = self.colors['accent1']
+		accent2 = self.colors['accent2']
+		# Base styles
+		self.style.configure('TFrame', background=bg)
+		self.style.configure('TLabel', background=bg, foreground=fg)
+		self.style.configure('TNotebook', background=bg)
+		# Buttons
+		self.style.configure('Rounded.TButton', foreground=fg, background=accent, padding=8, relief='flat', font=('Segoe UI', 10, 'bold'))
+		self.style.map('Rounded.TButton', background=[('active', accent2)])
+		self.style.configure('Sidebar.TButton', foreground=fg, background=self.colors['sidebar'], padding=8, relief='flat')
+		self.style.map('Sidebar.TButton', background=[('active', accent)])
+		# Treeview
+		self.style.configure('Treeview', background=self.colors['card'], fieldbackground=self.colors['card'], foreground=fg, rowheight=24)
+		self.style.map('Treeview', background=[('selected', accent)])
+		# Entry fields
+		self.style.configure('TEntry', fieldbackground=self.colors['card'], foreground=fg)
+		self.style.configure('TCombobox', fieldbackground=self.colors['card'], foreground=fg)
+		# Window bg
+		try:
+			self.root.configure(bg=bg)
+		except Exception:
+			pass
+
+	def draw_gradient(self, canvas, color1, color2):
+		# Simple vertical gradient
+		w = canvas.winfo_reqwidth() or canvas.winfo_width() or 800
+		h = int(canvas['height']) if canvas['height'] else 120
+		# convert hex to rgb
+		def hex_to_rgb(h):
+			h = h.lstrip('#')
+			return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+		r1, g1, b1 = hex_to_rgb(color1)
+		r2, g2, b2 = hex_to_rgb(color2)
+		canvas.delete('grad')
+		canvas.update_idletasks()
+		w = canvas.winfo_width() or w
+		for i in range(h):
+			r = int(r1 + (r2 - r1) * (i / h))
+			g = int(g1 + (g2 - g1) * (i / h))
+			b = int(b1 + (b2 - b1) * (i / h))
+			color = f'#{r:02x}{g:02x}{b:02x}'
+			canvas.create_line(0, i, w, i, fill=color, tags='grad')
+
+	def count_members(self):
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT COUNT(*) FROM Members');n=cur.fetchone()[0];conn.close();return n
+
+	def count_borrowed(self):
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT COUNT(*) FROM BorrowedItems WHERE Returned=0');n=cur.fetchone()[0];conn.close();return n
+
+	def get_next_event(self):
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT Title, Date FROM Events WHERE Date IS NOT NULL');rows=cur.fetchall();conn.close()
+		now = datetime.now()
+		candidates = []
+		for title, datestr in rows:
+			if not datestr: continue
+			# try ISO first, then common formats
+			_dt = None
+			try:
+				_dt = datetime.fromisoformat(datestr)
+			except Exception:
+				try:
+					_dt = datetime.strptime(datestr, '%Y-%m-%d')
+				except Exception:
+					try:
+						_dt = datetime.strptime(datestr, '%d/%m/%Y')
+					except Exception:
+						_dt = None
+			if _dt and _dt >= now:
+				candidates.append((_dt, title, datestr))
+		if not candidates:
+			return None
+		candidates.sort()
+		_dt, title, datestr = candidates[0]
+		return title, _dt
+
+	def show_view(self, key):
+		self.clear_content()
+		frame = ttk.Frame(self.content, padding=12)
+		frame.pack(fill=tk.BOTH, expand=True)
+		self.current_view = frame
+		if key == 'dashboard':
+			tk.Label(frame, text=f"Welcome, {self.user['username']}", font=(None,16)).pack(pady=8)
+			# gradient banner
+			canvas = tk.Canvas(frame, height=120, highlightthickness=0)
+			canvas.pack(fill=tk.X, pady=6)
+			self.draw_gradient(canvas, '#7c3aed', '#06b6d4')
+			# stats cards
+			stats = tk.Frame(frame, bg=self.colors['bg'])
+			stats.pack(fill=tk.X, pady=8)
+			# member count
+			mcount = self.count_members()
+			bcount = self.count_borrowed()
+			next_event = self.get_next_event()
+			card_w = 240
+			card1 = tk.Frame(stats, bg=self.colors['card'], width=card_w, height=90)
+			card1.pack(side=tk.LEFT, padx=12, pady=6)
+			card1.pack_propagate(False)
+			tk.Label(card1, text='Society Members', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=8, pady=(8,0))
+			tk.Label(card1, text=str(mcount), bg=self.colors['card'], fg=self.colors['accent1'], font=(None,20,'bold')).pack(anchor='w', padx=8)
+			# borrowed count
+			card2 = tk.Frame(stats, bg=self.colors['card'], width=card_w, height=90)
+			card2.pack(side=tk.LEFT, padx=12, pady=6)
+			card2.pack_propagate(False)
+			tk.Label(card2, text='Currently Borrowed', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=8, pady=(8,0))
+			tk.Label(card2, text=str(bcount), bg=self.colors['card'], fg=self.colors['accent2'], font=(None,20,'bold')).pack(anchor='w', padx=8)
+			# upcoming event
+			card3 = tk.Frame(stats, bg=self.colors['card'], width=card_w, height=90)
+			card3.pack(side=tk.LEFT, padx=12, pady=6)
+			card3.pack_propagate(False)
+			tk.Label(card3, text='Next Event', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=8, pady=(8,0))
+			if next_event:
+				tk.Label(card3, text=f"{next_event[0]} ({next_event[1].strftime('%Y-%m-%d')})", background=self.colors['card'], foreground=self.colors['fg']).pack(anchor='w', padx=8)
+			else:
+				tk.Label(card3, text='No upcoming events', background=self.colors['card'], foreground=self.colors['fg']).pack(anchor='w', padx=8)
+			tk.Label(frame, text="Use the sidebar to open modules: Members, Events, Inventory, Borrowing, Attendance, Reports, Security").pack()
+		elif key == 'members':
+			self.view_members(frame)
+		elif key == 'events':
+			self.view_events(frame)
+		elif key == 'inventory':
+			self.view_inventory(frame)
+		elif key == 'borrow':
+			self.view_borrowing(frame)
+		elif key == 'attendance':
+			self.view_attendance(frame)
+		elif key == 'reports':
+			self.view_reports(frame)
+		elif key == 'security':
+			self.view_security(frame)
+
+	# Members
+	def view_members(self, parent):
+		top = parent
+		tb = ttk.Frame(top)
+		tb.pack(fill=tk.X, pady=(0,6))
+		left = ttk.Frame(tb)
+		left.pack(side=tk.LEFT)
+		right = ttk.Frame(tb)
+		right.pack(side=tk.RIGHT)
+		ttk.Button(left, text='Add Member', command=self.add_member_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		tk.Button(left, text='Export CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])).pack(side=tk.LEFT, padx=6)
+		cols = ('MemberID','Name','Class','Roll','Email')
+		tree = ttk.Treeview(top, columns=cols, show='headings')
+		for c in cols:
+			tree.heading(c, text=c)
+			tree.column(c, width=140)
+		tree.pack(fill=tk.BOTH, expand=True)
+		self.populate_members(tree)
+		def on_delete():
+			sel = tree.selection()
+			if not sel: return
+			mid = tree.item(sel[0])['values'][0]
+			if messagebox.askyesno('Delete','Remove member?'):
+				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Members WHERE MemberID=?',(mid,));conn.commit();conn.close();self.populate_members(tree)
+		ttk.Button(right, text='Delete Selected', command=on_delete).pack()
+		# Inline add form
+		form = ttk.Frame(top, padding=6)
+		form.pack(fill=tk.X, pady=(8,0))
+		name_var = tk.StringVar(); class_var = tk.StringVar(); roll_var = tk.StringVar(); email_var = tk.StringVar()
+		ttk.Label(form, text='Name').grid(row=0, column=0); ttk.Entry(form, textvariable=name_var, width=24).grid(row=0, column=1, padx=6)
+		tk.Label(form, text='Class').grid(row=0, column=2); ttk.Entry(form, textvariable=class_var, width=12).grid(row=0, column=3, padx=6)
+		tk.Label(form, text='Roll').grid(row=0, column=4); ttk.Entry(form, textvariable=roll_var, width=10).grid(row=0, column=5, padx=6)
+		tk.Label(form, text='Email').grid(row=1, column=0); ttk.Entry(form, textvariable=email_var, width=36).grid(row=1, column=1, columnspan=3, padx=6)
+		def do_inline_add():
+			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name_var.get(),class_var.get(),roll_var.get(),email_var.get()));conn.commit();conn.close(); self.populate_members(tree); name_var.set(''); class_var.set(''); roll_var.set(''); email_var.set('')
+		ttk.Button(form, text='Add Inline', command=do_inline_add, style='Rounded.TButton').grid(row=1, column=4, columnspan=2, padx=6)
+
+	def populate_members(self, tree):
+		for r in tree.get_children(): tree.delete(r)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID, Name, Class, Roll, Email FROM Members');rows=cur.fetchall();conn.close()
+		for r in rows: tree.insert('',tk.END,values=r)
+
+	def add_member_dialog(self):
+		d=tk.Toplevel(self.root);d.title('Add Member')
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
+		name=tk.StringVar();cls=tk.StringVar();roll=tk.StringVar();email=tk.StringVar()
+		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
+		ttk.Label(f,text='Class').grid(row=1,column=0);ttk.Entry(f,textvariable=cls).grid(row=1,column=1)
+		ttk.Label(f,text='Roll').grid(row=2,column=0);ttk.Entry(f,textvariable=roll).grid(row=2,column=1)
+		ttk.Label(f,text='Email').grid(row=3,column=0);ttk.Entry(f,textvariable=email).grid(row=3,column=1)
+		def save():
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name.get(),cls.get(),roll.get(),email.get()));conn.commit();conn.close();d.destroy(); self.show_view('members')
+		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
+
+	# Events
+	def view_events(self, parent):
+		top=parent
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
+		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
+		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
+		ttk.Button(left,text='Add Event',command=self.add_event_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		cols=('EventID','Title','Date','Location')
+		tree=ttk.Treeview(top,columns=cols,show='headings')
+		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
+		tree.pack(fill=tk.BOTH,expand=True)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT EventID,Title,Date,Location FROM Events');rows=cur.fetchall();conn.close()
+		for r in rows: tree.insert('',tk.END,values=r)
+		# inline add
+		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
+		title_var = tk.StringVar(); date_var = tk.StringVar(); loc_var = tk.StringVar()
+		tk.Label(form,text='Title').grid(row=0,column=0); ttk.Entry(form,textvariable=title_var, width=36).grid(row=0,column=1, padx=6)
+		tk.Label(form,text='Date').grid(row=1,column=0); ttk.Entry(form,textvariable=date_var, width=20).grid(row=1,column=1, padx=6)
+		tk.Label(form,text='Location').grid(row=2,column=0); ttk.Entry(form,textvariable=loc_var, width=28).grid(row=2,column=1, padx=6)
+		def do_add_event():
+			if not title_var.get().strip(): messagebox.showwarning('Missing','Enter title'); return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location) VALUES (?,?,?)', (title_var.get(),date_var.get(),loc_var.get()));conn.commit();conn.close(); title_var.set(''); date_var.set(''); loc_var.set(''); self.show_view('events')
+		ttk.Button(form,text='Add Inline', command=do_add_event, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
+
+	def add_event_dialog(self):
+		d=tk.Toplevel(self.root);d.title('Add Event')
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
+		title=tk.StringVar(); date=tk.StringVar(); loc=tk.StringVar(); notes=tk.StringVar()
+		ttk.Label(f,text='Title').grid(row=0,column=0);ttk.Entry(f,textvariable=title).grid(row=0,column=1)
+		ttk.Label(f,text='Date').grid(row=1,column=0);ttk.Entry(f,textvariable=date).grid(row=1,column=1)
+		ttk.Label(f,text='Location').grid(row=2,column=0);ttk.Entry(f,textvariable=loc).grid(row=2,column=1)
+		ttk.Label(f,text='Notes').grid(row=3,column=0);ttk.Entry(f,textvariable=notes).grid(row=3,column=1)
+		def save():
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title.get(),date.get(),loc.get(),notes.get()));conn.commit();conn.close();d.destroy();self.show_view('events')
+		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
+
+	# Inventory
+	def view_inventory(self, parent):
+		top=parent
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
+		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
+		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
+		ttk.Button(left,text='Add Item',command=self.add_item_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		cols=('ItemID','Name','Quantity','Notes')
+		tree=ttk.Treeview(top,columns=cols,show='headings')
+		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
+		tree.pack(fill=tk.BOTH,expand=True)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory');rows=cur.fetchall();conn.close()
+		for r in rows: tree.insert('',tk.END,values=r)
+		# inline add
+		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
+		name_var = tk.StringVar(); qty_var = tk.IntVar(value=1); notes_var = tk.StringVar()
+		tk.Label(form,text='Name').grid(row=0,column=0); ttk.Entry(form,textvariable=name_var, width=36).grid(row=0,column=1, padx=6)
+		tk.Label(form,text='Quantity').grid(row=1,column=0); ttk.Entry(form,textvariable=qty_var, width=12).grid(row=1,column=1, padx=6)
+		tk.Label(form,text='Notes').grid(row=2,column=0); ttk.Entry(form,textvariable=notes_var, width=36).grid(row=2,column=1, padx=6)
+		def do_add_item():
+			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name_var.get(), qty_var.get(), notes_var.get()));conn.commit();conn.close(); name_var.set(''); qty_var.set(1); notes_var.set(''); self.show_view('inventory')
+		ttk.Button(form, text='Add Inline', command=do_add_item, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
+
+	def add_item_dialog(self):
+		d=tk.Toplevel(self.root);d.title('Add Item')
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
+		name=tk.StringVar(); qty=tk.IntVar(value=1); notes=tk.StringVar()
+		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
+		ttk.Label(f,text='Quantity').grid(row=1,column=0);ttk.Entry(f,textvariable=qty).grid(row=1,column=1)
+		ttk.Label(f,text='Notes').grid(row=2,column=0);ttk.Entry(f,textvariable=notes).grid(row=2,column=1)
+		def save():
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name.get(), qty.get(), notes.get()));conn.commit();conn.close();d.destroy();self.show_view('inventory')
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+
+	# Borrowing
+	def view_borrowing(self, parent):
+		top=parent
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
+		tk.Button(tb,text='Borrow Item',command=self.borrow_dialog).pack(side=tk.LEFT)
+		cols=('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned')
+		tree=ttk.Treeview(top,columns=cols,show='headings')
+		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
+		tree.pack(fill=tk.BOTH,expand=True)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("SELECT b.BorrowID,i.Name,m.Name,b.BorrowDate,b.ReturnDate,b.Returned FROM BorrowedItems b LEFT JOIN Inventory i ON b.ItemID=i.ItemID LEFT JOIN Members m ON b.MemberID=m.MemberID");rows=cur.fetchall();conn.close()
+		for r in rows: tree.insert('',tk.END,values=r)
+
+	def borrow_dialog(self):
+		d=tk.Toplevel(self.root);d.title('Borrow Item')
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name FROM Inventory WHERE Quantity>0');items=cur.fetchall();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();conn.close()
+		item_var=tk.IntVar(); member_var=tk.IntVar(); return_on=tk.StringVar()
+		ttk.Label(f,text='Item').grid(row=0,column=0);
+		item_cb=ttk.Combobox(f, values=[f"{i[0]}: {i[1]}" for i in items])
+		item_cb.grid(row=0,column=1)
+		ttk.Label(f,text='Member').grid(row=1,column=0);
+		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members])
+		mem_cb.grid(row=1,column=1)
+		ttk.Label(f,text='Return Date').grid(row=2,column=0);ttk.Entry(f,textvariable=return_on).grid(row=2,column=1)
+		def save():
+			try:
+				iid=int(item_cb.get().split(':')[0]); mid=int(mem_cb.get().split(':')[0])
+			except Exception:
+				messagebox.showerror('Error','Select item and member')
+				return
+			rd=return_on.get() or None
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)', (iid,mid,datetime.now().isoformat(), rd));cur.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=?',(iid,));conn.commit();conn.close();d.destroy();self.show_view('borrow')
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+
+	# Attendance
+	def view_attendance(self, parent):
+		top=parent
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
+		tk.Button(tb,text='Mark Attendance',command=self.mark_attendance_dialog).pack(side=tk.LEFT)
+		cols=('AttID','Member','Event','Present','Timestamp')
+		tree=ttk.Treeview(top,columns=cols,show='headings')
+		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
+		tree.pack(fill=tk.BOTH,expand=True)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("SELECT a.AttID,m.Name,e.Title,a.Present,a.Timestamp FROM Attendance a LEFT JOIN Members m ON a.MemberID=m.MemberID LEFT JOIN Events e ON a.EventID=e.EventID");rows=cur.fetchall();conn.close()
+		for r in rows: tree.insert('',tk.END,values=r)
+
+	def mark_attendance_dialog(self):
+		d=tk.Toplevel(self.root);d.title('Mark Attendance')
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();cur.execute('SELECT EventID,Title FROM Events');events=cur.fetchall();conn.close()
+		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members])
+		mem_cb.grid(row=0,column=1); ttk.Label(f,text='Member').grid(row=0,column=0)
+		evt_cb=ttk.Combobox(f, values=[f"{e[0]}: {e[1]}" for e in events])
+		evt_cb.grid(row=1,column=1); ttk.Label(f,text='Event').grid(row=1,column=0)
+		present_var = tk.IntVar(value=1)
+		tk.Checkbutton(f, text='Present', variable=present_var).grid(row=2,column=0,columnspan=2)
+		def save():
+			try:
+				mid=int(mem_cb.get().split(':')[0]); eid=int(evt_cb.get().split(':')[0])
+			except Exception:
+				messagebox.showerror('Error','Select member and event');return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Attendance (MemberID,EventID,Present,Timestamp) VALUES (?,?,?,?)',(mid,eid,present_var.get(),datetime.now().isoformat()));conn.commit();conn.close();d.destroy();self.show_view('attendance')
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+
+	# Reports & Security
+	def view_reports(self, parent):
+		top=parent
+		tk.Label(top, text='Reports').pack(pady=8)
+		tk.Button(top, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])).pack(pady=4)
+		tk.Button(top, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes'])).pack(pady=4)
+
+	def view_security(self, parent):
+		top=parent
+		ttk.Label(top, text='Security / Users').pack(pady=8)
+		tk.Button(top, text='Reset admin password', command=self.reset_admin_password).pack(pady=4)
+
+	def reset_admin_password(self):
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("UPDATE Users SET Password=? WHERE Username='admin'", (hash_password('admin123'),));conn.commit();conn.close();messagebox.showinfo('Reset','Admin password set to admin123')
+
+	def export_table(self, table, columns):
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute(f"SELECT {', '.join(columns)} FROM {table}");rows=cur.fetchall();conn.close()
+		fn = f"{table}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+		with open(fn,'w',newline='',encoding='utf-8') as f:
+			w=csv.writer(f); w.writerow(columns); w.writerows(rows)
+		messagebox.showinfo('Export','Wrote '+fn)
+
+
+def main():
+	setup_database()
+	root = tk.Tk()
+	app = App(root)
+	root.mainloop()
+
+
+if __name__ == '__main__':
+	main()
+
