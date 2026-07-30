@@ -376,6 +376,13 @@ class App:
 		except Exception:
 			pass
 
+	def build_input_card(self, parent, title, subtitle):
+		card = tk.Frame(parent, bg=self.colors['card'], bd=1, relief='flat', highlightbackground='#334155', highlightthickness=1)
+		card.pack(fill=tk.X, pady=(10, 0))
+		tk.Label(card, text=title, bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 12, 'bold')).pack(anchor='w', padx=12, pady=(10, 2))
+		tk.Label(card, text=subtitle, bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 8))
+		return card
+
 	def draw_gradient(self, canvas, color1, color2):
 		# Simple vertical gradient
 		w = canvas.winfo_reqwidth() or canvas.winfo_width() or 800
@@ -508,18 +515,28 @@ class App:
 			if messagebox.askyesno('Delete','Remove member?'):
 				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Members WHERE MemberID=?',(mid,));conn.commit();conn.close();self.populate_members(tree)
 		ttk.Button(right, text='Delete Selected', command=on_delete).pack()
-		# Inline add form
-		form = ttk.Frame(top, padding=6)
-		form.pack(fill=tk.X, pady=(8,0))
+		form_card = self.build_input_card(top, 'Add Member', 'Use this compact entry card to add a new member below the records list.')
+		form = ttk.Frame(form_card, padding=8)
+		form.pack(fill=tk.X)
 		name_var = tk.StringVar(); class_var = tk.StringVar(); roll_var = tk.StringVar(); email_var = tk.StringVar()
-		ttk.Label(form, text='Name').grid(row=0, column=0); ttk.Entry(form, textvariable=name_var, width=24).grid(row=0, column=1, padx=6)
-		tk.Label(form, text='Class').grid(row=0, column=2); ttk.Entry(form, textvariable=class_var, width=12).grid(row=0, column=3, padx=6)
-		tk.Label(form, text='Roll').grid(row=0, column=4); ttk.Entry(form, textvariable=roll_var, width=10).grid(row=0, column=5, padx=6)
-		tk.Label(form, text='Email').grid(row=1, column=0); ttk.Entry(form, textvariable=email_var, width=36).grid(row=1, column=1, columnspan=3, padx=6)
+		ttk.Label(form, text='Name').grid(row=0, column=0, sticky='w', padx=4, pady=4)
+		ttk.Entry(form, textvariable=name_var, width=24).grid(row=0, column=1, padx=6, pady=4)
+		ttk.Label(form, text='Class').grid(row=0, column=2, sticky='w', padx=4, pady=4)
+		ttk.Entry(form, textvariable=class_var, width=12).grid(row=0, column=3, padx=6, pady=4)
+		ttk.Label(form, text='Roll').grid(row=1, column=0, sticky='w', padx=4, pady=4)
+		ttk.Entry(form, textvariable=roll_var, width=10).grid(row=1, column=1, padx=6, pady=4)
+		ttk.Label(form, text='Email').grid(row=1, column=2, sticky='w', padx=4, pady=4)
+		ttk.Entry(form, textvariable=email_var, width=28).grid(row=1, column=3, padx=6, pady=4)
 		def do_inline_add():
-			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name_var.get(),class_var.get(),roll_var.get(),email_var.get()));conn.commit();conn.close(); self.populate_members(tree); name_var.set(''); class_var.set(''); roll_var.set(''); email_var.set('')
-		ttk.Button(form, text='Add Inline', command=do_inline_add, style='Rounded.TButton').grid(row=1, column=4, columnspan=2, padx=6)
+			name = name_var.get().strip()
+			if not name:
+				messagebox.showwarning('Missing','Enter the member name')
+				return
+			if email_var.get().strip() and '@' not in email_var.get().strip():
+				messagebox.showwarning('Invalid','Please enter a valid email address or leave it blank')
+				return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name,class_var.get().strip(),roll_var.get().strip(),email_var.get().strip()));conn.commit();conn.close(); self.populate_members(tree); name_var.set(''); class_var.set(''); roll_var.set(''); email_var.set('')
+		ttk.Button(form, text='Save member', command=do_inline_add, style='Rounded.TButton').grid(row=0, column=4, rowspan=2, padx=8, pady=4, sticky='nsew')
 
 	def populate_members(self, tree):
 		for r in tree.get_children(): tree.delete(r)
@@ -566,8 +583,9 @@ class App:
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT EventID,Title,Date,Location FROM Events ORDER BY Date IS NULL, Date, EventID');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
 
-		form = tk.Frame(panel, bg=self.colors['card'])
-		form.pack(fill=tk.X, padx=12, pady=(0, 12))
+		form_card = self.build_input_card(top, 'Add Event', 'Create a new event entry from the bottom panel and keep the schedule organized.')
+		form = ttk.Frame(form_card, padding=8)
+		form.pack(fill=tk.X)
 		title_var = tk.StringVar(); date_var = tk.StringVar(); loc_var = tk.StringVar(); notes_var = tk.StringVar()
 		ttk.Label(form, text='Title').grid(row=0, column=0, sticky='w', padx=4, pady=4)
 		ttk.Entry(form, textvariable=title_var, width=28).grid(row=0, column=1, padx=4, pady=4)
@@ -578,8 +596,20 @@ class App:
 		ttk.Label(form, text='Notes').grid(row=0, column=2, sticky='w', padx=4, pady=4)
 		ttk.Entry(form, textvariable=notes_var, width=28).grid(row=0, column=3, rowspan=3, padx=4, pady=4)
 		def do_add_event():
-			if not title_var.get().strip(): messagebox.showwarning('Missing','Enter title'); return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title_var.get(),date_var.get(),loc_var.get(),notes_var.get()));conn.commit();conn.close(); title_var.set(''); date_var.set(''); loc_var.set(''); notes_var.set(''); self.show_view('events')
+			title = title_var.get().strip()
+			if not title:
+				messagebox.showwarning('Missing','Enter an event title')
+				return
+			if date_var.get().strip():
+				try:
+					datetime.strptime(date_var.get().strip(), '%Y-%m-%d')
+				except ValueError:
+					try:
+						datetime.strptime(date_var.get().strip(), '%d/%m/%Y')
+					except ValueError:
+						messagebox.showwarning('Invalid','Use YYYY-MM-DD or DD/MM/YYYY for the date')
+						return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title,date_var.get().strip(),loc_var.get().strip(),notes_var.get().strip()));conn.commit();conn.close(); title_var.set(''); date_var.set(''); loc_var.set(''); notes_var.set(''); self.show_view('events')
 		ttk.Button(form, text='Save entry', command=do_add_event, style='Rounded.TButton').grid(row=1, column=2, columnspan=2, padx=4, pady=8, sticky='w')
 
 		info = tk.Frame(right, bg=self.colors['card'], bd=1, relief='flat')
@@ -620,16 +650,22 @@ class App:
 		tree.pack(fill=tk.BOTH,expand=True)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
-		# inline add
-		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
+		form_card = self.build_input_card(top, 'Add Inventory Item', 'Record the stock item in the dedicated entry card below the inventory table.')
+		form = ttk.Frame(form_card,padding=8); form.pack(fill=tk.X)
 		name_var = tk.StringVar(); qty_var = tk.IntVar(value=1); notes_var = tk.StringVar()
-		tk.Label(form,text='Name').grid(row=0,column=0); ttk.Entry(form,textvariable=name_var, width=36).grid(row=0,column=1, padx=6)
-		tk.Label(form,text='Quantity').grid(row=1,column=0); ttk.Entry(form,textvariable=qty_var, width=12).grid(row=1,column=1, padx=6)
-		tk.Label(form,text='Notes').grid(row=2,column=0); ttk.Entry(form,textvariable=notes_var, width=36).grid(row=2,column=1, padx=6)
+		tk.Label(form,text='Name').grid(row=0,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=name_var, width=36).grid(row=0,column=1, padx=6, pady=4)
+		tk.Label(form,text='Quantity').grid(row=1,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=qty_var, width=12).grid(row=1,column=1, padx=6, pady=4)
+		tk.Label(form,text='Notes').grid(row=2,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=notes_var, width=36).grid(row=2,column=1, padx=6, pady=4)
 		def do_add_item():
-			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name_var.get(), qty_var.get(), notes_var.get()));conn.commit();conn.close(); name_var.set(''); qty_var.set(1); notes_var.set(''); self.show_view('inventory')
-		ttk.Button(form, text='Add Inline', command=do_add_item, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
+			name = name_var.get().strip()
+			if not name:
+				messagebox.showwarning('Missing','Enter the item name')
+				return
+			if qty_var.get() < 0:
+				messagebox.showwarning('Invalid','Quantity cannot be negative')
+				return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name, qty_var.get(), notes_var.get().strip()));conn.commit();conn.close(); name_var.set(''); qty_var.set(1); notes_var.set(''); self.show_view('inventory')
+		ttk.Button(form, text='Save item', command=do_add_item, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8, pady=4, sticky='nsew')
 
 	def add_item_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Item')
@@ -660,6 +696,34 @@ class App:
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
 		tree.pack(fill=tk.BOTH,expand=True)
 		self.populate_borrowed(tree)
+		form_card = self.build_input_card(top, 'Record a Borrow', 'Use the dedicated panel below to log a new borrowing entry and keep stock movement up to date.')
+		form = ttk.Frame(form_card, padding=8)
+		form.pack(fill=tk.X)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name FROM Inventory WHERE Quantity>0');items=cur.fetchall();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();conn.close()
+		if items and members:
+			return_on=tk.StringVar()
+			ttk.Label(form,text='Item').grid(row=0,column=0, sticky='w', padx=4, pady=4)
+			item_cb=ttk.Combobox(form, values=[f"{i[0]}: {i[1]}" for i in items], state='readonly', width=24)
+			item_cb.grid(row=0,column=1, padx=4, pady=4)
+			ttk.Label(form,text='Member').grid(row=1,column=0, sticky='w', padx=4, pady=4)
+			mem_cb=ttk.Combobox(form, values=[f"{m[0]}: {m[1]}" for m in members], state='readonly', width=24)
+			mem_cb.grid(row=1,column=1, padx=4, pady=4)
+			ttk.Label(form,text='Return Date').grid(row=2,column=0, sticky='w', padx=4, pady=4)
+			ttk.Entry(form,textvariable=return_on, width=18).grid(row=2,column=1, padx=4, pady=4)
+			def do_borrow():
+				try:
+					iid=int(item_cb.get().split(':')[0]); mid=int(mem_cb.get().split(':')[0])
+				except Exception:
+					messagebox.showerror('Error','Select both an item and a member before saving')
+					return
+				if not item_cb.get() or not mem_cb.get():
+					messagebox.showwarning('Missing','Choose an item and member')
+					return
+				rd=return_on.get().strip() or None
+				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)', (iid,mid,datetime.now().isoformat(), rd));cur.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=?',(iid,));conn.commit();conn.close(); return_on.set(''); item_cb.set(''); mem_cb.set(''); self.populate_borrowed(tree)
+			ttk.Button(form, text='Save borrow', command=do_borrow, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8,pady=4, sticky='nsew')
+		else:
+			tk.Label(form, text='No inventory items or members are available right now.', fg='orange').grid(row=0,column=0,columnspan=2,padx=4,pady=8)
 
 	def populate_borrowed(self, tree):
 		for r in tree.get_children(): tree.delete(r)
@@ -732,6 +796,26 @@ class App:
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
 		tree.pack(fill=tk.BOTH,expand=True)
 		self.populate_attendance(tree)
+		form_card = self.build_input_card(top, 'Mark Attendance', 'Add a new attendance record from the bottom form so the event log stays current.')
+		form = ttk.Frame(form_card, padding=8)
+		form.pack(fill=tk.X)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();cur.execute('SELECT EventID,Title FROM Events');events=cur.fetchall();conn.close()
+		if members and events:
+			mem_cb=ttk.Combobox(form, values=[f"{m[0]}: {m[1]}" for m in members], width=24, state='readonly')
+			mem_cb.grid(row=0,column=1,padx=4,pady=4); ttk.Label(form,text='Member').grid(row=0,column=0, sticky='w', padx=4, pady=4)
+			evt_cb=ttk.Combobox(form, values=[f"{e[0]}: {e[1]}" for e in events], width=24, state='readonly')
+			evt_cb.grid(row=1,column=1,padx=4,pady=4); ttk.Label(form,text='Event').grid(row=1,column=0, sticky='w', padx=4, pady=4)
+			present_var = tk.IntVar(value=1)
+			tk.Checkbutton(form, text='Present', variable=present_var).grid(row=2,column=0,columnspan=2,padx=4,pady=4)
+			def save():
+				try:
+					mid=int(mem_cb.get().split(':')[0]); eid=int(evt_cb.get().split(':')[0])
+				except Exception:
+					messagebox.showerror('Error','Select both a member and an event');return
+				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Attendance (MemberID,EventID,Present,Timestamp) VALUES (?,?,?,?)',(mid,eid,present_var.get(),datetime.now().isoformat()));conn.commit();conn.close(); mem_cb.set(''); evt_cb.set(''); present_var.set(1); self.populate_attendance(tree)
+			ttk.Button(form,text='Save attendance',command=save, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8,pady=4, sticky='nsew')
+		else:
+			tk.Label(form, text='Add members and events before marking attendance.', fg='orange').grid(row=0,column=0,columnspan=2,padx=4,pady=8)
 
 	def populate_attendance(self, tree):
 		for r in tree.get_children(): tree.delete(r)
@@ -839,6 +923,33 @@ class App:
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
 		tree.pack(fill=tk.BOTH,expand=True, pady=8)
 		self.populate_users(tree)
+		form_card = self.build_input_card(top, 'Create User', 'Create a new account entry in the dedicated bottom panel and keep access organized.')
+		form = ttk.Frame(form_card, padding=8)
+		form.pack(fill=tk.X)
+		username_var=tk.StringVar(); password_var=tk.StringVar(); role_var=tk.StringVar(value='member'); member_var=tk.StringVar()
+		ttk.Label(form,text='Username').grid(row=0,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=username_var).grid(row=0,column=1,padx=4,pady=4)
+		ttk.Label(form,text='Password').grid(row=1,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=password_var, show='*').grid(row=1,column=1,padx=4,pady=4)
+		ttk.Label(form,text='Role').grid(row=2,column=0, sticky='w', padx=4, pady=4); ttk.Combobox(form, textvariable=role_var, values=['member','admin'], state='readonly').grid(row=2,column=1,padx=4,pady=4)
+		ttk.Label(form,text='Member ID').grid(row=3,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=member_var).grid(row=3,column=1,padx=4,pady=4)
+		def save():
+			uname=username_var.get().strip(); pw=password_var.get(); role=role_var.get(); mid=member_var.get().strip()
+			if not (uname and pw):
+				messagebox.showwarning('Missing','Enter username and password')
+				return
+			if mid:
+				if not mid.isdigit():
+					messagebox.showwarning('Invalid','Member ID must be numeric')
+					return
+				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID FROM Members WHERE MemberID=?',(int(mid),));exists=cur.fetchone();conn.close()
+				if not exists:
+					messagebox.showerror('Not found','The supplied member ID was not found')
+					return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT 1 FROM Users WHERE Username=?',(uname,));exists=cur.fetchone();conn.close()
+			if exists:
+				messagebox.showerror('Taken','That username is already in use')
+				return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Users (MemberID, Username, Password, Role, FirstLogin) VALUES (?,?,?,?,1)', ((int(mid) if mid else None), uname, hash_password(pw), role));conn.commit();conn.close(); username_var.set(''); password_var.set(''); role_var.set('member'); member_var.set(''); self.populate_users(tree)
+		ttk.Button(form,text='Create',command=save, style='Rounded.TButton').grid(row=0,column=2,rowspan=4,padx=8,pady=4, sticky='nsew')
 
 	def populate_users(self, tree):
 		for r in tree.get_children(): tree.delete(r)
