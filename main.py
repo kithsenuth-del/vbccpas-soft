@@ -225,43 +225,49 @@ class App:
 	def __init__(self, root):
 		self.root = root
 		root.title("School Society Manager")
-		root.geometry("980x620")
+		root.geometry("1200x740")
+		root.minsize(1080, 680)
 		self.style = ttk.Style(root)
 		self.style.theme_use('clam')
-		# apply visual theme
 		self.apply_theme()
 
-		self.container = ttk.Frame(root)
+		self.container = ttk.Frame(root, style='Main.TFrame')
 		self.container.pack(fill=tk.BOTH, expand=True)
 
-		self.sidebar = ttk.Frame(self.container, width=220)
+		self.sidebar = tk.Frame(self.container, bg=self.colors['sidebar'], width=250)
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+		self.sidebar.pack_propagate(False)
 
-		self.content = ttk.Frame(self.container)
+		self.content = tk.Frame(self.container, bg=self.colors['bg'])
 		self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
 		# Login
-		self.login_frame = ttk.Frame(self.content, padding=24)
+		self.login_frame = tk.Frame(self.content, bg=self.colors['bg'])
 		self.login_frame.pack(fill=tk.BOTH, expand=True)
-		ttk.Label(self.login_frame, text="Login", font=("Segoe UI", 18)).pack(pady=(0, 8))
-		form = ttk.Frame(self.login_frame)
-		form.pack()
-		ttk.Label(form, text="Username:").grid(row=0, column=0, sticky=tk.E, padx=4, pady=4)
+		login_card = tk.Frame(self.login_frame, bg=self.colors['card'], bd=1, highlightthickness=1, highlightbackground='#334155')
+		login_card.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=460, height=360)
+		tk.Label(login_card, text="VBCCPAS Society Manager", bg=self.colors['card'], fg='#f8fafc', font=('Segoe UI', 20, 'bold')).place(x=24, y=24)
+		tk.Label(login_card, text="Sign in to manage members, events, inventory and reports.", bg=self.colors['card'], fg='#cbd5e1', font=('Segoe UI', 10)).place(x=24, y=64)
+		form = tk.Frame(login_card, bg=self.colors['card'])
+		form.place(x=24, y=110, width=410)
+		tk.Label(form, text="Username", bg=self.colors['card'], fg=self.colors['fg'], font=('Segoe UI', 10, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=(0, 6))
 		self.username_var = tk.StringVar()
-		ttk.Entry(form, textvariable=self.username_var).grid(row=0, column=1, padx=4, pady=4)
-		tk.Label(form, text="Password:").grid(row=1, column=0, sticky=tk.E, padx=4, pady=4)
+		tk.Entry(form, textvariable=self.username_var, bg='#0f172a', fg='#f8fafc', insertbackground='white', width=34).grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
+		tk.Label(form, text="Password", bg=self.colors['card'], fg=self.colors['fg'], font=('Segoe UI', 10, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=(0, 6))
 		self.password_var = tk.StringVar()
-		ttk.Entry(form, textvariable=self.password_var, show="*").grid(row=1, column=1, padx=4, pady=4)
-		btn_frame = ttk.Frame(self.login_frame)
-		btn_frame.pack(pady=12)
-		ttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btn_frame, text="Sign up", command=self.open_signup, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		tk.Entry(form, textvariable=self.password_var, show='*', bg='#0f172a', fg='#f8fafc', insertbackground='white', width=34).grid(row=3, column=0, sticky=tk.W, pady=(0, 12))
+		btn_frame = tk.Frame(login_card, bg=self.colors['card'])
+		btn_frame.place(x=24, y=290)
+		ttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+		ttk.Button(btn_frame, text="Sign up", command=self.open_signup, style='Rounded.TButton').pack(side=tk.LEFT)
 
 		# sidebar buttons (hidden until login)
 		self.side_buttons = {}
+		self.sidebar_title = tk.Label(self.sidebar, text="Modules", bg=self.colors['sidebar'], fg='#cbd5e1', font=('Segoe UI', 11, 'bold'))
+		self.sidebar_title.pack(anchor='w', padx=18, pady=(18, 10))
 		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
 			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
-			b.pack(fill=tk.X, padx=8, pady=6)
+			b.pack(fill=tk.X, padx=12, pady=6)
 			self.side_buttons[key] = b
 		self.sidebar.pack_forget()
 		self.current_view = None
@@ -293,7 +299,7 @@ class App:
 		d.title('Sign up')
 		frm = ttk.Frame(d, padding=16)
 		frm.pack(fill=tk.BOTH, expand=True)
-		tk.Label(frm, text='Register Member Account', font=("Segoe UI", 14)).grid(row=0, column=0, columnspan=2, pady=(0,12))
+		tk.Label(frm, text='Register Member Account', font=(None, 14)).grid(row=0, column=0, columnspan=2, pady=(0,12))
 		member_var = tk.StringVar()
 		username_var = tk.StringVar()
 		password_var = tk.StringVar()
@@ -342,46 +348,38 @@ class App:
 			self.current_view = None
 
 	def apply_theme(self):
-		# Modern color system
 		self.colors = {
-			'bg': '#0b1220',
-			'card': '#0f1724',
-			'fg': '#e6eef8',
-			'accent1': '#7c3aed',
-			'accent2': '#06b6d4',
-			'sidebar': '#071031'
+			'bg': '#07131f',
+			'card': '#0f172a',
+			'fg': '#e2e8f0',
+			'accent1': '#10b981',
+			'accent2': '#fbbf24',
+			'accent3': '#38bdf8',
+			'sidebar': '#020617',
+			'panel': '#111827'
 		}
 		bg = self.colors['bg']
 		fg = self.colors['fg']
 		accent = self.colors['accent1']
 		accent2 = self.colors['accent2']
-		# Base styles
+		accent3 = self.colors['accent3']
 		self.style.configure('TFrame', background=bg)
-		self.style.configure('TLabel', background=bg, foreground=fg)
+		self.style.configure('Main.TFrame', background=bg)
+		self.style.configure('TLabel', background=bg, foreground=fg, font=('Segoe UI', 10))
 		self.style.configure('TNotebook', background=bg)
-		# Buttons
-		self.style.configure('Rounded.TButton', foreground=fg, background=accent, padding=8, relief='flat', font=('Segoe UI', 10, 'bold'))
-		self.style.map('Rounded.TButton', background=[('active', accent2)])
-		self.style.configure('Sidebar.TButton', foreground=fg, background=self.colors['sidebar'], padding=8, relief='flat')
-		self.style.map('Sidebar.TButton', background=[('active', accent)])
-		# Treeview
-		self.style.configure('Treeview', background=self.colors['card'], fieldbackground=self.colors['card'], foreground=fg, rowheight=24)
+		self.style.configure('Rounded.TButton', foreground='#f8fafc', background=accent, padding=8, relief='flat', font=('Segoe UI', 10, 'bold'))
+		self.style.map('Rounded.TButton', background=[('active', accent3), ('pressed', accent2)])
+		self.style.configure('Sidebar.TButton', foreground='#e2e8f0', background=self.colors['sidebar'], padding=10, relief='flat', font=('Segoe UI', 10, 'bold'))
+		self.style.map('Sidebar.TButton', background=[('active', accent), ('pressed', accent3)])
+		self.style.configure('Treeview', background=self.colors['card'], fieldbackground=self.colors['card'], foreground=fg, rowheight=28)
 		self.style.map('Treeview', background=[('selected', accent)])
-		# Entry fields
-		self.style.configure('TEntry', fieldbackground=self.colors['card'], foreground=fg)
-		self.style.configure('TCombobox', fieldbackground=self.colors['card'], foreground=fg)
-		# Window bg
+		self.style.configure('TEntry', fieldbackground='#0f172a', foreground=fg)
+		self.style.configure('TCombobox', fieldbackground='#0f172a', foreground=fg)
+		self.style.configure('TSpinbox', fieldbackground='#0f172a', foreground=fg)
 		try:
 			self.root.configure(bg=bg)
 		except Exception:
 			pass
-
-	def build_input_card(self, parent, title, subtitle):
-		card = tk.Frame(parent, bg=self.colors['card'], bd=1, relief='flat', highlightbackground='#334155', highlightthickness=1)
-		card.pack(fill=tk.X, pady=(10, 0))
-		tk.Label(card, text=title, bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 12, 'bold')).pack(anchor='w', padx=12, pady=(10, 2))
-		tk.Label(card, text=subtitle, bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 8))
-		return card
 
 	def draw_gradient(self, canvas, color1, color2):
 		# Simple vertical gradient
@@ -437,44 +435,38 @@ class App:
 
 	def show_view(self, key):
 		self.clear_content()
-		frame = ttk.Frame(self.content, padding=12)
+		frame = tk.Frame(self.content, bg=self.colors['bg'])
 		frame.pack(fill=tk.BOTH, expand=True)
 		self.current_view = frame
 		if key == 'dashboard':
-			tk.Label(frame, text=f"Welcome, {self.user['username']}", font=("Segoe UI", 16)).pack(pady=8)
-			# gradient banner
-			canvas = tk.Canvas(frame, height=120, highlightthickness=0)
-			canvas.pack(fill=tk.X, pady=6)
-			self.draw_gradient(canvas, '#7c3aed', '#06b6d4')
-			# stats cards
+			header = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
+			header.pack(fill=tk.X, padx=16, pady=(16, 12))
+			tk.Label(header, text=f"Welcome back, {self.user['username']}", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 18, 'bold')).pack(anchor='w', padx=20, pady=(16, 4))
+			tk.Label(header, text="A bright, modern desktop workspace for society management.", bg=self.colors['panel'], fg='#cbd5e1', font=('Segoe UI', 10)).pack(anchor='w', padx=20, pady=(0, 16))
 			stats = tk.Frame(frame, bg=self.colors['bg'])
-			stats.pack(fill=tk.X, pady=8)
-			# member count
+			stats.pack(fill=tk.X, padx=16, pady=6)
 			mcount = self.count_members()
 			bcount = self.count_borrowed()
 			next_event = self.get_next_event()
-			card_w = 240
-			card1 = tk.Frame(stats, bg=self.colors['card'], width=card_w, height=90)
-			card1.pack(side=tk.LEFT, padx=12, pady=6)
-			card1.pack_propagate(False)
-			tk.Label(card1, text='Society Members', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=8, pady=(8,0))
-			tk.Label(card1, text=str(mcount), bg=self.colors['card'], fg=self.colors['accent1'], font=("Segoe UI", 20, 'bold')).pack(anchor='w', padx=8)
-			# borrowed count
-			card2 = tk.Frame(stats, bg=self.colors['card'], width=card_w, height=90)
-			card2.pack(side=tk.LEFT, padx=12, pady=6)
-			card2.pack_propagate(False)
-			tk.Label(card2, text='Currently Borrowed', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=8, pady=(8,0))
-			tk.Label(card2, text=str(bcount), bg=self.colors['card'], fg=self.colors['accent2'], font=("Segoe UI", 20, 'bold')).pack(anchor='w', padx=8)
-			# upcoming event
-			card3 = tk.Frame(stats, bg=self.colors['card'], width=card_w, height=90)
-			card3.pack(side=tk.LEFT, padx=12, pady=6)
-			card3.pack_propagate(False)
-			tk.Label(card3, text='Next Event', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=8, pady=(8,0))
-			if next_event:
-				tk.Label(card3, text=f"{next_event[0]} ({next_event[1].strftime('%Y-%m-%d')})", background=self.colors['card'], foreground=self.colors['fg']).pack(anchor='w', padx=8)
-			else:
-				tk.Label(card3, text='No upcoming events', background=self.colors['card'], foreground=self.colors['fg']).pack(anchor='w', padx=8)
-			tk.Label(frame, text="Use the sidebar to open modules: Members, Events, Inventory, Borrowing, Attendance, Reports, Security").pack()
+			for title, value, color, subtitle in [
+				('Society Members', str(mcount), self.colors['accent1'], 'Registered members'),
+				('Currently Borrowed', str(bcount), self.colors['accent2'], 'Outstanding items'),
+				('Next Event', f"{next_event[0]} ({next_event[1].strftime('%Y-%m-%d')})" if next_event else 'No upcoming events', self.colors['accent3'], 'Upcoming schedule')
+			]:
+				card = tk.Frame(stats, bg=self.colors['card'], bd=1, highlightthickness=1, highlightbackground='#334155', width=260, height=120)
+				card.pack(side=tk.LEFT, padx=8)
+				card.pack_propagate(False)
+				tk.Label(card, text=title, bg=self.colors['card'], fg='#cbd5e1', font=('Segoe UI', 10)).place(x=16, y=16)
+				tk.Label(card, text=value, bg=self.colors['card'], fg=color, font=('Segoe UI', 18, 'bold')).place(x=16, y=42)
+				tk.Label(card, text=subtitle, bg=self.colors['card'], fg='#64748b', font=('Segoe UI', 9)).place(x=16, y=88)
+			panel = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
+			panel.pack(fill=tk.BOTH, expand=True, padx=16, pady=(12, 16))
+			tk.Label(panel, text="Quick actions", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=18, pady=(16, 8))
+			tk.Label(panel, text="Use the sidebar to open members, events, inventory, borrowing, attendance, reports, and security modules.", bg=self.colors['panel'], fg='#cbd5e1', justify=tk.LEFT).pack(anchor='w', padx=18, pady=(0, 10))
+			buttons = tk.Frame(panel, bg=self.colors['panel'])
+			buttons.pack(anchor='w', padx=18, pady=6)
+			ttk.Button(buttons, text='Open Members', command=lambda: self.show_view('members'), style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+			ttk.Button(buttons, text='Open Events', command=lambda: self.show_view('events'), style='Rounded.TButton').pack(side=tk.LEFT)
 		elif key == 'members':
 			self.view_members(frame)
 		elif key == 'events':
@@ -515,28 +507,18 @@ class App:
 			if messagebox.askyesno('Delete','Remove member?'):
 				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Members WHERE MemberID=?',(mid,));conn.commit();conn.close();self.populate_members(tree)
 		ttk.Button(right, text='Delete Selected', command=on_delete).pack()
-		form_card = self.build_input_card(top, 'Add Member', 'Use this compact entry card to add a new member below the records list.')
-		form = ttk.Frame(form_card, padding=8)
-		form.pack(fill=tk.X)
+		# Inline add form
+		form = ttk.Frame(top, padding=6)
+		form.pack(fill=tk.X, pady=(8,0))
 		name_var = tk.StringVar(); class_var = tk.StringVar(); roll_var = tk.StringVar(); email_var = tk.StringVar()
-		ttk.Label(form, text='Name').grid(row=0, column=0, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=name_var, width=24).grid(row=0, column=1, padx=6, pady=4)
-		ttk.Label(form, text='Class').grid(row=0, column=2, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=class_var, width=12).grid(row=0, column=3, padx=6, pady=4)
-		ttk.Label(form, text='Roll').grid(row=1, column=0, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=roll_var, width=10).grid(row=1, column=1, padx=6, pady=4)
-		ttk.Label(form, text='Email').grid(row=1, column=2, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=email_var, width=28).grid(row=1, column=3, padx=6, pady=4)
+		ttk.Label(form, text='Name').grid(row=0, column=0); ttk.Entry(form, textvariable=name_var, width=24).grid(row=0, column=1, padx=6)
+		tk.Label(form, text='Class').grid(row=0, column=2); ttk.Entry(form, textvariable=class_var, width=12).grid(row=0, column=3, padx=6)
+		tk.Label(form, text='Roll').grid(row=0, column=4); ttk.Entry(form, textvariable=roll_var, width=10).grid(row=0, column=5, padx=6)
+		tk.Label(form, text='Email').grid(row=1, column=0); ttk.Entry(form, textvariable=email_var, width=36).grid(row=1, column=1, columnspan=3, padx=6)
 		def do_inline_add():
-			name = name_var.get().strip()
-			if not name:
-				messagebox.showwarning('Missing','Enter the member name')
-				return
-			if email_var.get().strip() and '@' not in email_var.get().strip():
-				messagebox.showwarning('Invalid','Please enter a valid email address or leave it blank')
-				return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name,class_var.get().strip(),roll_var.get().strip(),email_var.get().strip()));conn.commit();conn.close(); self.populate_members(tree); name_var.set(''); class_var.set(''); roll_var.set(''); email_var.set('')
-		ttk.Button(form, text='Save member', command=do_inline_add, style='Rounded.TButton').grid(row=0, column=4, rowspan=2, padx=8, pady=4, sticky='nsew')
+			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name_var.get(),class_var.get(),roll_var.get(),email_var.get()));conn.commit();conn.close(); self.populate_members(tree); name_var.set(''); class_var.set(''); roll_var.set(''); email_var.set('')
+		ttk.Button(form, text='Add Inline', command=do_inline_add, style='Rounded.TButton').grid(row=1, column=4, columnspan=2, padx=6)
 
 	def populate_members(self, tree):
 		for r in tree.get_children(): tree.delete(r)
@@ -545,7 +527,7 @@ class App:
 
 	def add_member_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Member')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
 		name=tk.StringVar();cls=tk.StringVar();roll=tk.StringVar();email=tk.StringVar()
 		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
 		ttk.Label(f,text='Class').grid(row=1,column=0);ttk.Entry(f,textvariable=cls).grid(row=1,column=1)
@@ -557,85 +539,39 @@ class App:
 
 	# Events
 	def view_events(self, parent):
-		top = parent
-		header = tk.Frame(top, bg=self.colors['card'], bd=1, relief='flat')
-		header.pack(fill=tk.X, pady=(0, 8))
-		tk.Label(header, text='Events & Activities', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 14, 'bold')).pack(anchor='w', padx=12, pady=(10, 2))
-		tk.Label(header, text='Keep your society calendar tidy with clear event entries and a quick preview of upcoming activities.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 10))
-
-		layout = ttk.Frame(top)
-		layout.pack(fill=tk.BOTH, expand=True)
-		left = tk.Frame(layout, bg=self.colors['bg'])
-		left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
-		right = tk.Frame(layout, bg=self.colors['bg'])
-		right.pack(side=tk.RIGHT, fill=tk.Y)
-
-		panel = tk.Frame(left, bg=self.colors['card'], bd=1, relief='flat')
-		panel.pack(fill=tk.BOTH, expand=True)
-		tk.Label(panel, text='Event Register', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 12, 'bold')).pack(anchor='w', padx=12, pady=(10, 4))
-		tk.Label(panel, text='Add a new meeting, celebration, or workshop with the details you need.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 8))
-		ttk.Button(panel, text='Add Event', command=self.add_event_dialog, style='Rounded.TButton').pack(anchor='w', padx=12, pady=(0, 8))
-
+		top=parent
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
+		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
+		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
+		ttk.Button(left,text='Add Event',command=self.add_event_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
 		cols=('EventID','Title','Date','Location')
-		tree=ttk.Treeview(panel, columns=cols, show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=150)
-		tree.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT EventID,Title,Date,Location FROM Events ORDER BY Date IS NULL, Date, EventID');rows=cur.fetchall();conn.close()
+		tree=ttk.Treeview(top,columns=cols,show='headings')
+		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
+		tree.pack(fill=tk.BOTH,expand=True)
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT EventID,Title,Date,Location FROM Events');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
-
-		form_card = self.build_input_card(top, 'Add Event', 'Create a new event entry from the bottom panel and keep the schedule organized.')
-		form = ttk.Frame(form_card, padding=8)
-		form.pack(fill=tk.X)
-		title_var = tk.StringVar(); date_var = tk.StringVar(); loc_var = tk.StringVar(); notes_var = tk.StringVar()
-		ttk.Label(form, text='Title').grid(row=0, column=0, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=title_var, width=28).grid(row=0, column=1, padx=4, pady=4)
-		ttk.Label(form, text='Date').grid(row=1, column=0, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=date_var, width=20).grid(row=1, column=1, padx=4, pady=4)
-		ttk.Label(form, text='Location').grid(row=2, column=0, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=loc_var, width=24).grid(row=2, column=1, padx=4, pady=4)
-		ttk.Label(form, text='Notes').grid(row=0, column=2, sticky='w', padx=4, pady=4)
-		ttk.Entry(form, textvariable=notes_var, width=28).grid(row=0, column=3, rowspan=3, padx=4, pady=4)
+		# inline add
+		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
+		title_var = tk.StringVar(); date_var = tk.StringVar(); loc_var = tk.StringVar()
+		tk.Label(form,text='Title').grid(row=0,column=0); ttk.Entry(form,textvariable=title_var, width=36).grid(row=0,column=1, padx=6)
+		tk.Label(form,text='Date').grid(row=1,column=0); ttk.Entry(form,textvariable=date_var, width=20).grid(row=1,column=1, padx=6)
+		tk.Label(form,text='Location').grid(row=2,column=0); ttk.Entry(form,textvariable=loc_var, width=28).grid(row=2,column=1, padx=6)
 		def do_add_event():
-			title = title_var.get().strip()
-			if not title:
-				messagebox.showwarning('Missing','Enter an event title')
-				return
-			if date_var.get().strip():
-				try:
-					datetime.strptime(date_var.get().strip(), '%Y-%m-%d')
-				except ValueError:
-					try:
-						datetime.strptime(date_var.get().strip(), '%d/%m/%Y')
-					except ValueError:
-						messagebox.showwarning('Invalid','Use YYYY-MM-DD or DD/MM/YYYY for the date')
-						return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title,date_var.get().strip(),loc_var.get().strip(),notes_var.get().strip()));conn.commit();conn.close(); title_var.set(''); date_var.set(''); loc_var.set(''); notes_var.set(''); self.show_view('events')
-		ttk.Button(form, text='Save entry', command=do_add_event, style='Rounded.TButton').grid(row=1, column=2, columnspan=2, padx=4, pady=8, sticky='w')
-
-		info = tk.Frame(right, bg=self.colors['card'], bd=1, relief='flat')
-		info.pack(fill=tk.X, padx=(0, 4), pady=(0, 8))
-		tk.Label(info, text='Upcoming Highlights', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 12, 'bold')).pack(anchor='w', padx=12, pady=(10, 4))
-		events = self.get_upcoming_events(4)
-		if events:
-			for title, datestr in events:
-				item = tk.Frame(info, bg=self.colors['card'])
-				item.pack(fill=tk.X, padx=12, pady=4)
-				tk.Label(item, text=title, bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 10, 'bold')).pack(anchor='w')
-				tk.Label(item, text=datestr, bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w')
-		else:
-			tk.Label(info, text='No upcoming events recorded yet.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 10))
+			if not title_var.get().strip(): messagebox.showwarning('Missing','Enter title'); return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location) VALUES (?,?,?)', (title_var.get(),date_var.get(),loc_var.get()));conn.commit();conn.close(); title_var.set(''); date_var.set(''); loc_var.set(''); self.show_view('events')
+		ttk.Button(form,text='Add Inline', command=do_add_event, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
 
 	def add_event_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Event')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
 		title=tk.StringVar(); date=tk.StringVar(); loc=tk.StringVar(); notes=tk.StringVar()
-		ttk.Label(f,text='Title').grid(row=0,column=0, sticky='w', padx=4, pady=4);ttk.Entry(f,textvariable=title).grid(row=0,column=1, padx=4, pady=4)
-		ttk.Label(f,text='Date').grid(row=1,column=0, sticky='w', padx=4, pady=4);ttk.Entry(f,textvariable=date).grid(row=1,column=1, padx=4, pady=4)
-		ttk.Label(f,text='Location').grid(row=2,column=0, sticky='w', padx=4, pady=4);ttk.Entry(f,textvariable=loc).grid(row=2,column=1, padx=4, pady=4)
-		ttk.Label(f,text='Notes').grid(row=3,column=0, sticky='w', padx=4, pady=4);ttk.Entry(f,textvariable=notes).grid(row=3,column=1, padx=4, pady=4)
+		ttk.Label(f,text='Title').grid(row=0,column=0);ttk.Entry(f,textvariable=title).grid(row=0,column=1)
+		ttk.Label(f,text='Date').grid(row=1,column=0);ttk.Entry(f,textvariable=date).grid(row=1,column=1)
+		ttk.Label(f,text='Location').grid(row=2,column=0);ttk.Entry(f,textvariable=loc).grid(row=2,column=1)
+		ttk.Label(f,text='Notes').grid(row=3,column=0);ttk.Entry(f,textvariable=notes).grid(row=3,column=1)
 		def save():
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title.get(),date.get(),loc.get(),notes.get()));conn.commit();conn.close();d.destroy();self.show_view('events')
-		ttk.Button(f,text='Save',command=save, style='Rounded.TButton').grid(row=4,column=0,columnspan=2,pady=8)
+		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
 
 	# Inventory
 	def view_inventory(self, parent):
@@ -650,26 +586,20 @@ class App:
 		tree.pack(fill=tk.BOTH,expand=True)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
-		form_card = self.build_input_card(top, 'Add Inventory Item', 'Record the stock item in the dedicated entry card below the inventory table.')
-		form = ttk.Frame(form_card,padding=8); form.pack(fill=tk.X)
+		# inline add
+		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
 		name_var = tk.StringVar(); qty_var = tk.IntVar(value=1); notes_var = tk.StringVar()
-		tk.Label(form,text='Name').grid(row=0,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=name_var, width=36).grid(row=0,column=1, padx=6, pady=4)
-		tk.Label(form,text='Quantity').grid(row=1,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=qty_var, width=12).grid(row=1,column=1, padx=6, pady=4)
-		tk.Label(form,text='Notes').grid(row=2,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=notes_var, width=36).grid(row=2,column=1, padx=6, pady=4)
+		tk.Label(form,text='Name').grid(row=0,column=0); ttk.Entry(form,textvariable=name_var, width=36).grid(row=0,column=1, padx=6)
+		tk.Label(form,text='Quantity').grid(row=1,column=0); ttk.Entry(form,textvariable=qty_var, width=12).grid(row=1,column=1, padx=6)
+		tk.Label(form,text='Notes').grid(row=2,column=0); ttk.Entry(form,textvariable=notes_var, width=36).grid(row=2,column=1, padx=6)
 		def do_add_item():
-			name = name_var.get().strip()
-			if not name:
-				messagebox.showwarning('Missing','Enter the item name')
-				return
-			if qty_var.get() < 0:
-				messagebox.showwarning('Invalid','Quantity cannot be negative')
-				return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name, qty_var.get(), notes_var.get().strip()));conn.commit();conn.close(); name_var.set(''); qty_var.set(1); notes_var.set(''); self.show_view('inventory')
-		ttk.Button(form, text='Save item', command=do_add_item, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8, pady=4, sticky='nsew')
+			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
+			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name_var.get(), qty_var.get(), notes_var.get()));conn.commit();conn.close(); name_var.set(''); qty_var.set(1); notes_var.set(''); self.show_view('inventory')
+		ttk.Button(form, text='Add Inline', command=do_add_item, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
 
 	def add_item_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Item')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
 		name=tk.StringVar(); qty=tk.IntVar(value=1); notes=tk.StringVar()
 		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
 		ttk.Label(f,text='Quantity').grid(row=1,column=0);ttk.Entry(f,textvariable=qty).grid(row=1,column=1)
@@ -681,82 +611,29 @@ class App:
 	# Borrowing
 	def view_borrowing(self, parent):
 		top=parent
-		header = tk.Frame(top, bg=self.colors['card'], bd=1, relief='flat')
-		header.pack(fill=tk.X, pady=(0, 8))
-		tk.Label(header, text='Borrowing Desk', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 14, 'bold')).pack(anchor='w', padx=12, pady=(10, 2))
-		tk.Label(header, text='Track who borrowed what and make returns quick and accurate.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 10))
-
-		action_bar = ttk.Frame(top)
-		action_bar.pack(fill=tk.X, pady=(0, 8))
-		ttk.Button(action_bar, text='Borrow Item', command=self.borrow_dialog, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(action_bar, text='Return Selected', command=lambda: self.return_selected_borrow(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(action_bar, text='Refresh', command=lambda: self.populate_borrowed(tree)).pack(side=tk.LEFT, padx=4)
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
+		left=ttk.Frame(tb); left.pack(side=tk.LEFT)
+		tk.Button(left,text='Borrow Item',command=self.borrow_dialog).pack(side=tk.LEFT)
+		tk.Button(left,text='Return Selected',command=lambda: self.return_selected_borrow(tree)).pack(side=tk.LEFT, padx=6)
+		tk.Button(left,text='Refresh',command=lambda: self.populate_borrowed(tree)).pack(side=tk.LEFT, padx=6)
 		cols=('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned')
 		tree=ttk.Treeview(top,columns=cols,show='headings')
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
 		tree.pack(fill=tk.BOTH,expand=True)
 		self.populate_borrowed(tree)
-		form_card = self.build_input_card(top, 'Record a Borrow', 'Use the dedicated panel below to log a new borrowing entry and keep stock movement up to date.')
-		form = ttk.Frame(form_card, padding=8)
-		form.pack(fill=tk.X)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name FROM Inventory WHERE Quantity>0');items=cur.fetchall();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();conn.close()
-		if items and members:
-			return_on=tk.StringVar()
-			ttk.Label(form,text='Item').grid(row=0,column=0, sticky='w', padx=4, pady=4)
-			item_cb=ttk.Combobox(form, values=[f"{i[0]}: {i[1]}" for i in items], state='readonly', width=24)
-			item_cb.grid(row=0,column=1, padx=4, pady=4)
-			ttk.Label(form,text='Member').grid(row=1,column=0, sticky='w', padx=4, pady=4)
-			mem_cb=ttk.Combobox(form, values=[f"{m[0]}: {m[1]}" for m in members], state='readonly', width=24)
-			mem_cb.grid(row=1,column=1, padx=4, pady=4)
-			ttk.Label(form,text='Return Date').grid(row=2,column=0, sticky='w', padx=4, pady=4)
-			ttk.Entry(form,textvariable=return_on, width=18).grid(row=2,column=1, padx=4, pady=4)
-			def do_borrow():
-				try:
-					iid=int(item_cb.get().split(':')[0]); mid=int(mem_cb.get().split(':')[0])
-				except Exception:
-					messagebox.showerror('Error','Select both an item and a member before saving')
-					return
-				if not item_cb.get() or not mem_cb.get():
-					messagebox.showwarning('Missing','Choose an item and member')
-					return
-				rd=return_on.get().strip() or None
-				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)', (iid,mid,datetime.now().isoformat(), rd));cur.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=?',(iid,));conn.commit();conn.close(); return_on.set(''); item_cb.set(''); mem_cb.set(''); self.populate_borrowed(tree)
-			ttk.Button(form, text='Save borrow', command=do_borrow, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8,pady=4, sticky='nsew')
-		else:
-			tk.Label(form, text='No inventory items or members are available right now.', fg='orange').grid(row=0,column=0,columnspan=2,padx=4,pady=8)
-
-	def populate_borrowed(self, tree):
-		for r in tree.get_children(): tree.delete(r)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('''
-			SELECT b.BorrowID, i.Name, m.Name, b.BorrowDate, b.ReturnDate,
-				CASE WHEN b.Returned=1 THEN 'Returned' ELSE 'Active' END
-			FROM BorrowedItems b
-			LEFT JOIN Inventory i ON b.ItemID=i.ItemID
-			LEFT JOIN Members m ON b.MemberID=m.MemberID
-			ORDER BY b.BorrowID DESC
-		''');rows=cur.fetchall();conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
 
 	def borrow_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Borrow Item')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name FROM Inventory WHERE Quantity>0');items=cur.fetchall();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();conn.close()
-		if not items:
-			messagebox.showwarning('Empty','No available inventory items to borrow right now.')
-			d.destroy()
-			return
-		if not members:
-			messagebox.showwarning('Empty','Add members before recording borrowing entries.')
-			d.destroy()
-			return
-		return_on=tk.StringVar()
-		ttk.Label(f,text='Item').grid(row=0,column=0, sticky='w', padx=4, pady=4)
-		item_cb=ttk.Combobox(f, values=[f"{i[0]}: {i[1]}" for i in items], state='readonly')
-		item_cb.grid(row=0,column=1, padx=4, pady=4)
-		ttk.Label(f,text='Member').grid(row=1,column=0, sticky='w', padx=4, pady=4)
-		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members], state='readonly')
-		mem_cb.grid(row=1,column=1, padx=4, pady=4)
-		ttk.Label(f,text='Return Date').grid(row=2,column=0, sticky='w', padx=4, pady=4);ttk.Entry(f,textvariable=return_on).grid(row=2,column=1, padx=4, pady=4)
+		item_var=tk.IntVar(); member_var=tk.IntVar(); return_on=tk.StringVar()
+		ttk.Label(f,text='Item').grid(row=0,column=0);
+		item_cb=ttk.Combobox(f, values=[f"{i[0]}: {i[1]}" for i in items])
+		item_cb.grid(row=0,column=1)
+		ttk.Label(f,text='Member').grid(row=1,column=0);
+		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members])
+		mem_cb.grid(row=1,column=1)
+		ttk.Label(f,text='Return Date').grid(row=2,column=0);ttk.Entry(f,textvariable=return_on).grid(row=2,column=1)
 		def save():
 			try:
 				iid=int(item_cb.get().split(':')[0]); mid=int(mem_cb.get().split(':')[0])
@@ -765,23 +642,7 @@ class App:
 				return
 			rd=return_on.get() or None
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)', (iid,mid,datetime.now().isoformat(), rd));cur.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=?',(iid,));conn.commit();conn.close();d.destroy();self.show_view('borrow')
-		ttk.Button(f,text='Save',command=save, style='Rounded.TButton').grid(row=3,column=0,columnspan=2,pady=8)
-
-	def return_selected_borrow(self, tree):
-		sel=tree.selection()
-		if not sel:
-			messagebox.showwarning('Select','Pick a borrowing entry to return')
-			return
-		borrow_id=tree.item(sel[0])['values'][0]
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID, Returned FROM BorrowedItems WHERE BorrowID=?',(borrow_id,));row=cur.fetchone();conn.close()
-		if not row:
-			messagebox.showerror('Missing','Borrow record not found')
-			return
-		if row[1]:
-			messagebox.showinfo('Already returned','This item was already returned.')
-			return
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('UPDATE BorrowedItems SET Returned=1, ReturnDate=? WHERE BorrowID=?',(datetime.now().isoformat(), borrow_id));cur.execute('UPDATE Inventory SET Quantity=Quantity+1 WHERE ItemID=?',(row[0],));conn.commit();conn.close();self.populate_borrowed(tree)
-		messagebox.showinfo('Returned','Borrowing entry marked as returned.')
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
 
 	# Attendance
 	def view_attendance(self, parent):
@@ -796,26 +657,6 @@ class App:
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
 		tree.pack(fill=tk.BOTH,expand=True)
 		self.populate_attendance(tree)
-		form_card = self.build_input_card(top, 'Mark Attendance', 'Add a new attendance record from the bottom form so the event log stays current.')
-		form = ttk.Frame(form_card, padding=8)
-		form.pack(fill=tk.X)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();cur.execute('SELECT EventID,Title FROM Events');events=cur.fetchall();conn.close()
-		if members and events:
-			mem_cb=ttk.Combobox(form, values=[f"{m[0]}: {m[1]}" for m in members], width=24, state='readonly')
-			mem_cb.grid(row=0,column=1,padx=4,pady=4); ttk.Label(form,text='Member').grid(row=0,column=0, sticky='w', padx=4, pady=4)
-			evt_cb=ttk.Combobox(form, values=[f"{e[0]}: {e[1]}" for e in events], width=24, state='readonly')
-			evt_cb.grid(row=1,column=1,padx=4,pady=4); ttk.Label(form,text='Event').grid(row=1,column=0, sticky='w', padx=4, pady=4)
-			present_var = tk.IntVar(value=1)
-			tk.Checkbutton(form, text='Present', variable=present_var).grid(row=2,column=0,columnspan=2,padx=4,pady=4)
-			def save():
-				try:
-					mid=int(mem_cb.get().split(':')[0]); eid=int(evt_cb.get().split(':')[0])
-				except Exception:
-					messagebox.showerror('Error','Select both a member and an event');return
-				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Attendance (MemberID,EventID,Present,Timestamp) VALUES (?,?,?,?)',(mid,eid,present_var.get(),datetime.now().isoformat()));conn.commit();conn.close(); mem_cb.set(''); evt_cb.set(''); present_var.set(1); self.populate_attendance(tree)
-			ttk.Button(form,text='Save attendance',command=save, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8,pady=4, sticky='nsew')
-		else:
-			tk.Label(form, text='Add members and events before marking attendance.', fg='orange').grid(row=0,column=0,columnspan=2,padx=4,pady=8)
 
 	def populate_attendance(self, tree):
 		for r in tree.get_children(): tree.delete(r)
@@ -824,7 +665,7 @@ class App:
 
 	def mark_attendance_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Mark Attendance')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
+		f=ttk.Frame(d,padx=12,pady=12);f.pack()
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();cur.execute('SELECT EventID,Title FROM Events');events=cur.fetchall();conn.close()
 		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members])
 		mem_cb.grid(row=0,column=1); ttk.Label(f,text='Member').grid(row=0,column=0)
@@ -841,165 +682,38 @@ class App:
 		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
 
 	# Reports & Security
-	def get_upcoming_events(self, limit=4):
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT Title, Date FROM Events WHERE Date IS NOT NULL ORDER BY Date LIMIT ?', (limit,));rows=cur.fetchall();conn.close()
-		return rows
-
-	def get_report_summary(self):
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor()
-		cur.execute('SELECT COUNT(*) FROM Members'); members = cur.fetchone()[0]
-		cur.execute('SELECT COUNT(*) FROM Inventory'); inventory_items = cur.fetchone()[0]
-		cur.execute('SELECT COUNT(*) FROM BorrowedItems WHERE Returned=0'); active_borrows = cur.fetchone()[0]
-		cur.execute('SELECT COUNT(*) FROM Events'); events = cur.fetchone()[0]
-		conn.close()
-		return {'members': members, 'inventory_items': inventory_items, 'active_borrows': active_borrows, 'events': events}
-
-	def get_security_summary(self):
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor()
-		cur.execute('SELECT COUNT(*) FROM Users'); total_users = cur.fetchone()[0]
-		cur.execute('SELECT COUNT(*) FROM Users WHERE Role="admin"'); admin_users = cur.fetchone()[0]
-		conn.close()
-		return {'total_users': total_users, 'admin_users': admin_users}
-
 	def view_reports(self, parent):
 		top=parent
-		header = tk.Frame(top, bg=self.colors['card'], bd=1, relief='flat')
-		header.pack(fill=tk.X, pady=(0, 8))
-		tk.Label(header, text='Reports Center', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 14, 'bold')).pack(anchor='w', padx=12, pady=(10, 2))
-		tk.Label(header, text='Export key records and review quick summaries from one place.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 10))
-
-		summary = self.get_report_summary()
-		cards = tk.Frame(top, bg=self.colors['bg'])
-		cards.pack(fill=tk.X, pady=(0, 10))
-		for label, value in [('Members', summary['members']), ('Inventory Items', summary['inventory_items']), ('Active Borrows', summary['active_borrows']), ('Events', summary['events'])]:
-			card = tk.Frame(cards, bg=self.colors['card'], bd=1, relief='flat')
-			card.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=6)
-			tk.Label(card, text=label, bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=10, pady=(8, 0))
-			tk.Label(card, text=str(value), bg=self.colors['card'], fg=self.colors['accent2'], font='Segoe UI 16 bold').pack(anchor='w', padx=10, pady=(0, 8))
-
+		tk.Label(top, text='Reports').pack(pady=8)
 		btns = ttk.Frame(top)
-		btns.pack(fill=tk.X, pady=(0, 10))
-		ttk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-
-		note = tk.Frame(top, bg=self.colors['card'], bd=1, relief='flat')
-		note.pack(fill=tk.BOTH, expand=True)
-		tk.Label(note, text='Quick actions', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 12, 'bold')).pack(anchor='w', padx=12, pady=(10, 4))
-		tk.Label(note, text='Use these exports whenever you need reports for meetings, inventory stock, borrowing history, or attendance.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 10))
+		btns.pack(pady=8)
+		tk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		tk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		tk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		tk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		tk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 
 	def view_security(self, parent):
 		top=parent
-		header = tk.Frame(top, bg=self.colors['card'], bd=1, relief='flat')
-		header.pack(fill=tk.X, pady=(0, 8))
-		tk.Label(header, text='Security Center', bg=self.colors['card'], fg=self.colors['fg'], font=("Segoe UI", 14, 'bold')).pack(anchor='w', padx=12, pady=(10, 2))
-		tk.Label(header, text='Manage access, reset passwords, and keep user accounts in order.', bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=12, pady=(0, 10))
+		tk.Label(top, text='Security / Users').pack(pady=8)
 		if self.user.get('role') != 'admin':
-			panel = tk.Frame(top, bg=self.colors['card'], bd=1, relief='flat')
-			panel.pack(fill=tk.BOTH, expand=True, pady=8)
-			tk.Label(panel, text='Admin access required to manage users.', bg=self.colors['card'], fg='orange').pack(padx=12, pady=12)
-			ttk.Button(panel, text='Change my password', command=self.change_password_dialog, style='Rounded.TButton').pack(anchor='w', padx=12, pady=(0, 12))
+			tk.Label(top, text='Admin access required to manage users.', foreground='orange').pack(pady=12)
 			return
-		summary = self.get_security_summary()
-		cards = tk.Frame(top, bg=self.colors['bg'])
-		cards.pack(fill=tk.X, pady=(0, 10))
-		for label, value in [('Total Users', summary['total_users']), ('Admins', summary['admin_users'])]:
-			card = tk.Frame(cards, bg=self.colors['card'], bd=1, relief='flat')
-			card.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=6)
-			tk.Label(card, text=label, bg=self.colors['card'], fg=self.colors['fg']).pack(anchor='w', padx=10, pady=(8, 0))
-			tk.Label(card, text=str(value), bg=self.colors['card'], fg=self.colors['accent2'], font='Segoe UI 16 bold').pack(anchor='w', padx=10, pady=(0, 8))
-
-		tb=ttk.Frame(top);tb.pack(fill=tk.X, pady=(0, 8))
+		tb=ttk.Frame(top);tb.pack(fill=tk.X)
 		left=ttk.Frame(tb); left.pack(side=tk.LEFT)
-		ttk.Button(left, text='Create user', command=self.create_user_dialog, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(left, text='Change my password', command=self.change_password_dialog, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(left, text='Reset admin password', command=self.reset_admin_password, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(left, text='Reset selected', command=lambda: self.reset_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(left, text='Delete selected', command=lambda: self.delete_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		tk.Button(left, text='Reset admin password', command=self.reset_admin_password, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		tk.Button(left, text='Reset selected', command=lambda: self.reset_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		tk.Button(left, text='Delete selected', command=lambda: self.delete_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
 		cols=('UserID','Username','Role','MemberID')
 		tree=ttk.Treeview(top,columns=cols,show='headings')
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
 		tree.pack(fill=tk.BOTH,expand=True, pady=8)
 		self.populate_users(tree)
-		form_card = self.build_input_card(top, 'Create User', 'Create a new account entry in the dedicated bottom panel and keep access organized.')
-		form = ttk.Frame(form_card, padding=8)
-		form.pack(fill=tk.X)
-		username_var=tk.StringVar(); password_var=tk.StringVar(); role_var=tk.StringVar(value='member'); member_var=tk.StringVar()
-		ttk.Label(form,text='Username').grid(row=0,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=username_var).grid(row=0,column=1,padx=4,pady=4)
-		ttk.Label(form,text='Password').grid(row=1,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=password_var, show='*').grid(row=1,column=1,padx=4,pady=4)
-		ttk.Label(form,text='Role').grid(row=2,column=0, sticky='w', padx=4, pady=4); ttk.Combobox(form, textvariable=role_var, values=['member','admin'], state='readonly').grid(row=2,column=1,padx=4,pady=4)
-		ttk.Label(form,text='Member ID').grid(row=3,column=0, sticky='w', padx=4, pady=4); ttk.Entry(form,textvariable=member_var).grid(row=3,column=1,padx=4,pady=4)
-		def save():
-			uname=username_var.get().strip(); pw=password_var.get(); role=role_var.get(); mid=member_var.get().strip()
-			if not (uname and pw):
-				messagebox.showwarning('Missing','Enter username and password')
-				return
-			if mid:
-				if not mid.isdigit():
-					messagebox.showwarning('Invalid','Member ID must be numeric')
-					return
-				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID FROM Members WHERE MemberID=?',(int(mid),));exists=cur.fetchone();conn.close()
-				if not exists:
-					messagebox.showerror('Not found','The supplied member ID was not found')
-					return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT 1 FROM Users WHERE Username=?',(uname,));exists=cur.fetchone();conn.close()
-			if exists:
-				messagebox.showerror('Taken','That username is already in use')
-				return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Users (MemberID, Username, Password, Role, FirstLogin) VALUES (?,?,?,?,1)', ((int(mid) if mid else None), uname, hash_password(pw), role));conn.commit();conn.close(); username_var.set(''); password_var.set(''); role_var.set('member'); member_var.set(''); self.populate_users(tree)
-		ttk.Button(form,text='Create',command=save, style='Rounded.TButton').grid(row=0,column=2,rowspan=4,padx=8,pady=4, sticky='nsew')
 
 	def populate_users(self, tree):
 		for r in tree.get_children(): tree.delete(r)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT UserID, Username, Role, MemberID FROM Users');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
-
-	def create_user_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Create User')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
-		username_var=tk.StringVar(); password_var=tk.StringVar(); role_var=tk.StringVar(value='member'); member_var=tk.StringVar()
-		ttk.Label(f,text='Username').grid(row=0,column=0, sticky='w', padx=4, pady=4); ttk.Entry(f,textvariable=username_var).grid(row=0,column=1,padx=4,pady=4)
-		ttk.Label(f,text='Password').grid(row=1,column=0, sticky='w', padx=4, pady=4); ttk.Entry(f,textvariable=password_var, show='*').grid(row=1,column=1,padx=4,pady=4)
-		ttk.Label(f,text='Role').grid(row=2,column=0, sticky='w', padx=4, pady=4); ttk.Combobox(f, textvariable=role_var, values=['member','admin'], state='readonly').grid(row=2,column=1,padx=4,pady=4)
-		ttk.Label(f,text='Member ID').grid(row=3,column=0, sticky='w', padx=4, pady=4); ttk.Entry(f,textvariable=member_var).grid(row=3,column=1,padx=4,pady=4)
-		def save():
-			uname=username_var.get().strip(); pw=password_var.get(); role=role_var.get(); mid=member_var.get().strip()
-			if not (uname and pw):
-				messagebox.showwarning('Missing','Enter username and password')
-				return
-			if mid:
-				if not mid.isdigit():
-					messagebox.showwarning('Invalid','Member ID must be numeric')
-					return
-				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID FROM Members WHERE MemberID=?',(int(mid),));exists=cur.fetchone();conn.close()
-				if not exists:
-					messagebox.showerror('Not found','The supplied member ID was not found')
-					return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT 1 FROM Users WHERE Username=?',(uname,));exists=cur.fetchone();conn.close()
-			if exists:
-				messagebox.showerror('Taken','That username is already in use')
-				return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Users (MemberID, Username, Password, Role, FirstLogin) VALUES (?,?,?,?,1)', ((int(mid) if mid else None), uname, hash_password(pw), role));conn.commit();conn.close();d.destroy();self.show_view('security')
-		ttk.Button(f,text='Create',command=save, style='Rounded.TButton').grid(row=4,column=0,columnspan=2,pady=8)
-
-	def change_password_dialog(self, username=None):
-		d=tk.Toplevel(self.root);d.title('Change Password')
-		f=ttk.Frame(d);f.pack(padx=12,pady=12)
-		new_pw=tk.StringVar(); confirm_pw=tk.StringVar()
-		ttk.Label(f,text='New Password').grid(row=0,column=0, sticky='w', padx=4, pady=4); ttk.Entry(f,textvariable=new_pw, show='*').grid(row=0,column=1,padx=4,pady=4)
-		ttk.Label(f,text='Confirm').grid(row=1,column=0, sticky='w', padx=4, pady=4); ttk.Entry(f,textvariable=confirm_pw, show='*').grid(row=1,column=1,padx=4,pady=4)
-		def save():
-			if new_pw.get() != confirm_pw.get():
-				messagebox.showwarning('Mismatch','The passwords do not match')
-				return
-			if not new_pw.get():
-				messagebox.showwarning('Missing','Enter a password')
-				return
-			user_to_update = username or self.user['username']
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('UPDATE Users SET Password=?, FirstLogin=0 WHERE Username=?', (hash_password(new_pw.get()), user_to_update));conn.commit();conn.close();d.destroy();messagebox.showinfo('Updated','Password changed successfully')
-		ttk.Button(f,text='Save',command=save, style='Rounded.TButton').grid(row=2,column=0,columnspan=2,pady=8)
 
 	def reset_selected_user(self, tree):
 		sel = tree.selection()
@@ -1010,7 +724,7 @@ class App:
 		if username == 'admin':
 			self.reset_admin_password()
 			return
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('UPDATE Users SET Password=?, FirstLogin=1 WHERE Username=?', (hash_password('password123'), username));conn.commit();conn.close();messagebox.showinfo('Reset', f"Password reset for {username}")
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password('password123'), username));conn.commit();conn.close();messagebox.showinfo('Reset', f"Password reset for {username}")
 
 	def delete_selected_user(self, tree):
 		sel = tree.selection()
@@ -1026,15 +740,14 @@ class App:
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Users WHERE Username=?', (username,));conn.commit();conn.close();self.populate_users(tree)
 
 	def reset_admin_password(self):
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("UPDATE Users SET Password=?, FirstLogin=1 WHERE Username='admin'", (hash_password('admin123'),));conn.commit();conn.close();messagebox.showinfo('Reset','Admin password set to admin123')
+		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("UPDATE Users SET Password=? WHERE Username='admin'", (hash_password('admin123'),));conn.commit();conn.close();messagebox.showinfo('Reset','Admin password set to admin123')
 
 	def export_table(self, table, columns):
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute(f"SELECT {', '.join(columns)} FROM {table}");rows=cur.fetchall();conn.close()
 		fn = f"{table}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-		output_path = os.path.join(os.path.dirname(__file__), fn)
-		with open(output_path,'w',newline='',encoding='utf-8') as f:
+		with open(fn,'w',newline='',encoding='utf-8') as f:
 			w=csv.writer(f); w.writerow(columns); w.writerows(rows)
-		messagebox.showinfo('Export','Wrote '+output_path)
+		messagebox.showinfo('Export','Wrote '+fn)
 
 
 def main():

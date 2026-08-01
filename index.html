@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Society Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.3),_transparent_30%),linear-gradient(135deg,_#07131f_0%,_#0f172a_45%,_#111827_100%)] text-slate-100">
+    <div class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <header class="mb-6 rounded-[28px] border border-white/10 bg-white/10 px-4 py-4 shadow-2xl shadow-emerald-500/10 backdrop-blur md:px-6">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.35em] text-emerald-300">VBCCPAS Soft</p>
+            <h1 class="text-2xl font-semibold text-white">Society Manager Dashboard</h1>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400">Open Dashboard</button>
+            <button class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-400/30 transition hover:bg-amber-300">Quick Reports</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="grid flex-1 gap-6 lg:grid-cols-[260px_1fr]">
+        <aside class="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-2xl shadow-black/30 backdrop-blur">
+          <h2 class="mb-4 px-2 text-sm font-semibold uppercase tracking-[0.25em] text-slate-400">Sections</h2>
+          <div class="space-y-2">
+            <button data-target="dashboard" class="nav-btn w-full rounded-2xl bg-emerald-500/90 px-4 py-3 text-left font-semibold text-white transition hover:bg-emerald-400">Dashboard</button>
+            <button data-target="members" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Members</button>
+            <button data-target="events" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Events</button>
+            <button data-target="inventory" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Inventory</button>
+            <button data-target="borrowing" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Borrowing</button>
+            <button data-target="attendance" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Attendance</button>
+            <button data-target="reports" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Reports</button>
+            <button data-target="security" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Security</button>
+          </div>
+        </aside>
+
+        <section class="space-y-6">
+          <div id="dashboard" class="section-card rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur xl:p-8">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="max-w-2xl">
+                <p class="mb-3 inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-200">Fresh, modern, and easy to use</p>
+                <h2 class="text-3xl font-semibold leading-tight text-white sm:text-4xl">Keep your society organized with a brighter workspace.</h2>
+                <p class="mt-4 text-lg text-slate-300">Manage members, plan events, track inventory, and review attendance from one polished dashboard.</p>
+              </div>
+              <div class="rounded-3xl border border-amber-400/30 bg-amber-400/10 p-4 text-amber-200">
+                <p class="text-sm uppercase tracking-[0.25em]">Today</p>
+                <p id="summary-count" class="mt-2 text-3xl font-semibold text-white">0</p>
+                <p class="text-sm text-amber-100">Active records</p>
+              </div>
+            </div>
+
+            <div class="mt-8 grid gap-4 md:grid-cols-3">
+              <div class="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+                <p class="text-sm text-emerald-200">Members</p>
+                <p id="count-members" class="mt-2 text-2xl font-semibold text-white">0</p>
+              </div>
+              <div class="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+                <p class="text-sm text-amber-100">Events</p>
+                <p id="count-events" class="mt-2 text-2xl font-semibold text-white">0</p>
+              </div>
+              <div class="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-4">
+                <p class="text-sm text-sky-100">Attendance</p>
+                <p id="count-attendance" class="mt-2 text-2xl font-semibold text-white">0</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="members" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-emerald-300">Members</p>
+                <h3 class="text-2xl font-semibold text-white">Member directory</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <form id="members-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input type="hidden" name="id" />
+                <label class="block text-sm text-slate-300">Name<input name="name" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Class<input name="class" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Roll<input name="roll" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Email<input name="email" type="email" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <div class="flex flex-wrap gap-3">
+                  <button type="submit" class="rounded-full bg-emerald-500 px-4 py-2 font-semibold text-white transition hover:bg-emerald-400">Save member</button>
+                  <button type="button" data-reset="members" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
+                </div>
+              </form>
+              <div>
+                <p class="mb-3 text-sm text-slate-400">Saved members</p>
+                <div id="members-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="events" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-amber-300">Events</p>
+                <h3 class="text-2xl font-semibold text-white">Upcoming programs</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <form id="events-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input type="hidden" name="id" />
+                <label class="block text-sm text-slate-300">Title<input name="title" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Date<input name="date" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Location<input name="location" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Notes<textarea name="notes" rows="3" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white"></textarea></label>
+                <div class="flex flex-wrap gap-3">
+                  <button type="submit" class="rounded-full bg-amber-400 px-4 py-2 font-semibold text-slate-900 transition hover:bg-amber-300">Save event</button>
+                  <button type="button" data-reset="events" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
+                </div>
+              </form>
+              <div>
+                <p class="mb-3 text-sm text-slate-400">Saved events</p>
+                <div id="events-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="inventory" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-sky-300">Inventory</p>
+                <h3 class="text-2xl font-semibold text-white">Stock overview</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <form id="inventory-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input type="hidden" name="id" />
+                <label class="block text-sm text-slate-300">Item name<input name="name" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Quantity<input name="quantity" type="number" min="0" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Notes<textarea name="notes" rows="3" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white"></textarea></label>
+                <div class="flex flex-wrap gap-3">
+                  <button type="submit" class="rounded-full bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-400">Save item</button>
+                  <button type="button" data-reset="inventory" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
+                </div>
+              </form>
+              <div>
+                <p class="mb-3 text-sm text-slate-400">Current stock</p>
+                <div id="inventory-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="borrowing" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-violet-300">Borrowing</p>
+                <h3 class="text-2xl font-semibold text-white">Borrowed items</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <form id="borrowed-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input type="hidden" name="id" />
+                <label class="block text-sm text-slate-300">Item ID<input name="item_id" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Member ID<input name="member_id" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Borrow date<input name="borrow_date" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Return date<input name="return_date" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Returned<select name="returned" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white"><option value="0">No</option><option value="1">Yes</option></select></label>
+                <div class="flex flex-wrap gap-3">
+                  <button type="submit" class="rounded-full bg-violet-500 px-4 py-2 font-semibold text-white transition hover:bg-violet-400">Save borrowing</button>
+                  <button type="button" data-reset="borrowed" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
+                </div>
+              </form>
+              <div>
+                <p class="mb-3 text-sm text-slate-400">Borrow records</p>
+                <div id="borrowed-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="attendance" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-emerald-300">Attendance</p>
+                <h3 class="text-2xl font-semibold text-white">Participation status</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <form id="attendance-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input type="hidden" name="id" />
+                <label class="block text-sm text-slate-300">Member ID<input name="member_id" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Event ID<input name="event_id" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Present<select name="present" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white"><option value="1">Yes</option><option value="0">No</option></select></label>
+                <label class="block text-sm text-slate-300">Timestamp<input name="timestamp" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <div class="flex flex-wrap gap-3">
+                  <button type="submit" class="rounded-full bg-emerald-500 px-4 py-2 font-semibold text-white transition hover:bg-emerald-400">Save attendance</button>
+                  <button type="button" data-reset="attendance" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
+                </div>
+              </form>
+              <div>
+                <p class="mb-3 text-sm text-slate-400">Attendance log</p>
+                <div id="attendance-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="reports" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-amber-300">Reports</p>
+                <h3 class="text-2xl font-semibold text-white">Performance snapshots</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 md:grid-cols-2">
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p class="text-sm text-slate-400">Monthly growth</p>
+                <p id="report-growth" class="mt-2 text-2xl font-semibold text-white">0%</p>
+              </div>
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p class="text-sm text-slate-400">Event success rate</p>
+                <p id="report-success" class="mt-2 text-2xl font-semibold text-white">0%</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="security" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm uppercase tracking-[0.25em] text-rose-300">Security</p>
+                <h3 class="text-2xl font-semibold text-white">Control center</h3>
+              </div>
+            </div>
+            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+              <form id="users-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input type="hidden" name="id" />
+                <label class="block text-sm text-slate-300">Username<input name="username" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Password<input name="password" type="password" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
+                <label class="block text-sm text-slate-300">Role<select name="role" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white"><option value="admin">Admin</option><option value="member">Member</option></select></label>
+                <div class="flex flex-wrap gap-3">
+                  <button type="submit" class="rounded-full bg-rose-500 px-4 py-2 font-semibold text-white transition hover:bg-rose-400">Save account</button>
+                  <button type="button" data-reset="users" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
+                </div>
+              </form>
+              <div>
+                <p class="mb-3 text-sm text-slate-400">Access accounts</p>
+                <div id="users-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const navButtons = document.querySelectorAll('.nav-btn');
+      const cards = document.querySelectorAll('.section-card');
+
+      navButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const target = button.getAttribute('data-target');
+          cards.forEach((card) => {
+            card.classList.toggle('hidden', card.id !== target);
+          });
+
+          navButtons.forEach((btn) => {
+            btn.classList.toggle('bg-emerald-500/90', btn === button);
+            btn.classList.toggle('text-white', btn === button);
+            btn.classList.toggle('bg-white/5', btn !== button);
+            btn.classList.toggle('text-slate-100', btn !== button);
+          });
+        });
+      });
+
+      const sections = [
+        { key: 'members', formId: 'members-form', listId: 'members-list', endpoint: '/api/members' },
+        { key: 'events', formId: 'events-form', listId: 'events-list', endpoint: '/api/events' },
+        { key: 'inventory', formId: 'inventory-form', listId: 'inventory-list', endpoint: '/api/inventory' },
+        { key: 'borrowed', formId: 'borrowed-form', listId: 'borrowed-list', endpoint: '/api/borrowed' },
+        { key: 'attendance', formId: 'attendance-form', listId: 'attendance-list', endpoint: '/api/attendance' },
+        { key: 'users', formId: 'users-form', listId: 'users-list', endpoint: '/api/users' },
+      ];
+
+      async function loadSummary() {
+        const response = await fetch('/api/summary');
+        const data = await response.json();
+        document.getElementById('summary-count').textContent = Object.values(data).reduce((sum, value) => sum + Number(value || 0), 0);
+        document.getElementById('count-members').textContent = data.members;
+        document.getElementById('count-events').textContent = data.events;
+        document.getElementById('count-attendance').textContent = data.attendance;
+        document.getElementById('report-growth').textContent = `${Math.min(100, Math.round((data.members / Math.max(1, data.events)) * 10))}%`;
+        document.getElementById('report-success').textContent = `${Math.min(100, 90 + data.events)}%`;
+      }
+
+      async function loadSection(section) {
+        const response = await fetch(section.endpoint);
+        const rows = await response.json();
+        const container = document.getElementById(section.listId);
+        if (!container) return;
+
+        if (section.key === 'members') {
+          container.innerHTML = rows.map((row) => `
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-white">${row.name || 'Unnamed'}</p>
+                  <p>${row.class || '-'} • Roll ${row.roll || '-'} • ${row.email || '-'}</p>
+                </div>
+                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
+              </div>
+            </div>
+          `).join('');
+        } else if (section.key === 'events') {
+          container.innerHTML = rows.map((row) => `
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-white">${row.title || 'Untitled event'}</p>
+                  <p>${row.date || '-'} • ${row.location || '-'}</p>
+                </div>
+                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-amber-400/90 px-3 py-1 text-xs font-semibold text-slate-900">Edit</button>
+              </div>
+            </div>
+          `).join('');
+        } else if (section.key === 'inventory') {
+          container.innerHTML = rows.map((row) => `
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-white">${row.name || 'Untitled item'}</p>
+                  <p>${row.quantity || 0} in stock • ${row.notes || '-'}</p>
+                </div>
+                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-sky-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
+              </div>
+            </div>
+          `).join('');
+        } else if (section.key === 'borrowed') {
+          container.innerHTML = rows.map((row) => `
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-white">Item ${row.item_id || '-'} • Member ${row.member_id || '-'}</p>
+                  <p>Borrowed ${row.borrow_date || '-'} • Return ${row.return_date || '-'}</p>
+                </div>
+                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-violet-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
+              </div>
+            </div>
+          `).join('');
+        } else if (section.key === 'attendance') {
+          container.innerHTML = rows.map((row) => `
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-white">Member ${row.member_id || '-'} • Event ${row.event_id || '-'}</p>
+                  <p>${row.present ? 'Present' : 'Absent'} • ${row.timestamp || '-'}</p>
+                </div>
+                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
+              </div>
+            </div>
+          `).join('');
+        } else if (section.key === 'users') {
+          container.innerHTML = rows.map((row) => `
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-white">${row.username || 'Unknown'}</p>
+                  <p>${row.role || 'member'}</p>
+                </div>
+                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-rose-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+
+      async function loadAll() {
+        await loadSummary();
+        for (const section of sections) {
+          await loadSection(section);
+        }
+      }
+
+      async function saveSection(formId, endpoint) {
+        const form = document.getElementById(formId);
+        const payload = Object.fromEntries(new FormData(form).entries());
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+          form.reset();
+          form.querySelector('input[name="id"]').value = '';
+          await loadAll();
+        }
+      }
+
+      sections.forEach((section) => {
+        const form = document.getElementById(section.formId);
+        if (form) {
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await saveSection(section.formId, section.endpoint);
+          });
+        }
+      });
+
+      document.querySelectorAll('[data-reset]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const formId = `${button.getAttribute('data-reset')}-form`;
+          const form = document.getElementById(formId);
+          if (form) {
+            form.reset();
+            form.querySelector('input[name="id"]').value = '';
+          }
+        });
+      });
+
+      document.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-edit]');
+        if (!button) return;
+        const sectionKey = button.getAttribute('data-edit');
+        const id = button.getAttribute('data-id');
+        const section = sections.find((item) => item.key === sectionKey);
+        if (!section) return;
+        const response = await fetch(`${section.endpoint}`);
+        const rows = await response.json();
+        const row = rows.find((item) => String(item.id) === String(id));
+        if (!row) return;
+        const form = document.getElementById(section.formId);
+        if (!form) return;
+        Object.entries(row).forEach(([key, value]) => {
+          const field = form.querySelector(`[name="${key}"]`);
+          if (field) {
+            field.value = value ?? '';
+          }
+        });
+        const hidden = form.querySelector('input[name="id"]');
+        if (hidden) hidden.value = row.id;
+      });
+
+      loadAll();
+    </script>
+  </body>
+</html>
