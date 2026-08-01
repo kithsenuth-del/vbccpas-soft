@@ -11,6 +11,7 @@ DB_PATH = main.DB_PATH
 
 
 def get_db():
+    main.setup_database()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -19,6 +20,7 @@ def get_db():
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
+        print("REQUEST", self.command, parsed.path)
         if parsed.path.startswith("/api/"):
             self.handle_api(parsed.path)
             return
@@ -26,6 +28,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        print("REQUEST", self.command, parsed.path)
         if parsed.path.startswith("/api/"):
             self.handle_api(parsed.path)
             return
@@ -126,51 +129,63 @@ class Handler(BaseHTTPRequestHandler):
 
     def list_members(self):
         conn = get_db()
-        rows = conn.execute(
-            "SELECT MemberID AS id, Name AS name, Class AS class, Roll AS roll, Email AS email FROM Members ORDER BY MemberID DESC"
-        ).fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        try:
+            rows = conn.execute(
+                "SELECT MemberID AS id, Name AS name, Class AS class, Roll AS roll, Email AS email FROM Members ORDER BY MemberID DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def list_events(self):
         conn = get_db()
-        rows = conn.execute(
-            "SELECT EventID AS id, Title AS title, Date AS date, Location AS location, Notes AS notes FROM Events ORDER BY EventID DESC"
-        ).fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        try:
+            rows = conn.execute(
+                "SELECT EventID AS id, Title AS title, Date AS date, Location AS location, Notes AS notes FROM Events ORDER BY EventID DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def list_inventory(self):
         conn = get_db()
-        rows = conn.execute(
-            "SELECT ItemID AS id, Name AS name, Quantity AS quantity, Notes AS notes FROM Inventory ORDER BY ItemID DESC"
-        ).fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        try:
+            rows = conn.execute(
+                "SELECT ItemID AS id, Name AS name, Quantity AS quantity, Notes AS notes FROM Inventory ORDER BY ItemID DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def list_borrowed(self):
         conn = get_db()
-        rows = conn.execute(
-            "SELECT BorrowID AS id, ItemID AS item_id, MemberID AS member_id, BorrowDate AS borrow_date, ReturnDate AS return_date, Returned AS returned FROM BorrowedItems ORDER BY BorrowID DESC"
-        ).fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        try:
+            rows = conn.execute(
+                "SELECT BorrowID AS id, ItemID AS item_id, MemberID AS member_id, BorrowDate AS borrow_date, ReturnDate AS return_date, Returned AS returned FROM BorrowedItems ORDER BY BorrowID DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def list_attendance(self):
         conn = get_db()
-        rows = conn.execute(
-            "SELECT AttID AS id, MemberID AS member_id, EventID AS event_id, Present AS present, Timestamp AS timestamp FROM Attendance ORDER BY AttID DESC"
-        ).fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        try:
+            rows = conn.execute(
+                "SELECT AttID AS id, MemberID AS member_id, EventID AS event_id, Present AS present, Timestamp AS timestamp FROM Attendance ORDER BY AttID DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def list_users(self):
         conn = get_db()
-        rows = conn.execute(
-            "SELECT UserID AS id, Username AS username, Role AS role FROM Users ORDER BY UserID DESC"
-        ).fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        try:
+            rows = conn.execute(
+                "SELECT UserID AS id, Username AS username, Role AS role FROM Users ORDER BY UserID DESC"
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
 
     def save_member(self):
         data = self.read_json()

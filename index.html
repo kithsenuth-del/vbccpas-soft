@@ -85,6 +85,7 @@
                   <button type="submit" class="rounded-full bg-emerald-500 px-4 py-2 font-semibold text-white transition hover:bg-emerald-400">Save member</button>
                   <button type="button" data-reset="members" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
                 </div>
+                <p id="members-status" class="text-sm text-slate-400">Ready to save a member.</p>
               </form>
               <div>
                 <p class="mb-3 text-sm text-slate-400">Saved members</p>
@@ -111,6 +112,7 @@
                   <button type="submit" class="rounded-full bg-amber-400 px-4 py-2 font-semibold text-slate-900 transition hover:bg-amber-300">Save event</button>
                   <button type="button" data-reset="events" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
                 </div>
+                <p id="events-status" class="text-sm text-slate-400">Ready to save an event.</p>
               </form>
               <div>
                 <p class="mb-3 text-sm text-slate-400">Saved events</p>
@@ -136,6 +138,7 @@
                   <button type="submit" class="rounded-full bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-400">Save item</button>
                   <button type="button" data-reset="inventory" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
                 </div>
+                <p id="inventory-status" class="text-sm text-slate-400">Ready to save stock.</p>
               </form>
               <div>
                 <p class="mb-3 text-sm text-slate-400">Current stock</p>
@@ -163,6 +166,7 @@
                   <button type="submit" class="rounded-full bg-violet-500 px-4 py-2 font-semibold text-white transition hover:bg-violet-400">Save borrowing</button>
                   <button type="button" data-reset="borrowed" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
                 </div>
+                <p id="borrowed-status" class="text-sm text-slate-400">Ready to save borrowing activity.</p>
               </form>
               <div>
                 <p class="mb-3 text-sm text-slate-400">Borrow records</p>
@@ -189,6 +193,7 @@
                   <button type="submit" class="rounded-full bg-emerald-500 px-4 py-2 font-semibold text-white transition hover:bg-emerald-400">Save attendance</button>
                   <button type="button" data-reset="attendance" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
                 </div>
+                <p id="attendance-status" class="text-sm text-slate-400">Ready to save attendance.</p>
               </form>
               <div>
                 <p class="mb-3 text-sm text-slate-400">Attendance log</p>
@@ -233,6 +238,7 @@
                   <button type="submit" class="rounded-full bg-rose-500 px-4 py-2 font-semibold text-white transition hover:bg-rose-400">Save account</button>
                   <button type="button" data-reset="users" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
                 </div>
+                <p id="users-status" class="text-sm text-slate-400">Ready to save access details.</p>
               </form>
               <div>
                 <p class="mb-3 text-sm text-slate-400">Access accounts</p>
@@ -273,95 +279,131 @@
         { key: 'users', formId: 'users-form', listId: 'users-list', endpoint: '/api/users' },
       ];
 
+      function setStatus(sectionKey, message, tone = 'info') {
+        const status = document.getElementById(`${sectionKey}-status`);
+        if (!status) return;
+        status.textContent = message || '';
+        const toneClasses = {
+          success: 'text-emerald-300',
+          error: 'text-rose-300',
+          info: 'text-slate-400',
+        };
+        status.className = `text-sm ${toneClasses[tone] || toneClasses.info}`;
+      }
+
       async function loadSummary() {
-        const response = await fetch('/api/summary');
-        const data = await response.json();
-        document.getElementById('summary-count').textContent = Object.values(data).reduce((sum, value) => sum + Number(value || 0), 0);
-        document.getElementById('count-members').textContent = data.members;
-        document.getElementById('count-events').textContent = data.events;
-        document.getElementById('count-attendance').textContent = data.attendance;
-        document.getElementById('report-growth').textContent = `${Math.min(100, Math.round((data.members / Math.max(1, data.events)) * 10))}%`;
-        document.getElementById('report-success').textContent = `${Math.min(100, 90 + data.events)}%`;
+        try {
+          const response = await fetch('/api/summary');
+          const data = await response.json();
+          document.getElementById('summary-count').textContent = Object.values(data).reduce((sum, value) => sum + Number(value || 0), 0);
+          document.getElementById('count-members').textContent = data.members;
+          document.getElementById('count-events').textContent = data.events;
+          document.getElementById('count-attendance').textContent = data.attendance;
+          document.getElementById('report-growth').textContent = `${Math.min(100, Math.round((data.members / Math.max(1, data.events)) * 10))}%`;
+          document.getElementById('report-success').textContent = `${Math.min(100, 90 + data.events)}%`;
+        } catch (error) {
+          setStatus('members', 'Unable to refresh the summary from the database.', 'error');
+        }
       }
 
       async function loadSection(section) {
-        const response = await fetch(section.endpoint);
-        const rows = await response.json();
         const container = document.getElementById(section.listId);
         if (!container) return;
+        try {
+          const response = await fetch(section.endpoint);
+          const text = await response.text();
+          let rows = [];
+          try {
+            rows = JSON.parse(text);
+          } catch (error) {
+            rows = [];
+          }
 
-        if (section.key === 'members') {
-          container.innerHTML = rows.map((row) => `
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-white">${row.name || 'Unnamed'}</p>
-                  <p>${row.class || '-'} • Roll ${row.roll || '-'} • ${row.email || '-'}</p>
+          if (!Array.isArray(rows)) {
+            rows = [];
+          }
+
+          if (!rows.length) {
+            container.innerHTML = '<div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-400">No records yet.</div>';
+            return;
+          }
+
+          if (section.key === 'members') {
+            container.innerHTML = rows.map((row) => `
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">${row.name || 'Unnamed'}</p>
+                    <p>${row.class || '-'} • Roll ${row.roll || '-'} • ${row.email || '-'}</p>
+                  </div>
+                  <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
                 </div>
-                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
               </div>
-            </div>
-          `).join('');
-        } else if (section.key === 'events') {
-          container.innerHTML = rows.map((row) => `
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-white">${row.title || 'Untitled event'}</p>
-                  <p>${row.date || '-'} • ${row.location || '-'}</p>
+            `).join('');
+          } else if (section.key === 'events') {
+            container.innerHTML = rows.map((row) => `
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">${row.title || 'Untitled event'}</p>
+                    <p>${row.date || '-'} • ${row.location || '-'}</p>
+                  </div>
+                  <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-amber-400/90 px-3 py-1 text-xs font-semibold text-slate-900">Edit</button>
                 </div>
-                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-amber-400/90 px-3 py-1 text-xs font-semibold text-slate-900">Edit</button>
               </div>
-            </div>
-          `).join('');
-        } else if (section.key === 'inventory') {
-          container.innerHTML = rows.map((row) => `
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-white">${row.name || 'Untitled item'}</p>
-                  <p>${row.quantity || 0} in stock • ${row.notes || '-'}</p>
+            `).join('');
+          } else if (section.key === 'inventory') {
+            container.innerHTML = rows.map((row) => `
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">${row.name || 'Untitled item'}</p>
+                    <p>${row.quantity || 0} in stock • ${row.notes || '-'}</p>
+                  </div>
+                  <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-sky-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
                 </div>
-                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-sky-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
               </div>
-            </div>
-          `).join('');
-        } else if (section.key === 'borrowed') {
-          container.innerHTML = rows.map((row) => `
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-white">Item ${row.item_id || '-'} • Member ${row.member_id || '-'}</p>
-                  <p>Borrowed ${row.borrow_date || '-'} • Return ${row.return_date || '-'}</p>
+            `).join('');
+          } else if (section.key === 'borrowed') {
+            container.innerHTML = rows.map((row) => `
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">Item ${row.item_id || '-'} • Member ${row.member_id || '-'}</p>
+                    <p>Borrowed ${row.borrow_date || '-'} • Return ${row.return_date || '-'}</p>
+                  </div>
+                  <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-violet-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
                 </div>
-                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-violet-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
               </div>
-            </div>
-          `).join('');
-        } else if (section.key === 'attendance') {
-          container.innerHTML = rows.map((row) => `
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-white">Member ${row.member_id || '-'} • Event ${row.event_id || '-'}</p>
-                  <p>${row.present ? 'Present' : 'Absent'} • ${row.timestamp || '-'}</p>
+            `).join('');
+          } else if (section.key === 'attendance') {
+            container.innerHTML = rows.map((row) => `
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">Member ${row.member_id || '-'} • Event ${row.event_id || '-'}</p>
+                    <p>${row.present ? 'Present' : 'Absent'} • ${row.timestamp || '-'}</p>
+                  </div>
+                  <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
                 </div>
-                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
               </div>
-            </div>
-          `).join('');
-        } else if (section.key === 'users') {
-          container.innerHTML = rows.map((row) => `
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-white">${row.username || 'Unknown'}</p>
-                  <p>${row.role || 'member'}</p>
+            `).join('');
+          } else if (section.key === 'users') {
+            container.innerHTML = rows.map((row) => `
+              <div class="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="font-semibold text-white">${row.username || 'Unknown'}</p>
+                    <p>${row.role || 'member'}</p>
+                  </div>
+                  <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-rose-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
                 </div>
-                <button data-edit="${section.key}" data-id="${row.id}" class="rounded-full bg-rose-500/80 px-3 py-1 text-xs font-semibold text-white">Edit</button>
               </div>
-            </div>
-          `).join('');
+            `).join('');
+          }
+        } catch (error) {
+          container.innerHTML = '<div class="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">Unable to load records from the database. Please refresh the page and try again.</div>';
+          setStatus(section.key, 'Unable to load records from the database.', 'error');
         }
       }
 
@@ -372,18 +414,28 @@
         }
       }
 
-      async function saveSection(formId, endpoint) {
+      async function saveSection(sectionKey, formId, endpoint) {
         const form = document.getElementById(formId);
+        if (!form) return;
         const payload = Object.fromEntries(new FormData(form).entries());
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (response.ok) {
-          form.reset();
-          form.querySelector('input[name="id"]').value = '';
-          await loadAll();
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (response.ok) {
+            form.reset();
+            const hidden = form.querySelector('input[name="id"]');
+            if (hidden) hidden.value = '';
+            setStatus(sectionKey, result.message || 'Saved to the database.', 'success');
+            await loadAll();
+          } else {
+            setStatus(sectionKey, result.error || 'Unable to save the record.', 'error');
+          }
+        } catch (error) {
+          setStatus(sectionKey, 'The request could not reach the server.', 'error');
         }
       }
 
@@ -392,19 +444,22 @@
         if (form) {
           form.addEventListener('submit', async (event) => {
             event.preventDefault();
-            await saveSection(section.formId, section.endpoint);
+            await saveSection(section.key, section.formId, section.endpoint);
           });
         }
       });
 
       document.querySelectorAll('[data-reset]').forEach((button) => {
         button.addEventListener('click', () => {
-          const formId = `${button.getAttribute('data-reset')}-form`;
+          const sectionKey = button.getAttribute('data-reset');
+          const formId = `${sectionKey}-form`;
           const form = document.getElementById(formId);
           if (form) {
             form.reset();
-            form.querySelector('input[name="id"]').value = '';
+            const hidden = form.querySelector('input[name="id"]');
+            if (hidden) hidden.value = '';
           }
+          setStatus(sectionKey, 'Ready for a new entry.', 'info');
         });
       });
 
@@ -415,20 +470,31 @@
         const id = button.getAttribute('data-id');
         const section = sections.find((item) => item.key === sectionKey);
         if (!section) return;
-        const response = await fetch(`${section.endpoint}`);
-        const rows = await response.json();
-        const row = rows.find((item) => String(item.id) === String(id));
-        if (!row) return;
-        const form = document.getElementById(section.formId);
-        if (!form) return;
-        Object.entries(row).forEach(([key, value]) => {
-          const field = form.querySelector(`[name="${key}"]`);
-          if (field) {
-            field.value = value ?? '';
+        try {
+          const response = await fetch(section.endpoint);
+          const text = await response.text();
+          let rows = [];
+          try {
+            rows = JSON.parse(text);
+          } catch (error) {
+            rows = [];
           }
-        });
-        const hidden = form.querySelector('input[name="id"]');
-        if (hidden) hidden.value = row.id;
+          const row = rows.find((item) => String(item.id) === String(id));
+          if (!row) return;
+          const form = document.getElementById(section.formId);
+          if (!form) return;
+          Object.entries(row).forEach(([key, value]) => {
+            const field = form.querySelector(`[name="${key}"]`);
+            if (field) {
+              field.value = value ?? '';
+            }
+          });
+          const hidden = form.querySelector('input[name="id"]');
+          if (hidden) hidden.value = row.id;
+          setStatus(sectionKey, 'Loaded the selected record from the database.', 'info');
+        } catch (error) {
+          setStatus(sectionKey, 'Unable to load the selected record.', 'error');
+        }
       });
 
       loadAll();
