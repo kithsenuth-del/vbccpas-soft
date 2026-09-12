@@ -1,12 +1,16 @@
 import json
 import os
 import sqlite3
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import main
 
-BASE_DIR = os.path.dirname(__file__)
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(__file__)
 DB_PATH = main.DB_PATH
 
 
@@ -41,7 +45,17 @@ class Handler(BaseHTTPRequestHandler):
         if not os.path.exists(file_path):
             self.send_error(404)
             return
-        content_type = "text/html; charset=utf-8" if file_path.endswith(".html") else "application/octet-stream"
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".html":
+            content_type = "text/html; charset=utf-8"
+        elif ext == ".js":
+            content_type = "application/javascript; charset=utf-8"
+        elif ext == ".css":
+            content_type = "text/css; charset=utf-8"
+        elif ext == ".json":
+            content_type = "application/json; charset=utf-8"
+        else:
+            content_type = "application/octet-stream"
         with open(file_path, "rb") as fh:
             body = fh.read()
         self.send_response(200)
