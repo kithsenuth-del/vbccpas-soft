@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - feature/unified-windows-ui
+      - feature/photographic-arts-theme
+      - feature/one-click-windows-launcher
   pull_request:
     branches:
       - main
@@ -48,9 +50,20 @@ jobs:
         run: python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py
       - name: Build single-windowed desktop executable
         run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build desktop_app.spec
-      - name: Upload Windows application
+      - name: Add one-click shortcut setup files
+        shell: pwsh
+        run: |
+          Copy-Item Create-Desktop-Shortcut.ps1 dist/ -Force
+          Copy-Item Setup-VBCCPAS-Shortcut.bat dist/ -Force
+      - name: Verify Windows desktop shortcut creation
+        shell: pwsh
+        run: |
+          $shortcut = Join-Path $env:RUNNER_TEMP "VBCCPAS-Soft-test.lnk"
+          ./Create-Desktop-Shortcut.ps1 -TargetExe "$PWD/dist/VBCCPAS-Soft.exe" -ShortcutPath $shortcut
+          if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw "Shortcut was not created." }
+      - name: Upload Windows application and launcher
         uses: actions/upload-artifact@v4
         with:
           name: VBCCPAS-Soft-Windows
-          path: dist/VBCCPAS-Soft.exe
+          path: dist/*
           if-no-files-found: error
