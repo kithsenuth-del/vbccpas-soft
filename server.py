@@ -308,7 +308,9 @@ class Handler(BaseHTTPRequestHandler):
                 "members": conn.execute("SELECT COUNT(*) FROM Members").fetchone()[0],
                 "events": conn.execute("SELECT COUNT(*) FROM Events").fetchone()[0],
                 "inventory": conn.execute("SELECT COUNT(*) FROM Inventory").fetchone()[0],
-                "borrowed": conn.execute("SELECT COUNT(*) FROM BorrowedItems").fetchone()[0],
+                "borrowed": conn.execute(
+                    "SELECT COUNT(*) FROM BorrowedItems WHERE Returned=0"
+                ).fetchone()[0],
                 "attendance": conn.execute("SELECT COUNT(*) FROM Attendance").fetchone()[0],
             }
 
@@ -369,12 +371,75 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True}
 
     def save_borrowed(self, data):
-        returned = 1 if str(data.get("returned", "0")).lower() in {"1", "true", "yes", "on"} else 0
+        """Save a loan and keep available inventory in sync atomically."""
+        try:
+            item_id = int(data.get("item_id"))
+            member_id = int(data.get("member_id"))
+            borrow_id = int(data["id"]) if data.get("id") else None
+        except (TypeError, ValueError):
+            raise ValueError("Select a valid inventory item and member.")
+
+        returned_value = str(data.get("returned", "0")).strip().lower()
+        if returned_value not in {"0", "1", "false", "true", "no", "yes", "off", "on"}:
+            raise ValueError("Choose whether the item has been returned.")
+        returned = 1 if returned_value in {"1", "true", "yes", "on"} else 0
+        borrow_date = str(data.get("borrow_date", "") or "")
+        return_date = str(data.get("return_date", "") or "")
+
         with get_db() as conn:
-            if data.get("id"):
-                conn.execute("UPDATE BorrowedItems SET ItemID=?, MemberID=?, BorrowDate=?, ReturnDate=?, Returned=? WHERE BorrowID=?", (data.get("item_id", ""), data.get("member_id", ""), data.get("borrow_date", ""), data.get("return_date", ""), returned, int(data["id"])))
+            # Serialize stock changes so two simultaneous browser requests cannot
+            # both borrow the last available unit.
+            conn.execute("BEGIN IMMEDIATE")
+            if not conn.execute(
+                "SELECT 1 FROM Members WHERE MemberID=?", (member_id,)
+            ).fetchone():
+                raise ValueError("The selected member does not exist.")
+            if not conn.execute(
+                "SELECT 1 FROM Inventory WHERE ItemID=?", (item_id,)
+            ).fetchone():
+                raise ValueError("The selected inventory item does not exist.")
+
+            old = None
+            if borrow_id is not None:
+                old = conn.execute(
+                    "SELECT ItemID, Returned FROM BorrowedItems WHERE BorrowID=?",
+                    (borrow_id,),
+                ).fetchone()
+                if old is None:
+                    raise ValueError("The borrowing record no longer exists.")
+
+                # Release the previously reserved unit before applying the new
+                # state. Any later validation failure rolls this back.
+                if int(old["Returned"]) == 0:
+                    conn.execute(
+                        "UPDATE Inventory SET Quantity=Quantity+1 WHERE ItemID=?",
+                        (old["ItemID"],),
+                    )
+
+            # An outstanding loan consumes one available unit. The conditional
+            # update prevents negative stock, including concurrent requests.
+            if returned == 0:
+                stock = conn.execute(
+                    "UPDATE Inventory SET Quantity=Quantity-1 "
+                    "WHERE ItemID=? AND Quantity>0",
+                    (item_id,),
+                )
+                if stock.rowcount != 1:
+                    raise ValueError("This item has no available stock to borrow.")
+
+            if borrow_id is None:
+                conn.execute(
+                    "INSERT INTO BorrowedItems "
+                    "(ItemID, MemberID, BorrowDate, ReturnDate, Returned) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (item_id, member_id, borrow_date, return_date, returned),
+                )
             else:
-                conn.execute("INSERT INTO BorrowedItems (ItemID, MemberID, BorrowDate, ReturnDate, Returned) VALUES (?, ?, ?, ?, ?)", (data.get("item_id", ""), data.get("member_id", ""), data.get("borrow_date", ""), data.get("return_date", ""), returned))
+                conn.execute(
+                    "UPDATE BorrowedItems SET ItemID=?, MemberID=?, BorrowDate=?, "
+                    "ReturnDate=?, Returned=? WHERE BorrowID=?",
+                    (item_id, member_id, borrow_date, return_date, returned, borrow_id),
+                )
         return {"ok": True}
 
     def save_attendance(self, data):
