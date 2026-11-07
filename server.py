@@ -20,6 +20,7 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 @contextmanager
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
     try:
         yield conn
         conn.commit()
