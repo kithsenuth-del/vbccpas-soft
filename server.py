@@ -79,7 +79,11 @@ class Handler(BaseHTTPRequestHandler):
         requested = unquote(path).lstrip("/")
         root = os.path.realpath(BASE_DIR)
         file_path = os.path.realpath(os.path.join(root, requested))
-        if os.path.commonpath([root, file_path]) != root or not os.path.isfile(file_path):
+        try:
+            is_inside_root = os.path.commonpath([root, file_path]) == root
+        except ValueError:
+            is_inside_root = False
+        if not is_inside_root or not os.path.isfile(file_path):
             self.send_error(404)
             return
         ext = os.path.splitext(file_path)[1].lower()
