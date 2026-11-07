@@ -1,11 +1,15 @@
 name: VBCCPAS Windows desktop build
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
       - feature/unified-windows-ui
       - feature/photographic-arts-theme
       - feature/one-click-windows-launcher
+      - main
   pull_request:
     branches:
       - main
@@ -46,6 +50,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
+      - name: Stamp build commit
+        shell: pwsh
+        run: Set-Content -Path build_info.py -Value "BUILD_COMMIT = '$env:GITHUB_SHA'" -Encoding ascii
       - name: Compile Windows application modules
         run: python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py
       - name: Build single-windowed desktop executable
@@ -55,12 +62,27 @@ jobs:
         run: |
           Copy-Item Create-Desktop-Shortcut.ps1 dist/ -Force
           Copy-Item Setup-VBCCPAS-Shortcut.bat dist/ -Force
+          Copy-Item updater.ps1 dist/ -Force
       - name: Verify Windows desktop shortcut creation
         shell: pwsh
         run: |
           $shortcut = Join-Path $env:RUNNER_TEMP "VBCCPAS-Soft-test.lnk"
           ./Create-Desktop-Shortcut.ps1 -TargetExe "$PWD/dist/VBCCPAS-Soft.exe" -ShortcutPath $shortcut
           if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw "Shortcut was not created." }
+      - name: Package Windows update
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: Compress-Archive -Path dist/* -DestinationPath dist/VBCCPAS-Soft-Windows.zip -Force
+      - name: Publish latest Windows release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.sha }}
+          name: VBCCPAS Soft build ${{ github.sha }}
+          target_commitish: ${{ github.sha }}
+          files: dist/VBCCPAS-Soft-Windows.zip
+          generate_release_notes: true
+          make_latest: true
       - name: Upload Windows application and launcher
         uses: actions/upload-artifact@v4
         with:
