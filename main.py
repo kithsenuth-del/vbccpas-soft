@@ -352,6 +352,9 @@ class App:
 			if not (mid and uname and pw):
 				messagebox.showwarning('Missing', 'Enter member id, username and password')
 				return
+			if len(pw) < 10:
+				messagebox.showwarning('Weak password', 'Use at least 10 characters')
+				return
 			if not mid.isdigit():
 				messagebox.showwarning('Invalid', 'Member ID must be numeric')
 				return
@@ -852,10 +855,12 @@ class App:
 				else:
 					cur.execute('UPDATE Users SET Username=?, Role=?, MemberID=? WHERE UserID=?', (username, role, member_id_int, selected_user_id['value']))
 			else:
+				if len(password) < 10:
+					conn.close(); messagebox.showwarning('Weak password', 'Use at least 10 characters'); return
 				cur.execute('SELECT 1 FROM Users WHERE Username=?', (username,))
 				if cur.fetchone():
 					conn.close(); messagebox.showerror('Taken','Username already exists'); return
-				cur.execute('INSERT INTO Users (Username, Password, Role, MemberID) VALUES (?,?,?,?)', (username, hash_password(password or 'password123'), role, member_id_int))
+				cur.execute('INSERT INTO Users (Username, Password, Role, MemberID) VALUES (?,?,?,?)', (username, hash_password(password), role, member_id_int))
 			conn.commit(); conn.close();
 			self.populate_users(tree)
 			self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id)
