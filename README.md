@@ -1,23 +1,42 @@
 # VBCCPAS Soft
 
-Society management system for VBCCPAS.
+Local society management system for VBCCPAS.
 
-## Local setup
+## Run the local web application
 
-- Run `python main.py` to start the desktop application.
-- Run `python run_server.py` to serve the local web interface at `http://127.0.0.1:8000`.
-- The web server binds to loopback only. Do not expose it directly to a LAN or the public internet.
+Use Python 3.10 or newer.
 
-## Administrator account
+```bash
+python -m pip install -r requirements.txt
+python run_server.py
+```
 
-For a new installation, set the `VBCCPAS_ADMIN_PASSWORD` environment variable before the first launch to choose the initial administrator password. If it is not set, the app generates a unique one and prints it to the launching terminal; save it securely. Existing installations retain their current credentials, so change any old shared/default password immediately using the Security screen.
+Open **http://localhost:8000** on the same computer. Do not use the computer's LAN IP, expose port 8000 to a network, or publish this server to the internet. The application deliberately accepts only the local browser origin.
 
-New passwords must be at least 10 characters. Passwords are stored using salted PBKDF2-SHA256. Existing legacy SHA-256 password hashes are upgraded after a successful desktop login.
+## First-time executive administrator setup
+
+1. Start the server from a terminal.
+2. On first run, the terminal prints a one-time setup token. Keep it private.
+3. Open `http://localhost:8000` on this computer.
+4. Paste the token into the setup screen and choose the built-in platform authenticator (for example, Windows Hello).
+5. Complete the operating-system user verification prompt.
+
+The web dashboard has one executive administrator and one device-bound passkey. Public account creation and web user-management endpoints are disabled. Synced/backed-up credentials are rejected. The passkey's private key remains with the computer's platform authenticator; only its public credential and verification metadata are stored in the local `society.db` file. No passkey private key is uploaded to this application.
+
+The web login uses an in-memory, eight-hour session and a CSRF token. Restarting the server invalidates active sessions. Sign out when finished.
+
+## Local data and backups
+
+The database is stored beside the application. Back up `society.db` securely and keep access to the computer's operating-system account protected. A database backup does **not** back up the passkey private key. If the Windows profile or device-bound authenticator is lost, the passkey must be re-enrolled through a controlled local recovery procedure.
+
+## Desktop application
+
+Run `python main.py` for the separate Tkinter desktop application. Its local sign-in remains password-based and is restricted to administrator-role accounts; the browser dashboard uses the passkey flow described above.
 
 ## Verification
 
-Run `python verify_data_flow.py` to exercise the summary, member, event, and inventory API paths. The test uses a temporary SQLite database and does not write to the real `society.db`.
+Run `python verify_data_flow.py` to check that unauthenticated requests are rejected and that the test does not touch the real society database. The test uses a temporary SQLite database. GitHub Actions also compiles the Python modules and checks the dashboard JavaScript syntax.
 
-## Security scope
+## Security boundary
 
-The local API rejects cross-origin browser requests, validates JSON request sizes and content types, restricts static-file paths to the application directory, and escapes database values before rendering them in the web interface. The web API still does not provide per-user login/session authorization; keep it on a trusted local machine only. Add authenticated sessions and role-based API authorization before any multi-user or network deployment.
+This is a single-computer application, not a multi-user or network-hosted service. Keep it bound to loopback. Do not expose it to a LAN or the public internet.
