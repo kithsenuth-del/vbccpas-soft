@@ -1,6 +1,6 @@
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import sqlite3
 import hashlib
 import hmac
@@ -238,10 +238,14 @@ def setup_database():
 	)
 	''')
 
-	# seed admin
+	# Bootstrap a new installation with a unique password, not a shared default.
 	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
 	if not cur.fetchone():
-		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password("admin123")))
+		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
+		if not initial_password:
+			initial_password = secrets.token_urlsafe(18)
+			print("VBCCPAS initial admin password (save it securely): " + initial_password)
+		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
 
 	conn.commit()
 	conn.close()
@@ -859,16 +863,31 @@ class App:
 		except Exception as exc:
 			conn.close(); messagebox.showerror('Error', str(exc))
 
-	def reset_selected_user(self, tree):
+	 def reset_selected_user(self, tree):
 		sel = tree.selection()
 		if not sel:
-			messagebox.showwarning('Select','Select a user to reset')
+			messagebox.showwarning('Select', 'Select a user to reset')
 			return
 		username = tree.item(sel[0])['values'][1]
-		if username == 'admin':
-			self.reset_admin_password()
+		self.set_user_password(username)
+
+	def set_user_password(self, username):
+		password = simpledialog.askstring(
+			'Set password',
+			'Enter a new password for ' + username + ' (at least 10 characters):',
+			parent=self.root,
+			show='*'
+		)
+		if password is None:
 			return
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password('password123'), username));conn.commit();conn.close();messagebox.showinfo('Reset', f"Password reset for {username}")
+		if len(password) < 10:
+			messagebox.showwarning('Weak password', 'Use at least 10 characters.')
+			return
+		conn = sqlite3.connect(DB_PATH)
+		conn.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password(password), username))
+		conn.commit()
+		conn.close()
+		messagebox.showinfo('Reset', 'Password updated for ' + username)
 
 	def delete_selected_user(self, tree):
 		sel = tree.selection()
@@ -884,7 +903,7 @@ class App:
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Users WHERE Username=?', (username,));conn.commit();conn.close();self.populate_users(tree)
 
 	def reset_admin_password(self):
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("UPDATE Users SET Password=? WHERE Username='admin'", (hash_password('admin123'),));conn.commit();conn.close();messagebox.showinfo('Reset','Admin password set to admin123')
+		self.set_user_password('admin')
 
 	def export_table(self, table, columns):
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute(f"SELECT {', '.join(columns)} FROM {table}");rows=cur.fetchall();conn.close()
