@@ -40,6 +40,14 @@ The web dashboard uses a device-bound passkey and an in-memory eight-hour sessio
 - The problem checker is read-only. It does not repair, edit, or delete application records.
 - A database backup does not back up the passkey private key.
 
+## Software updates
+
+- Open **Maintenance & Backups → Check for Software Updates** while connected to the internet.
+- The app checks the latest published Windows release from this official GitHub repository.
+- If an update is available, you can choose whether to install it. The package is downloaded over HTTPS and verified against GitHub's SHA-256 asset digest before installation.
+- The updater replaces only the application executable after the app closes. It does not include or overwrite `society.db`, backups, or passkey data.
+- New updates are published automatically when changes are pushed to the `main` branch and the Windows build and integration checks pass.
+
 ## Data storage
 
 The existing society.db remains beside the application executable. Keep the application in a folder where the signed-in Windows user has read/write permission. Back up the database regularly and store backups securely.
