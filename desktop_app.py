@@ -107,6 +107,9 @@ class UnifiedApp(desktop.App):
         ttk.Button(actions, text="Check for Software Updates",
                    command=self.check_for_updates,
                    style="Rounded.TButton").pack(side=tk.LEFT, padx=8)
+        ttk.Button(actions, text="Recover Passkey Setup",
+                   command=self.recover_passkey_setup,
+                   style="Rounded.TButton").pack(side=tk.LEFT, padx=8)
         self.diagnostic_output = tk.Text(
             frame, height=22, wrap=tk.WORD, bg="#171719", fg="#f3eee6",
             insertbackground="white", font=("Consolas", 9), relief="flat",
@@ -213,6 +216,45 @@ class UnifiedApp(desktop.App):
         ttk.Button(buttons, text="Close", command=dialog.destroy).pack(
             side=tk.LEFT, padx=5)
 
+    def recover_passkey_setup(self):
+        """Re-open first-time passkey enrollment after a verified local admin login."""
+        import passkey_auth
+
+        if not self.start_local_server(show_errors=True):
+            return
+        if not messagebox.askyesno(
+            "Recover administrator passkey setup",
+            "This will remove the saved passkey registration from this computer "
+            "so you can register it again. Any currently working passkey will "
+            "stop working. Your society records will not be changed.\n\n"
+            "A database backup is required before continuing. Proceed?",
+            parent=self.root,
+        ):
+            return
+        if not self.backup_database():
+            return
+        try:
+            passkey_auth.reset_registration_state(desktop.DB_PATH)
+            self.passkey_setup_token = passkey_auth.BOOTSTRAP_TOKEN
+            messagebox.showinfo(
+                "Passkey setup is ready",
+                "The passkey registration state has been reset safely. "
+                "Your society data was preserved and a backup was saved.\n\n"
+                "Copy the new one-time token from the next window, then refresh "
+                "the local web dashboard to display the registration form.",
+                parent=self.root,
+            )
+            self.show_passkey_setup()
+            import server
+            webbrowser.open(server.EXPECTED_ORIGIN, new=1)
+        except Exception as exc:
+            messagebox.showerror(
+                "Passkey recovery failed",
+                "The passkey state could not be reset. Your database backup "
+                "was retained.\n\n" + str(exc),
+                parent=self.root,
+            )
+
     def run_problem_checker(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
@@ -265,7 +307,7 @@ class UnifiedApp(desktop.App):
             messagebox.showerror("Database not found",
                                  "The society database does not exist yet.",
                                  parent=self.root)
-            return
+            return False
         filename = "VBCCPAS_backup_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
         destination = filedialog.asksaveasfilename(
             parent=self.root, title="Save secure database backup",
@@ -273,12 +315,12 @@ class UnifiedApp(desktop.App):
             filetypes=[("SQLite database", "*.db"), ("All files", "*.*")],
         )
         if not destination:
-            return
+            return False
         if os.path.abspath(destination) == os.path.abspath(desktop.DB_PATH):
             messagebox.showerror("Invalid destination",
                                  "Choose a different file from the active database.",
                                  parent=self.root)
-            return
+            return False
         try:
             with sqlite3.connect(desktop.DB_PATH, timeout=10) as source:
                 with sqlite3.connect(destination, timeout=10) as target:
@@ -289,8 +331,10 @@ class UnifiedApp(desktop.App):
                 "the device passkey's private key.",
                 parent=self.root,
             )
+            return True
         except (OSError, sqlite3.Error) as exc:
             messagebox.showerror("Backup failed", str(exc), parent=self.root)
+            return False
 
     def close_application(self):
         self.stop_local_server()
