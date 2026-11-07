@@ -289,7 +289,6 @@ class App:
 		btn_frame = tk.Frame(login_card, bg=self.colors['card'])
 		btn_frame.place(x=24, y=290)
 		ttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
-		ttk.Button(btn_frame, text="Sign up", command=self.open_signup, style='Rounded.TButton').pack(side=tk.LEFT)
 
 		# sidebar buttons (hidden until login)
 		self.side_buttons = {}
@@ -316,6 +315,9 @@ class App:
 		if not row:
 			messagebox.showerror("Login failed", "Unknown username")
 			return
+		if row[1] != 'admin':
+			messagebox.showerror("Access denied", "Only the Executive Administrator can sign in to this desktop application.")
+			return
 		if not verify_password(p, row[0]):
 			messagebox.showerror("Login failed", "Incorrect password")
 			return
@@ -325,6 +327,7 @@ class App:
 			conn.execute("UPDATE Users SET Password=? WHERE Username=?", (hash_password(p), u))
 			conn.commit()
 			conn.close()
+		self.user = {'username': u, 'role': row[1]}
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.show_view('dashboard')

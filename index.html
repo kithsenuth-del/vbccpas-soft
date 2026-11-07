@@ -35,7 +35,23 @@
     </style>
   </head>
   <body class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.3),_transparent_30%),linear-gradient(135deg,_#07131f_0%,_#0f172a_45%,_#111827_100%)] text-slate-100">
-    <div class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+    <div id="auth-gate" class="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-950 px-4 py-8">
+      <div class="w-full max-w-lg rounded-3xl border border-emerald-400/20 bg-slate-900 p-8 shadow-2xl shadow-emerald-950/40">
+        <p class="eyebrow text-emerald-300">VBCCPAS SOFT · LOCAL SECURITY</p>
+        <h1 id="auth-title" class="mt-3 text-3xl font-semibold text-white">Executive administrator login</h1>
+        <p id="auth-description" class="mt-3 text-sm leading-6 text-slate-300">Sign in using the passkey registered on this computer. Society records stay on this computer.</p>
+        <div id="bootstrap-area" class="mt-6 hidden">
+          <label class="block text-sm font-medium text-slate-200">One-time setup token
+            <input id="bootstrap-token" type="password" autocomplete="off" class="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white" placeholder="Paste the token shown in the server terminal" />
+          </label>
+          <p class="mt-2 text-xs leading-5 text-slate-400">The token is printed once when the local server starts. Keep it private and do not share it.</p>
+        </div>
+        <button id="auth-action" class="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-white transition hover:bg-emerald-400">Continue with passkey</button>
+        <p id="auth-message" role="status" aria-live="polite" class="mt-4 min-h-6 text-sm text-slate-300">Checking local security status…</p>
+        <p class="mt-5 border-t border-white/10 pt-4 text-xs leading-5 text-slate-500">This login is restricted to this computer and its local browser address. A device-bound passkey is required.</p>
+      </div>
+    </div>
+    <div id="app-shell" class="hidden mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
       <header class="mb-6 rounded-[28px] border border-white/10 bg-white/10 px-4 py-4 shadow-2xl shadow-emerald-500/10 backdrop-blur md:px-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -45,6 +61,7 @@
           <div class="flex flex-wrap gap-3">
             <button id="open-dashboard" class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400">Open Dashboard</button>
             <button id="open-reports" class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-400/30 transition hover:bg-amber-300">Quick Reports</button>
+            <button id="logout-button" class="rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20">Sign out</button>
           </div>
         </div>
       </header>
@@ -250,28 +267,13 @@
           </div>
 
           <div id="security" class="section-card hidden rounded-[32px] border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-black/30 backdrop-blur">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p class="text-sm uppercase tracking-[0.25em] text-rose-300">Security</p>
-                <h3 class="text-2xl font-semibold text-white">Control center</h3>
-              </div>
-            </div>
-            <div class="mt-6 grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-              <form id="users-form" class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
-                <input type="hidden" name="id" />
-                <label class="block text-sm text-slate-300">Username<input name="username" required class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
-                <label class="block text-sm text-slate-300">Password<input name="password" type="password" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" /></label>
-                <label class="block text-sm text-slate-300">Role<select name="role" class="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white"><option value="admin">Admin</option><option value="member">Member</option></select></label>
-                <div class="flex flex-wrap gap-3">
-                  <button type="submit" class="rounded-full bg-rose-500 px-4 py-2 font-semibold text-white transition hover:bg-rose-400">Save account</button>
-                  <button type="button" data-reset="users" class="rounded-full bg-white/10 px-4 py-2 font-semibold text-slate-100 transition hover:bg-white/20">Reset</button>
-                </div>
-                <p id="users-status" class="text-sm text-slate-400">Ready to save access details.</p>
-              </form>
-              <div>
-                <p class="mb-3 text-sm text-slate-400">Access accounts</p>
-                <div id="users-list" class="space-y-2"></div>
-              </div>
+            <p class="text-sm uppercase tracking-[0.25em] text-rose-300">Security</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">Executive administrator access</h3>
+            <div class="mt-6 max-w-2xl rounded-2xl border border-emerald-400/20 bg-emerald-500/5 p-5">
+              <p class="font-semibold text-emerald-200">Single-owner passkey protection</p>
+              <p class="mt-2 text-sm leading-6 text-slate-300">Only the registered executive administrator passkey can open this workspace or use its data API. New accounts and public sign-up are disabled in the web interface.</p>
+              <p id="passkey-status" class="mt-4 text-sm text-slate-400">Checking passkey status…</p>
+              <button id="security-logout" class="mt-5 rounded-full bg-rose-500/90 px-4 py-2 font-semibold text-white transition hover:bg-rose-400">Sign out securely</button>
             </div>
           </div>
         </section>
@@ -279,6 +281,182 @@
     </div>
 
     <script>
+      let csrfToken = '';
+      const appShell = document.getElementById('app-shell');
+      const authGate = document.getElementById('auth-gate');
+      const authAction = document.getElementById('auth-action');
+      const authMessage = document.getElementById('auth-message');
+      const bootstrapArea = document.getElementById('bootstrap-area');
+      let needsBootstrap = false;
+
+      function authMessageText(message, error = false) {
+        authMessage.textContent = message;
+        authMessage.className = 'mt-4 min-h-6 text-sm ' + (error ? 'text-rose-300' : 'text-slate-300');
+      }
+
+      function showLoginGate(configured) {
+        appShell.classList.add('hidden');
+        authGate.classList.remove('hidden');
+        needsBootstrap = !configured;
+        bootstrapArea.classList.toggle('hidden', configured);
+        document.getElementById('auth-title').textContent = configured ? 'Executive administrator login' : 'Set up your administrator passkey';
+        document.getElementById('auth-description').textContent = configured
+          ? 'Use the device-bound passkey registered on this computer.'
+          : 'Register the first and only executive administrator passkey on this computer.';
+        authAction.textContent = configured ? 'Sign in with passkey' : 'Register this computer passkey';
+        authMessageText(configured ? 'Your local passkey is ready.' : 'Enter the one-time token printed in the server terminal.');
+      }
+
+      function showWorkspace(csrf) {
+        csrfToken = csrf || '';
+        authGate.classList.add('hidden');
+        appShell.classList.remove('hidden');
+        // Data is loaded only after the executive administrator passkey succeeds.
+      }
+
+      function b64urlToBuffer(value) {
+        const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4);
+        const binary = atob(padded);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes.buffer;
+      }
+
+      function bufferToB64url(value) {
+        const bytes = new Uint8Array(value);
+        let binary = '';
+        bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+      }
+
+      function prepareCreationOptions(options) {
+        options.challenge = b64urlToBuffer(options.challenge);
+        options.user.id = b64urlToBuffer(options.user.id);
+        (options.excludeCredentials || []).forEach((item) => { item.id = b64urlToBuffer(item.id); });
+        return options;
+      }
+
+      function prepareRequestOptions(options) {
+        options.challenge = b64urlToBuffer(options.challenge);
+        (options.allowCredentials || []).forEach((item) => { item.id = b64urlToBuffer(item.id); });
+        return options;
+      }
+
+      function credentialToJSON(credential) {
+        const response = credential.response;
+        const result = { clientDataJSON: bufferToB64url(response.clientDataJSON) };
+        if (response.attestationObject) result.attestationObject = bufferToB64url(response.attestationObject);
+        if (response.authenticatorData) result.authenticatorData = bufferToB64url(response.authenticatorData);
+        if (response.signature) result.signature = bufferToB64url(response.signature);
+        if (response.userHandle) result.userHandle = bufferToB64url(response.userHandle);
+        if (typeof response.getTransports === 'function') result.transports = response.getTransports();
+        return {
+          id: credential.id,
+          rawId: bufferToB64url(credential.rawId),
+          type: credential.type,
+          authenticatorAttachment: credential.authenticatorAttachment,
+          clientExtensionResults: credential.getClientExtensionResults(),
+          response: result
+        };
+      }
+
+      async function authPost(path, payload) {
+        const response = await fetch(path, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Authentication failed.');
+        return result;
+      }
+
+      async function initializeAuthentication() {
+        try {
+          const response = await fetch('/api/auth/status', { credentials: 'same-origin', cache: 'no-store' });
+          const state = await response.json();
+          if (state.authenticated) {
+            showWorkspace(state.csrf_token);
+            const status = document.getElementById('passkey-status');
+            if (status) status.textContent = 'Passkey active on this computer · Executive Administrator';
+          } else {
+            showLoginGate(Boolean(state.configured));
+          }
+        } catch (error) {
+          showLoginGate(true);
+          authMessageText('Cannot reach the local server. Open http://localhost:8000 and restart the local server if needed.', true);
+          authAction.disabled = true;
+        }
+      }
+
+      async function runPasskeyAuthentication() {
+        authAction.disabled = true;
+        try {
+          if (needsBootstrap) {
+            const token = document.getElementById('bootstrap-token').value.trim();
+            if (!token) throw new Error('Enter the one-time setup token from the server terminal.');
+            const begin = await authPost('/api/auth/register/options', { bootstrap_token: token });
+            const publicKey = prepareCreationOptions(begin.options);
+            const credential = await navigator.credentials.create({ publicKey });
+            if (!credential) throw new Error('Passkey registration was cancelled.');
+            const result = await authPost('/api/auth/register/verify', {
+              bootstrap_token: token,
+              transaction: begin.transaction,
+              credential: credentialToJSON(credential)
+            });
+            authMessageText(result.message || 'Passkey registered.');
+            const status = await fetch('/api/auth/status', { credentials: 'same-origin', cache: 'no-store' }).then((r) => r.json());
+            if (status.authenticated) showWorkspace(status.csrf_token);
+            return;
+          }
+          const begin = await authPost('/api/auth/login/options', {});
+          const publicKey = prepareRequestOptions(begin.options);
+          const credential = await navigator.credentials.get({ publicKey });
+          if (!credential) throw new Error('Passkey sign-in was cancelled.');
+          const result = await authPost('/api/auth/login/verify', {
+            transaction: begin.transaction,
+            credential: credentialToJSON(credential)
+          });
+          showWorkspace(result.csrf_token);
+        } catch (error) {
+          authMessageText(error.message || 'Passkey sign-in failed.', true);
+        } finally {
+          authAction.disabled = false;
+        }
+      }
+
+      async function signOut() {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+            body: '{}'
+          });
+        } catch (error) { /* The local session will also expire when the server restarts. */ }
+        csrfToken = '';
+        document.getElementById('bootstrap-token').value = '';
+        initializeAuthentication();
+      }
+
+      authAction.addEventListener('click', runPasskeyAuthentication);
+      document.getElementById('logout-button').addEventListener('click', signOut);
+      document.getElementById('security-logout').addEventListener('click', signOut);
+
+      async function apiFetch(url, options = {}) {
+        const headers = new Headers(options.headers || {});
+        if ((options.method || 'GET').toUpperCase() === 'POST') headers.set('X-CSRF-Token', csrfToken);
+        const response = await fetch(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
+        if (response.status === 401) {
+          csrfToken = '';
+          showLoginGate(true);
+        }
+        return response;
+      }
+
+      initializeAuthentication();
+
       const navButtons = document.querySelectorAll('.nav-btn');
       const cards = document.querySelectorAll('.section-card');
 
@@ -314,7 +492,6 @@
         { key: 'inventory', formId: 'inventory-form', listId: 'inventory-list', endpoint: '/api/inventory' },
         { key: 'borrowed', formId: 'borrowed-form', listId: 'borrowed-list', endpoint: '/api/borrowed' },
         { key: 'attendance', formId: 'attendance-form', listId: 'attendance-list', endpoint: '/api/attendance' },
-        { key: 'users', formId: 'users-form', listId: 'users-list', endpoint: '/api/users' },
       ];
 
       function setStatus(sectionKey, message, tone = 'info') {
@@ -331,7 +508,7 @@
 
       async function loadSummary() {
         try {
-          const response = await fetch('/api/summary');
+          const response = await apiFetch('/api/summary');
           const data = await response.json();
           document.getElementById('summary-count').textContent = Object.values(data).reduce((sum, value) => sum + Number(value || 0), 0);
           document.getElementById('count-members').textContent = data.members;
@@ -348,7 +525,7 @@
         const container = document.getElementById(section.listId);
         if (!container) return;
         try {
-          const response = await fetch(section.endpoint);
+          const response = await apiFetch(section.endpoint);
           const text = await response.text();
           let rows = [];
           try {
@@ -457,7 +634,7 @@
         if (!form) return;
         const payload = Object.fromEntries(new FormData(form).entries());
         try {
-          const response = await fetch(endpoint, {
+          const response = await apiFetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -509,7 +686,7 @@
         const section = sections.find((item) => item.key === sectionKey);
         if (!section) return;
         try {
-          const response = await fetch(section.endpoint);
+          const response = await apiFetch(section.endpoint);
           const text = await response.text();
           let rows = [];
           try {
