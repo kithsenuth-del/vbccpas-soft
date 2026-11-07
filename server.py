@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import sys
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
@@ -16,8 +17,17 @@ MAX_BODY_BYTES = 1024 * 1024
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+@contextmanager
 def get_db():
-    return sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 class Handler(BaseHTTPRequestHandler):
