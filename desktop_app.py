@@ -6,6 +6,11 @@ import sqlite3
 import sys
 import threading
 import webbrowser
+import updater
+try:
+    from build_info import BUILD_COMMIT
+except ImportError:
+    BUILD_COMMIT = "development"
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
@@ -98,6 +103,9 @@ class UnifiedApp(desktop.App):
                    style="Rounded.TButton").pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(actions, text="Back Up Database",
                    command=self.backup_database,
+                   style="Rounded.TButton").pack(side=tk.LEFT, padx=8)
+        ttk.Button(actions, text="Check for Software Updates",
+                   command=self.check_for_updates,
                    style="Rounded.TButton").pack(side=tk.LEFT, padx=8)
         self.diagnostic_output = tk.Text(
             frame, height=22, wrap=tk.WORD, bg="#171719", fg="#f3eee6",
@@ -224,6 +232,33 @@ class UnifiedApp(desktop.App):
         self.diagnostic_output.delete("1.0", tk.END)
         self.diagnostic_output.insert("1.0", output.getvalue())
         self.diagnostic_output.configure(state=tk.DISABLED)
+
+    def check_for_updates(self):
+        if not getattr(sys, "frozen", False):
+            messagebox.showinfo("Software updates", "The built-in updater is available in the packaged Windows version.", parent=self.root)
+            return
+        def check():
+            try:
+                release = updater.check_for_update(BUILD_COMMIT)
+                self.root.after(0, lambda: self._show_update_result(release))
+            except Exception as exc:
+                self.root.after(0, lambda error=str(exc): messagebox.showerror("Update check failed", "Could not check GitHub for updates. Check your internet connection and try again.\n\n" + error, parent=self.root))
+        threading.Thread(target=check, name="VBCCPAS-update-check", daemon=True).start()
+
+    def _show_update_result(self, release):
+        if release is None:
+            messagebox.showinfo("Software is up to date", "This computer already has the latest published VBCCPAS Soft version.", parent=self.root)
+            return
+        name = release.get("name") or release["tag_name"]
+        if not messagebox.askyesno("Update available", f"A newer version of VBCCPAS Soft is available:\n\n{name}\n\nInstall it now? The application will close and restart. Your society database and passkey information will be kept.", parent=self.root):
+            return
+        def install():
+            try:
+                updater.download_and_launch(release, os.path.abspath(sys.executable), os.getpid())
+                self.root.after(0, self.close_application)
+            except Exception as exc:
+                self.root.after(0, lambda error=str(exc): messagebox.showerror("Update could not be installed", "The current version has been left in place.\n\n" + error, parent=self.root))
+        threading.Thread(target=install, name="VBCCPAS-update-install", daemon=True).start()
 
     def backup_database(self):
         if not os.path.isfile(desktop.DB_PATH):
