@@ -254,7 +254,7 @@ def setup_database():
 class App:
 	def __init__(self, root):
 		self.root = root
-		root.title("School Society Manager")
+		root.title("VBCCPAS | Photographic Arts Society")
 		root.geometry("1200x740")
 		root.minsize(1080, 680)
 		self.style = ttk.Style(root)
@@ -276,13 +276,13 @@ class App:
 		self.login_frame.pack(fill=tk.BOTH, expand=True)
 		login_card = tk.Frame(self.login_frame, bg=self.colors['card'], bd=1, highlightthickness=1, highlightbackground='#334155')
 		login_card.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=460, height=360)
-		tk.Label(login_card, text="VBCCPAS Society Manager", bg=self.colors['card'], fg='#f8fafc', font=('Segoe UI', 20, 'bold')).place(x=24, y=24)
-		tk.Label(login_card, text="Sign in to manage members, events, inventory and reports.", bg=self.colors['card'], fg='#cbd5e1', font=('Segoe UI', 10)).place(x=24, y=64)
+		tk.Label(login_card, text="VBCCPAS Photographic Arts Society", bg=self.colors['card'], fg='#f3eee6', font=('Segoe UI', 20, 'bold')).place(x=24, y=24)
+		tk.Label(login_card, text="The creative home for student photographers, photo events and camera equipment.", bg=self.colors['card'], fg='#d6cfc5', font=('Segoe UI', 10)).place(x=24, y=64)
 		form = tk.Frame(login_card, bg=self.colors['card'])
 		form.place(x=24, y=110, width=410)
 		tk.Label(form, text="Username", bg=self.colors['card'], fg=self.colors['fg'], font=('Segoe UI', 10, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=(0, 6))
 		self.username_var = tk.StringVar()
-		tk.Entry(form, textvariable=self.username_var, bg='#0f172a', fg='#f8fafc', insertbackground='white', width=34).grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
+		tk.Entry(form, textvariable=self.username_var, bg='#171719', fg='#f8fafc', insertbackground='white', width=34).grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
 		tk.Label(form, text="Password", bg=self.colors['card'], fg=self.colors['fg'], font=('Segoe UI', 10, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=(0, 6))
 		self.password_var = tk.StringVar()
 		tk.Entry(form, textvariable=self.password_var, show='*', bg='#0f172a', fg='#f8fafc', insertbackground='white', width=34).grid(row=3, column=0, sticky=tk.W, pady=(0, 12))
@@ -390,14 +390,14 @@ class App:
 
 	def apply_theme(self):
 		self.colors = {
-			'bg': '#07131f',
-			'card': '#0f172a',
-			'fg': '#e2e8f0',
-			'accent1': '#10b981',
-			'accent2': '#fbbf24',
-			'accent3': '#38bdf8',
-			'sidebar': '#020617',
-			'panel': '#111827'
+			'bg': '#111214',
+			'card': '#242528',
+			'fg': '#f3eee6',
+			'accent1': '#c87548',
+			'accent2': '#d8b779',
+			'accent3': '#e6a778',
+			'sidebar': '#191a1d',
+			'panel': '#2b2928'
 		}
 		bg = self.colors['bg']
 		fg = self.colors['fg']
@@ -414,8 +414,8 @@ class App:
 		self.style.map('Sidebar.TButton', background=[('active', accent), ('pressed', accent3)])
 		self.style.configure('Treeview', background=self.colors['card'], fieldbackground=self.colors['card'], foreground=fg, rowheight=28)
 		self.style.map('Treeview', background=[('selected', accent)])
-		self.style.configure('TEntry', fieldbackground='#0f172a', foreground=fg)
-		self.style.configure('TCombobox', fieldbackground='#0f172a', foreground=fg)
+		self.style.configure('TEntry', fieldbackground='#171719', foreground=fg)
+		self.style.configure('TCombobox', fieldbackground='#171719', foreground=fg)
 		self.style.configure('TSpinbox', fieldbackground='#0f172a', foreground=fg)
 		try:
 			self.root.configure(bg=bg)
@@ -483,7 +483,7 @@ class App:
 			header = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
 			header.pack(fill=tk.X, padx=16, pady=(16, 12))
 			tk.Label(header, text=f"Welcome back, {self.user['username']}", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 18, 'bold')).pack(anchor='w', padx=20, pady=(16, 4))
-			tk.Label(header, text="A bright, modern desktop workspace for society management.", bg=self.colors['panel'], fg='#cbd5e1', font=('Segoe UI', 10)).pack(anchor='w', padx=20, pady=(0, 16))
+			tk.Label(header, text="A creative studio for student photographers, exhibitions and photo walks.", bg=self.colors['panel'], fg='#cbd5e1', font=('Segoe UI', 10)).pack(anchor='w', padx=20, pady=(0, 16))
 			stats = tk.Frame(frame, bg=self.colors['bg'])
 			stats.pack(fill=tk.X, padx=16, pady=6)
 			mcount = self.count_members()
