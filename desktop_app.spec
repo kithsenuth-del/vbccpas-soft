@@ -1,35 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
-block_cipher = None
+from PyInstaller.utils.hooks import collect_all
 
+webauthn_datas, webauthn_binaries, webauthn_hiddenimports = collect_all("webauthn")
 
 a = Analysis(
     ["desktop_app.py"],
     pathex=["."],
-    binaries=[],
-    datas=[("vendor", "vendor")],
-    hiddenimports=[],
+    binaries=webauthn_binaries,
+    datas=webauthn_datas + [("vendor", "vendor"), ("index.html", ".")],
+    hiddenimports=webauthn_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
+    noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    a.zipfiles,
     a.datas,
-    name="VBCCPAS-Desktop.exe",
+    [],
+    name="VBCCPAS-Soft",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,
+    upx=False,
+    console=False,
+    disable_windowed_traceback=False,
 )
