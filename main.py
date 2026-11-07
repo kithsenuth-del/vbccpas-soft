@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
 import hashlib
+import hmac
+import secrets
 import os
 import csv
 import sys
@@ -16,7 +18,26 @@ DB_PATH = os.path.join(BASE_DIR, "society.db")
 
 
 def hash_password(pw: str) -> str:
-	return hashlib.sha256(pw.encode('utf-8')).hexdigest()
+	"""Return a salted PBKDF2-SHA256 password hash."""
+	salt = secrets.token_bytes(16)
+	iterations = 310000
+	digest = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'), salt, iterations)
+	return 'pbkdf2_sha256$' + str(iterations) + '$' + salt.hex() + '$' + digest.hex()
+
+
+def verify_password(pw: str, stored: str) -> bool:
+	"""Verify PBKDF2 hashes and legacy SHA-256 hashes during migration."""
+	if not stored:
+		return False
+	if stored.startswith('pbkdf2_sha256$'):
+		try:
+			_, iterations, salt_hex, digest_hex = stored.split('$', 3)
+			digest = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'), bytes.fromhex(salt_hex), int(iterations))
+			return hmac.compare_digest(digest.hex(), digest_hex)
+		except (ValueError, TypeError):
+			return False
+	legacy_digest = hashlib.sha256(pw.encode('utf-8')).hexdigest()
+	return hmac.compare_digest(legacy_digest, stored)
 
 
 def setup_database():
@@ -291,10 +312,15 @@ class App:
 		if not row:
 			messagebox.showerror("Login failed", "Unknown username")
 			return
-		if hash_password(p) != row[0]:
+		if not verify_password(p, row[0]):
 			messagebox.showerror("Login failed", "Incorrect password")
 			return
-		self.user = {'username': u, 'role': row[1] if len(row) > 1 else 'member'}
+		# Upgrade legacy SHA-256 hashes after a successful login.
+		if not row[0].startswith('pbkdf2_sha256$'):
+			conn = sqlite3.connect(DB_PATH)
+			conn.execute("UPDATE Users SET Password=? WHERE Username=?", (hash_password(p), u))
+			conn.commit()
+			conn.close()
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.show_view('dashboard')
