@@ -4,6 +4,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from base64 import urlsafe_b64encode
 
 from webauthn import (
@@ -36,10 +37,18 @@ def _b64u(value):
     return urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
+@contextmanager
 def _db(db_path):
     conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def initialize(db_path):
