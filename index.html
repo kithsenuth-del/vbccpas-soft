@@ -275,7 +275,7 @@
               <p id="passkey-status" class="mt-4 text-sm text-slate-400">Checking passkey status…</p>
               <button id="security-logout" class="mt-5 rounded-full bg-rose-500/90 px-4 py-2 font-semibold text-white transition hover:bg-rose-400">Sign out securely</button>
             </div>
-          </div>div>
+          </div>
         </section>
       </main>
     </div>
@@ -356,7 +356,7 @@
           type: credential.type,
           authenticatorAttachment: credential.authenticatorAttachment,
           clientExtensionResults: credential.getClientExtensionResults(),
-          response
+          response: result
         };
       }
 
