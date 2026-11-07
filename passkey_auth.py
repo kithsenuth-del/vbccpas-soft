@@ -77,6 +77,20 @@ def configured(db_path):
     with _db(db_path) as conn:
         return conn.execute("SELECT 1 FROM Passkeys LIMIT 1").fetchone() is not None
 
+def reset_registration_state(db_path):
+    """Clear passkey registration rows after the desktop administrator confirms recovery.
+
+    Callers must create a database backup before invoking this function. Society
+    records and PasskeyMeta (including the stable WebAuthn user handle) are kept.
+    """
+    initialize(db_path)
+    with _db(db_path) as conn:
+        cursor = conn.execute("DELETE FROM Passkeys")
+        removed = cursor.rowcount
+    with _PENDING_LOCK:
+        _PENDING.clear()
+    return removed
+
 
 def _store_pending(kind, challenge):
     now = time.time()
