@@ -548,24 +548,6 @@ class App:
 			if messagebox.askyesno('Delete','Remove member?'):
 				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Members WHERE MemberID=?',(mid,));conn.commit();conn.close();self.populate_members(tree)
 		ttk.Button(right, text='Delete Selected', command=on_delete).pack()
-		# Inline add form
-		form = ttk.Frame(top, padding=6)
-		form.pack(fill=tk.X, pady=(8,0))
-		name_var = tk.StringVar(); class_var = tk.StringVar(); roll_var = tk.StringVar(); email_var = tk.StringVar()
-		ttk.Label(form, text='Name').grid(row=0, column=0); ttk.Entry(form, textvariable=name_var, width=24).grid(row=0, column=1, padx=6)
-		tk.Label(form, text='Class').grid(row=0, column=2); ttk.Entry(form, textvariable=class_var, width=12).grid(row=0, column=3, padx=6)
-		tk.Label(form, text='Roll').grid(row=0, column=4); ttk.Entry(form, textvariable=roll_var, width=10).grid(row=0, column=5, padx=6)
-		tk.Label(form, text='Email').grid(row=1, column=0); ttk.Entry(form, textvariable=email_var, width=36).grid(row=1, column=1, columnspan=3, padx=6)
-		def do_inline_add():
-			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name_var.get(),class_var.get(),roll_var.get(),email_var.get()));conn.commit();conn.close(); self.populate_members(tree); name_var.set(''); class_var.set(''); roll_var.set(''); email_var.set('')
-		ttk.Button(form, text='Add Inline', command=do_inline_add, style='Rounded.TButton').grid(row=1, column=4, columnspan=2, padx=6)
-
-	def populate_members(self, tree):
-		for r in tree.get_children(): tree.delete(r)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID, Name, Class, Roll, Email FROM Members');rows=cur.fetchall();conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
-
 	def add_member_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Member')
 		f=ttk.Frame(d, padding=12);f.pack()
@@ -591,17 +573,6 @@ class App:
 		tree.pack(fill=tk.BOTH,expand=True)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT EventID,Title,Date,Location FROM Events');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
-		# inline add
-		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
-		title_var = tk.StringVar(); date_var = tk.StringVar(); loc_var = tk.StringVar()
-		tk.Label(form,text='Title').grid(row=0,column=0); ttk.Entry(form,textvariable=title_var, width=36).grid(row=0,column=1, padx=6)
-		tk.Label(form,text='Date').grid(row=1,column=0); ttk.Entry(form,textvariable=date_var, width=20).grid(row=1,column=1, padx=6)
-		tk.Label(form,text='Location').grid(row=2,column=0); ttk.Entry(form,textvariable=loc_var, width=28).grid(row=2,column=1, padx=6)
-		def do_add_event():
-			if not title_var.get().strip(): messagebox.showwarning('Missing','Enter title'); return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location) VALUES (?,?,?)', (title_var.get(),date_var.get(),loc_var.get()));conn.commit();conn.close(); title_var.set(''); date_var.set(''); loc_var.set(''); self.show_view('events')
-		ttk.Button(form,text='Add Inline', command=do_add_event, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
-
 	def add_event_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Event')
 		f=ttk.Frame(d, padding=12);f.pack()
@@ -627,17 +598,6 @@ class App:
 		tree.pack(fill=tk.BOTH,expand=True)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory');rows=cur.fetchall();conn.close()
 		for r in rows: tree.insert('',tk.END,values=r)
-		# inline add
-		form = ttk.Frame(top,padding=6); form.pack(fill=tk.X, pady=(8,0))
-		name_var = tk.StringVar(); qty_var = tk.IntVar(value=1); notes_var = tk.StringVar()
-		tk.Label(form,text='Name').grid(row=0,column=0); ttk.Entry(form,textvariable=name_var, width=36).grid(row=0,column=1, padx=6)
-		tk.Label(form,text='Quantity').grid(row=1,column=0); ttk.Entry(form,textvariable=qty_var, width=12).grid(row=1,column=1, padx=6)
-		tk.Label(form,text='Notes').grid(row=2,column=0); ttk.Entry(form,textvariable=notes_var, width=36).grid(row=2,column=1, padx=6)
-		def do_add_item():
-			if not name_var.get().strip(): messagebox.showwarning('Missing','Enter name'); return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name_var.get(), qty_var.get(), notes_var.get()));conn.commit();conn.close(); name_var.set(''); qty_var.set(1); notes_var.set(''); self.show_view('inventory')
-		ttk.Button(form, text='Add Inline', command=do_add_item, style='Rounded.TButton').grid(row=0,column=2,rowspan=3,padx=8)
-
 	def add_item_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Item')
 		f=ttk.Frame(d, padding=12);f.pack()
