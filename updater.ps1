@@ -31,14 +31,29 @@ try {
         throw 'The staged update executable is missing.'
     }
 
-    # Ask Windows for elevation only when the install directory requires it.
+    # Avoid a UAC prompt for normal user-writable installations. Elevate only
+    # when the install directory does not allow the updater to stage a file.
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
+    $canWriteDirectory = $false
     if (-not $isAdministrator) {
+        $permissionProbe = Join-Path $targetDirectory ('.vbccpas-write-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+        try {
+            $stream = [IO.File]::Open($permissionProbe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            $stream.Dispose()
+            Remove-Item -LiteralPath $permissionProbe -Force
+            $canWriteDirectory = $true
+        } catch {
+            if (Test-Path -LiteralPath $permissionProbe) {
+                Remove-Item -LiteralPath $permissionProbe -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    if (-not $isAdministrator -and -not $canWriteDirectory) {
         $arguments = @(
             '-NoProfile',
-            '-NonInteractive',
             '-ExecutionPolicy', 'Bypass',
             '-File', ('"' + $PSCommandPath + '"'),
             '-ProcessId', $ProcessId,
