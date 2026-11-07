@@ -355,8 +355,8 @@ class App:
 			if not (mid and uname and pw):
 				messagebox.showwarning('Missing', 'Enter member id, username and password')
 				return
-			if len(pw) < 10:
-				messagebox.showwarning('Weak password', 'Use at least 10 characters')
+			if len(pw) < 6:
+				messagebox.showwarning('Weak password', 'Use at least 6 characters')
 				return
 			if not mid.isdigit():
 				messagebox.showwarning('Invalid', 'Member ID must be numeric')
@@ -858,8 +858,8 @@ class App:
 				else:
 					cur.execute('UPDATE Users SET Username=?, Role=?, MemberID=? WHERE UserID=?', (username, role, member_id_int, selected_user_id['value']))
 			else:
-				if len(password) < 10:
-					conn.close(); messagebox.showwarning('Weak password', 'Use at least 10 characters'); return
+				if len(password) < 6:
+					conn.close(); messagebox.showwarning('Weak password', 'Use at least 6 characters'); return
 				cur.execute('SELECT 1 FROM Users WHERE Username=?', (username,))
 				if cur.fetchone():
 					conn.close(); messagebox.showerror('Taken','Username already exists'); return
@@ -882,14 +882,14 @@ class App:
 	def set_user_password(self, username):
 		password = simpledialog.askstring(
 			'Set password',
-			'Enter a new password for ' + username + ' (at least 10 characters):',
+			'Enter a new password for ' + username + ' (at least 6 characters):',
 			parent=self.root,
 			show='*'
 		)
 		if password is None:
 			return
-		if len(password) < 10:
-			messagebox.showwarning('Weak password', 'Use at least 10 characters.')
+		if len(password) < 6:
+			messagebox.showwarning('Weak password', 'Use at least 6 characters.')
 			return
 		conn = sqlite3.connect(DB_PATH)
 		conn.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password(password), username))
