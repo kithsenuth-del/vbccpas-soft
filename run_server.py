@@ -1,12 +1,13 @@
 import os
 import sys
-
-sys.path.insert(0, os.getcwd())
-import main
-import server
 from http.server import ThreadingHTTPServer
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import main
+import server
+
 main.setup_database()
-httpd = ThreadingHTTPServer(('127.0.0.1', 8000), server.Handler)
-print('listening on 8000')
+server.startup_security()
+httpd = ThreadingHTTPServer(("127.0.0.1", server.PORT), server.Handler)
+print("Open " + server.EXPECTED_ORIGIN + " in this computer's browser.")
 httpd.serve_forever()
