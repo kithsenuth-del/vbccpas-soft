@@ -204,9 +204,8 @@ class WebDesktopIntegrationTests(unittest.TestCase):
             count = conn.execute("SELECT COUNT(*) FROM Members").fetchone()[0]
         self.assertEqual(count, 0)
 
-    @unittest.expectedFailure
     def test_web_borrow_decrements_inventory_like_desktop(self):
-        """Known gap: web save_borrowed currently records a loan but not stock movement."""
+        """A new outstanding web loan reserves one unit of inventory."""
         with self.db() as conn:
             member_id = conn.execute("INSERT INTO Members (Name) VALUES (?)", ("TEST Borrower",)).lastrowid
             item_id = conn.execute(
@@ -221,9 +220,8 @@ class WebDesktopIntegrationTests(unittest.TestCase):
             quantity = conn.execute("SELECT Quantity FROM Inventory WHERE ItemID=?", (item_id,)).fetchone()[0]
         self.assertEqual(quantity, 1, "Web borrowing should reduce available stock by one")
 
-    @unittest.expectedFailure
     def test_web_summary_counts_only_outstanding_borrowings(self):
-        """Known gap: web summary currently counts all loans, including returned ones."""
+        """Returned loans are excluded from the currently borrowed summary."""
         with self.db() as conn:
             member_id = conn.execute("INSERT INTO Members (Name) VALUES (?)", ("TEST Borrower",)).lastrowid
             item_id = conn.execute("INSERT INTO Inventory (Name, Quantity) VALUES (?, 1)", ("TEST Returned Item",)).lastrowid
@@ -234,6 +232,104 @@ class WebDesktopIntegrationTests(unittest.TestCase):
         status, summary = self.request("/api/summary")
         self.assertEqual(status, 200)
         self.assertEqual(summary["borrowed"], 0, "Returned loans should not count as currently borrowed")
+
+
+    def test_web_borrow_return_and_reopen_adjust_stock_once(self):
+        with self.db() as conn:
+            member_id = conn.execute(
+                "INSERT INTO Members (Name) VALUES (?)", ("TEST Loan Lifecycle Member",)
+            ).lastrowid
+            item_id = conn.execute(
+                "INSERT INTO Inventory (Name, Quantity) VALUES (?, ?)",
+                ("TEST Loan Lifecycle Camera", 2),
+            ).lastrowid
+
+        status, result = self.request("/api/borrowed", "POST", {
+            "item_id": item_id, "member_id": member_id,
+            "borrow_date": "2099-01-01", "returned": False,
+        })
+        self.assertEqual(status, 200, result)
+        with self.db() as conn:
+            borrow_id = conn.execute(
+                "SELECT BorrowID FROM BorrowedItems WHERE ItemID=?", (item_id,)
+            ).fetchone()[0]
+            quantity = conn.execute(
+                "SELECT Quantity FROM Inventory WHERE ItemID=?", (item_id,)
+            ).fetchone()[0]
+        self.assertEqual(quantity, 1)
+
+        for returned, expected_quantity in ((True, 2), (True, 2), (False, 1)):
+            status, result = self.request("/api/borrowed", "POST", {
+                "id": borrow_id, "item_id": item_id, "member_id": member_id,
+                "borrow_date": "2099-01-01", "return_date": "2099-01-02",
+                "returned": returned,
+            })
+            self.assertEqual(status, 200, result)
+            with self.db() as conn:
+                quantity = conn.execute(
+                    "SELECT Quantity FROM Inventory WHERE ItemID=?", (item_id,)
+                ).fetchone()[0]
+            self.assertEqual(quantity, expected_quantity)
+
+    def test_web_borrow_rejects_out_of_stock_without_partial_stock_change(self):
+        with self.db() as conn:
+            member_id = conn.execute(
+                "INSERT INTO Members (Name) VALUES (?)", ("TEST Stock Transfer Member",)
+            ).lastrowid
+            old_item = conn.execute(
+                "INSERT INTO Inventory (Name, Quantity) VALUES (?, 0)",
+                ("TEST Existing Loan Item",),
+            ).lastrowid
+            unavailable_item = conn.execute(
+                "INSERT INTO Inventory (Name, Quantity) VALUES (?, 0)",
+                ("TEST Unavailable Transfer Item",),
+            ).lastrowid
+            borrow_id = conn.execute(
+                "INSERT INTO BorrowedItems (ItemID, MemberID, BorrowDate, Returned) "
+                "VALUES (?, ?, ?, 0)",
+                (old_item, member_id, "2099-01-01"),
+            ).lastrowid
+
+        status, result = self.request("/api/borrowed", "POST", {
+            "id": borrow_id, "item_id": unavailable_item,
+            "member_id": member_id, "borrow_date": "2099-01-01",
+            "returned": False,
+        })
+        self.assertEqual(status, 400, result)
+        with self.db() as conn:
+            old_quantity = conn.execute(
+                "SELECT Quantity FROM Inventory WHERE ItemID=?", (old_item,)
+            ).fetchone()[0]
+            new_quantity = conn.execute(
+                "SELECT Quantity FROM Inventory WHERE ItemID=?", (unavailable_item,)
+            ).fetchone()[0]
+            stored_item, stored_returned = conn.execute(
+                "SELECT ItemID, Returned FROM BorrowedItems WHERE BorrowID=?",
+                (borrow_id,),
+            ).fetchone()
+        self.assertEqual((old_quantity, new_quantity), (0, 0))
+        self.assertEqual((stored_item, stored_returned), (old_item, 0))
+
+    def test_web_create_already_returned_loan_does_not_change_stock(self):
+        with self.db() as conn:
+            member_id = conn.execute(
+                "INSERT INTO Members (Name) VALUES (?)", ("TEST Returned Loan Member",)
+            ).lastrowid
+            item_id = conn.execute(
+                "INSERT INTO Inventory (Name, Quantity) VALUES (?, ?)",
+                ("TEST Already Returned Item", 2),
+            ).lastrowid
+        status, result = self.request("/api/borrowed", "POST", {
+            "item_id": item_id, "member_id": member_id,
+            "borrow_date": "2099-01-01", "returned": True,
+        })
+        self.assertEqual(status, 200, result)
+        with self.db() as conn:
+            quantity = conn.execute(
+                "SELECT Quantity FROM Inventory WHERE ItemID=?", (item_id,)
+            ).fetchone()[0]
+        self.assertEqual(quantity, 2)
+
 
 
 if __name__ == "__main__":
