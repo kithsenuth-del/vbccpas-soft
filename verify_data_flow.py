@@ -1,4 +1,4 @@
-"""Non-destructive API smoke test using an isolated temporary SQLite database."""
+"""Non-destructive tests for the local-only executive administrator API."""
 import json
 import os
 import tempfile
@@ -8,69 +8,82 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import main
-import server as web_server
+import passkey_auth
+import server
 
 
-def request_json(url, payload=None):
-    headers = {}
-    data = None
-    method = "GET"
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
+def call(base, path, method="GET", payload=None, origin=None):
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {"Host": "localhost:" + str(server.PORT)}
+    if data is not None:
         headers["Content-Type"] = "application/json"
-        method = "POST"
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(request, timeout=5) as response:
-        return response.status, json.loads(response.read().decode("utf-8"))
+    if origin is not None:
+        headers["Origin"] = origin
+    request = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8")
 
 
 def run_checks():
-    original_main_path = main.DB_PATH
-    original_server_path = web_server.DB_PATH
-    original_admin_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
-    results = {}
+    old_main_path = main.DB_PATH
+    old_server_path = server.DB_PATH
+    old_port = server.PORT
+    old_host = server.EXPECTED_HOST
+    old_origin = server.EXPECTED_ORIGIN
+    old_webauthn_origin = passkey_auth.ORIGIN
+    old_admin_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
     httpd = None
     thread = None
+    results = {}
     try:
-        with tempfile.TemporaryDirectory(prefix="vbccpas-test-") as temp_dir:
-            test_db = os.path.join(temp_dir, "isolated-test.db")
-            main.DB_PATH = test_db
-            web_server.DB_PATH = test_db
-            os.environ["VBCCPAS_ADMIN_PASSWORD"] = "temporary-test-only-password"
+        with tempfile.TemporaryDirectory(prefix="vbccpas-passkey-test-") as temp_dir:
+            db_path = os.path.join(temp_dir, "isolated.db")
+            main.DB_PATH = db_path
+            server.DB_PATH = db_path
+            os.environ["VBCCPAS_ADMIN_PASSWORD"] = "temporary-test-password-only"
             main.setup_database()
-            httpd = ThreadingHTTPServer(("127.0.0.1", 0), web_server.Handler)
+            passkey_auth.initialize(db_path)
+            httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+            server.PORT = httpd.server_port
+            server.EXPECTED_HOST = "localhost:" + str(server.PORT)
+            server.EXPECTED_ORIGIN = "http://localhost:" + str(server.PORT)
+            passkey_auth.ORIGIN = server.EXPECTED_ORIGIN
             thread = threading.Thread(target=httpd.serve_forever, daemon=True)
             thread.start()
-            base = "http://127.0.0.1:" + str(httpd.server_port)
+            base = "http://127.0.0.1:" + str(server.PORT)
+            same_origin = server.EXPECTED_ORIGIN
 
-            status, summary = request_json(base + "/api/summary")
-            results["summary_get"] = status == 200 and "members" in summary
-            request_json(base + "/api/members", {"name": "Isolated Test Member", "class": "12-C", "roll": "88", "email": "test@example.invalid"})
-            _, members = request_json(base + "/api/members")
-            results["members_create_and_list"] = any(r["name"] == "Isolated Test Member" for r in members)
+            status, body = call(base, "/api/auth/status")
+            state = json.loads(body)
+            results["first_run_reports_setup_required"] = status == 200 and state.get("configured") is False
 
-            request_json(base + "/api/events", {"title": "Isolated Test Event", "date": "2026-08-12", "location": "Test Hall", "notes": "temporary"})
-            _, events = request_json(base + "/api/events")
-            results["events_create_and_list"] = any(r["title"] == "Isolated Test Event" for r in events)
+            status, body = call(base, "/api/summary")
+            results["summary_requires_passkey_session"] = status == 401
 
-            request_json(base + "/api/inventory", {"name": "Isolated Test Item", "quantity": 7, "notes": "temporary"})
-            _, inventory = request_json(base + "/api/inventory")
-            results["inventory_create_and_list"] = any(r["name"] == "Isolated Test Item" for r in inventory)
+            status, body = call(
+                base, "/api/members", "POST",
+                {"name": "Should not be saved"}, same_origin
+            )
+            results["member_write_requires_passkey_session"] = status == 401
 
-            bad_origin = urllib.request.Request(base + "/api/members", data=b'{"name":"blocked"}', headers={"Content-Type": "application/json", "Origin": "https://attacker.invalid"}, method="POST")
-            try:
-                urllib.request.urlopen(bad_origin, timeout=5)
-                results["cross_origin_blocked"] = False
-            except urllib.error.HTTPError as exc:
-                results["cross_origin_blocked"] = exc.code == 403
+            status, body = call(
+                base, "/api/auth/register/options", "POST",
+                {"bootstrap_token": "not-the-console-token"}, same_origin
+            )
+            results["invalid_bootstrap_token_rejected"] = status == 403
 
-            bad_type = urllib.request.Request(base + "/api/members", data=b'name=blocked', headers={"Content-Type": "text/plain"}, method="POST")
-            try:
-                urllib.request.urlopen(bad_type, timeout=5)
-                results["invalid_content_type_rejected"] = False
-            except urllib.error.HTTPError as exc:
-                results["invalid_content_type_rejected"] = exc.code == 400
+            status, body = call(base, "/api/auth/status", origin="https://attacker.invalid")
+            results["cross_origin_rejected"] = status == 403
 
+            status, body = call(base, "/")
+            results["local_login_page_served"] = status == 200 and "Executive administrator login" in body
+
+            with sqlite3_connect(db_path) as conn:
+                count = conn.execute("SELECT COUNT(*) FROM Members").fetchone()[0]
+            results["unauthorized_write_did_not_change_database"] = count == 0
             results["all_passed"] = all(results.values())
     finally:
         if httpd:
@@ -78,13 +91,22 @@ def run_checks():
             httpd.server_close()
         if thread:
             thread.join(timeout=2)
-        main.DB_PATH = original_main_path
-        web_server.DB_PATH = original_server_path
-        if original_admin_password is None:
+        main.DB_PATH = old_main_path
+        server.DB_PATH = old_server_path
+        server.PORT = old_port
+        server.EXPECTED_HOST = old_host
+        server.EXPECTED_ORIGIN = old_origin
+        passkey_auth.ORIGIN = old_webauthn_origin
+        if old_admin_password is None:
             os.environ.pop("VBCCPAS_ADMIN_PASSWORD", None)
         else:
-            os.environ["VBCCPAS_ADMIN_PASSWORD"] = original_admin_password
+            os.environ["VBCCPAS_ADMIN_PASSWORD"] = old_admin_password
     return results
+
+
+def sqlite3_connect(path):
+    import sqlite3
+    return sqlite3.connect(path)
 
 
 if __name__ == "__main__":
