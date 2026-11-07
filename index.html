@@ -48,9 +48,12 @@
       [class*="text-emerald-"] { color:#e3a078 !important; }
       [class*="text-amber-"] { color:#e2c58f !important; }
       [class*="text-sky-"],[class*="text-violet-"] { color:#d8c4b3 !important; }
-      [class*="bg-emerald-"] { background-color:rgba(200,117,72,.12) !important; }\n      button[class*="bg-emerald-"] { background-color:#ad603d !important; }
-      [class*="bg-amber-"] { background-color:rgba(216,183,121,.12) !important; }\n      button[class*="bg-amber-"] { background-color:#d2ae70 !important; }
-      [class*="bg-sky-"],[class*="bg-violet-"] { background-color:rgba(216,183,121,.10) !important; }\n      button[class*="bg-sky-"],button[class*="bg-violet-"] { background-color:#66534a !important; }
+      [class*="bg-emerald-"] { background-color:rgba(200,117,72,.12) !important; }
+      button[class*="bg-emerald-"] { background-color:#ad603d !important; }
+      [class*="bg-amber-"] { background-color:rgba(216,183,121,.12) !important; }
+      button[class*="bg-amber-"] { background-color:#d2ae70 !important; }
+      [class*="bg-sky-"],[class*="bg-violet-"] { background-color:rgba(216,183,121,.10) !important; }
+      button[class*="bg-sky-"],button[class*="bg-violet-"] { background-color:#66534a !important; }
       [class*="border-emerald-"],[class*="border-amber-"],[class*="border-sky-"],[class*="border-violet-"] { border-color:rgba(216,183,121,.24) !important; }
       [class*="shadow-emerald-"],[class*="shadow-amber-"] { --tw-shadow-color:rgba(0,0,0,.28) !important; }
       .section-card [id$="-list"] > div:hover { background:rgba(200,117,72,.10) !important; border-color:rgba(216,183,121,.25) !important; }
@@ -71,7 +74,7 @@
           <label class="block text-sm font-medium text-slate-200">One-time setup token
             <input id="bootstrap-token" type="password" autocomplete="off" class="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white" placeholder="Paste the one-time token shown in the desktop app" />
           </label>
-          <p class="mt-2 text-xs leading-5 text-slate-400">The token is printed once when the local server starts. Keep it private and do not share it.</p>
+          <p class="mt-2 text-xs leading-5 text-slate-400">The token appears once in the desktop app after the administrator signs in. Keep it private and do not share it.</p>
         </div>
         <button id="auth-action" class="mt-6 w-full rounded-xl bg-emerald-500 px-5 py-3 font-semibold text-white transition hover:bg-emerald-400">Continue with passkey</button>
         <p id="auth-message" role="status" aria-live="polite" class="mt-4 min-h-6 text-sm text-slate-300">Checking local security status…</p>
