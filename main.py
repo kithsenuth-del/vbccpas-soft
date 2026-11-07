@@ -863,7 +863,7 @@ class App:
 		except Exception as exc:
 			conn.close(); messagebox.showerror('Error', str(exc))
 
-	 def reset_selected_user(self, tree):
+	def reset_selected_user(self, tree):
 		sel = tree.selection()
 		if not sel:
 			messagebox.showwarning('Select', 'Select a user to reset')
