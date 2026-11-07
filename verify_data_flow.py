@@ -27,6 +27,7 @@ def request_json(url, payload=None):
 def run_checks():
     original_main_path = main.DB_PATH
     original_server_path = web_server.DB_PATH
+    original_admin_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
     results = {}
     httpd = None
     thread = None
@@ -35,6 +36,7 @@ def run_checks():
             test_db = os.path.join(temp_dir, "isolated-test.db")
             main.DB_PATH = test_db
             web_server.DB_PATH = test_db
+            os.environ["VBCCPAS_ADMIN_PASSWORD"] = "temporary-test-only-password"
             main.setup_database()
             httpd = ThreadingHTTPServer(("127.0.0.1", 0), web_server.Handler)
             thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -78,6 +80,10 @@ def run_checks():
             thread.join(timeout=2)
         main.DB_PATH = original_main_path
         web_server.DB_PATH = original_server_path
+        if original_admin_password is None:
+            os.environ.pop("VBCCPAS_ADMIN_PASSWORD", None)
+        else:
+            os.environ["VBCCPAS_ADMIN_PASSWORD"] = original_admin_password
     return results
 
 
