@@ -58,7 +58,7 @@ class UnifiedApp(desktop.App):
                          anchor="w", padx=28, pady=(28, 8))
             tk.Label(
                 frame,
-                text="The browser dashboard runs locally on this computer and shares the society database.",
+                text="Your photography society dashboard runs locally and shares the same members, events and equipment records.",
                 bg=self.colors["bg"], fg="#cbd5e1", font=("Segoe UI", 10),
                 wraplength=760, justify="left",
             ).pack(anchor="w", padx=28, pady=(0, 20))
@@ -88,7 +88,7 @@ class UnifiedApp(desktop.App):
                  fg="#f8fafc", font=("Segoe UI", 22, "bold")).pack(
                      anchor="w", padx=28, pady=(28, 8))
         tk.Label(
-            frame, text="Run safe checks and create a secure database backup.",
+            frame, text="Keep the society studio running smoothly with safe checks and database backups.",
             bg=self.colors["bg"], fg="#cbd5e1", font=("Segoe UI", 10),
         ).pack(anchor="w", padx=28, pady=(0, 14))
         actions = tk.Frame(frame, bg=self.colors["bg"])
@@ -100,7 +100,7 @@ class UnifiedApp(desktop.App):
                    command=self.backup_database,
                    style="Rounded.TButton").pack(side=tk.LEFT, padx=8)
         self.diagnostic_output = tk.Text(
-            frame, height=22, wrap=tk.WORD, bg="#0f172a", fg="#e2e8f0",
+            frame, height=22, wrap=tk.WORD, bg="#171719", fg="#f3eee6",
             insertbackground="white", font=("Consolas", 9), relief="flat",
         )
         self.diagnostic_output.pack(fill=tk.BOTH, expand=True, padx=28, pady=16)
