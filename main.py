@@ -1,8 +1,10 @@
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import sqlite3
 import hashlib
+import hmac
+import secrets
 import os
 import csv
 import sys
@@ -16,7 +18,26 @@ DB_PATH = os.path.join(BASE_DIR, "society.db")
 
 
 def hash_password(pw: str) -> str:
-	return hashlib.sha256(pw.encode('utf-8')).hexdigest()
+	"""Return a salted PBKDF2-SHA256 password hash."""
+	salt = secrets.token_bytes(16)
+	iterations = 310000
+	digest = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'), salt, iterations)
+	return 'pbkdf2_sha256$' + str(iterations) + '$' + salt.hex() + '$' + digest.hex()
+
+
+def verify_password(pw: str, stored: str) -> bool:
+	"""Verify PBKDF2 hashes and legacy SHA-256 hashes during migration."""
+	if not stored:
+		return False
+	if stored.startswith('pbkdf2_sha256$'):
+		try:
+			_, iterations, salt_hex, digest_hex = stored.split('$', 3)
+			digest = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'), bytes.fromhex(salt_hex), int(iterations))
+			return hmac.compare_digest(digest.hex(), digest_hex)
+		except (ValueError, TypeError):
+			return False
+	legacy_digest = hashlib.sha256(pw.encode('utf-8')).hexdigest()
+	return hmac.compare_digest(legacy_digest, stored)
 
 
 def setup_database():
@@ -217,10 +238,14 @@ def setup_database():
 	)
 	''')
 
-	# seed admin
+	# Bootstrap a new installation with a unique password, not a shared default.
 	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
 	if not cur.fetchone():
-		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password("admin123")))
+		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
+		if not initial_password:
+			initial_password = secrets.token_urlsafe(18)
+			print("VBCCPAS initial admin password (save it securely): " + initial_password)
+		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
 
 	conn.commit()
 	conn.close()
@@ -291,10 +316,15 @@ class App:
 		if not row:
 			messagebox.showerror("Login failed", "Unknown username")
 			return
-		if hash_password(p) != row[0]:
+		if not verify_password(p, row[0]):
 			messagebox.showerror("Login failed", "Incorrect password")
 			return
-		self.user = {'username': u, 'role': row[1] if len(row) > 1 else 'member'}
+		# Upgrade legacy SHA-256 hashes after a successful login.
+		if not row[0].startswith('pbkdf2_sha256$'):
+			conn = sqlite3.connect(DB_PATH)
+			conn.execute("UPDATE Users SET Password=? WHERE Username=?", (hash_password(p), u))
+			conn.commit()
+			conn.close()
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.show_view('dashboard')
@@ -321,6 +351,9 @@ class App:
 			pw = password_var.get()
 			if not (mid and uname and pw):
 				messagebox.showwarning('Missing', 'Enter member id, username and password')
+				return
+			if len(pw) < 10:
+				messagebox.showwarning('Weak password', 'Use at least 10 characters')
 				return
 			if not mid.isdigit():
 				messagebox.showwarning('Invalid', 'Member ID must be numeric')
@@ -822,10 +855,12 @@ class App:
 				else:
 					cur.execute('UPDATE Users SET Username=?, Role=?, MemberID=? WHERE UserID=?', (username, role, member_id_int, selected_user_id['value']))
 			else:
+				if len(password) < 10:
+					conn.close(); messagebox.showwarning('Weak password', 'Use at least 10 characters'); return
 				cur.execute('SELECT 1 FROM Users WHERE Username=?', (username,))
 				if cur.fetchone():
 					conn.close(); messagebox.showerror('Taken','Username already exists'); return
-				cur.execute('INSERT INTO Users (Username, Password, Role, MemberID) VALUES (?,?,?,?)', (username, hash_password(password or 'password123'), role, member_id_int))
+				cur.execute('INSERT INTO Users (Username, Password, Role, MemberID) VALUES (?,?,?,?)', (username, hash_password(password), role, member_id_int))
 			conn.commit(); conn.close();
 			self.populate_users(tree)
 			self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id)
@@ -836,13 +871,28 @@ class App:
 	def reset_selected_user(self, tree):
 		sel = tree.selection()
 		if not sel:
-			messagebox.showwarning('Select','Select a user to reset')
+			messagebox.showwarning('Select', 'Select a user to reset')
 			return
 		username = tree.item(sel[0])['values'][1]
-		if username == 'admin':
-			self.reset_admin_password()
+		self.set_user_password(username)
+
+	def set_user_password(self, username):
+		password = simpledialog.askstring(
+			'Set password',
+			'Enter a new password for ' + username + ' (at least 10 characters):',
+			parent=self.root,
+			show='*'
+		)
+		if password is None:
 			return
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password('password123'), username));conn.commit();conn.close();messagebox.showinfo('Reset', f"Password reset for {username}")
+		if len(password) < 10:
+			messagebox.showwarning('Weak password', 'Use at least 10 characters.')
+			return
+		conn = sqlite3.connect(DB_PATH)
+		conn.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password(password), username))
+		conn.commit()
+		conn.close()
+		messagebox.showinfo('Reset', 'Password updated for ' + username)
 
 	def delete_selected_user(self, tree):
 		sel = tree.selection()
@@ -858,7 +908,7 @@ class App:
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Users WHERE Username=?', (username,));conn.commit();conn.close();self.populate_users(tree)
 
 	def reset_admin_password(self):
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("UPDATE Users SET Password=? WHERE Username='admin'", (hash_password('admin123'),));conn.commit();conn.close();messagebox.showinfo('Reset','Admin password set to admin123')
+		self.set_user_password('admin')
 
 	def export_table(self, table, columns):
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute(f"SELECT {', '.join(columns)} FROM {table}");rows=cur.fetchall();conn.close()

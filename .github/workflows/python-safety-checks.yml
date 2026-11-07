@@ -1,0 +1,25 @@
+name: Python safety checks
+
+on:
+  push:
+    branches:
+      - main
+      - fix/api-security-and-safe-tests
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile Python files
+        run: python -m py_compile main.py server.py run_server.py verify_data_flow.py
+      - name: Run isolated API smoke tests
+        run: python verify_data_flow.py
