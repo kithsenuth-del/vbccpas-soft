@@ -60,6 +60,19 @@ def run_checks():
             state = json.loads(body)
             results["first_run_reports_setup_required"] = status == 200 and state.get("configured") is False
 
+            registration = passkey_auth.begin_registration(db_path, passkey_auth.BOOTSTRAP_TOKEN)
+            selection = registration["options"].get("authenticatorSelection", {})
+            results["registration_requires_platform_authenticator"] = (
+                selection.get("authenticatorAttachment") == "platform"
+                and selection.get("residentKey") == "required"
+                and selection.get("userVerification") == "required"
+            )
+            try:
+                passkey_auth.begin_login(db_path)
+                results["login_blocked_before_setup"] = False
+            except PermissionError:
+                results["login_blocked_before_setup"] = True
+
             status, body = call(base, "/api/summary")
             results["summary_requires_passkey_session"] = status == 401
 
