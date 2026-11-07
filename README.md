@@ -1,42 +1,54 @@
 # VBCCPAS Soft
 
-Local society management system for VBCCPAS.
+VBCCPAS Soft is a local society-management application for Windows. The unified desktop application contains the existing desktop management modules and can start/open the local browser dashboard from the same interface.
 
-## Run the local web application
+## Run the application (Windows)
 
-Use Python 3.10 or newer.
+The recommended experience is the packaged **VBCCPAS-Soft.exe**. Double-click it to open the desktop application. Sign in with the executive administrator account. The local web server starts from inside the application; use **Web Dashboard** in the sidebar to open the browser dashboard.
+
+No Command Prompt window or separate server process is needed for normal use.
+
+## Build the Windows application from source
+
+Install Python 3.10 or newer, then run the following from PowerShell in the project folder:
+
+```powershell
+.\build_exes.ps1
+```
+
+The packaged application is created at `dist\VBCCPAS-Soft.exe`. The build script installs the required build tools.
+
+## First-time administrator setup
+
+On a new database, the desktop interface displays a randomly generated administrator password once. Save it securely and sign in with username `admin`. Change the password from the Security section.
+
+On first successful desktop login, the integrated local web server initializes. If a browser passkey has not yet been registered, the desktop interface displays the one-time passkey setup token with a Copy button. Open **Web Dashboard**, paste the token into the local setup page, and register the computer's platform authenticator (for example, Windows Hello). Keep the token private.
+
+The web dashboard uses a device-bound passkey and an in-memory eight-hour session. The passkey private key remains with the platform authenticator. The local web server binds only to loopback and must not be exposed to a LAN or the public internet.
+
+## Built-in maintenance
+
+- **Maintenance & Backups → Run Problem Checker** runs safe application and database checks from the desktop interface.
+- **Back Up Database** creates a consistent SQLite backup using SQLite's backup API.
+- The problem checker is read-only. It does not repair, edit, or delete application records.
+- A database backup does not back up the passkey private key.
+
+## Data storage
+
+The existing `society.db` remains beside the application executable. Keep the application in a folder where the signed-in Windows user has read/write permission. Back up the database regularly and store backups securely.
+
+## Developer verification
 
 ```bash
 python -m pip install -r requirements.txt
-python run_server.py
+python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py
+python test_integration.py
+python verify_data_flow.py
+python check_frontend.py
 ```
 
-Open **http://localhost:8000** on the same computer. Do not use the computer's LAN IP, expose port 8000 to a network, or publish this server to the internet. The application deliberately accepts only the local browser origin.
-
-## First-time executive administrator setup
-
-1. Start the server from a terminal.
-2. On first run, the terminal prints a one-time setup token. Keep it private.
-3. Open `http://localhost:8000` on this computer.
-4. Paste the token into the setup screen and choose the built-in platform authenticator (for example, Windows Hello).
-5. Complete the operating-system user verification prompt.
-
-The web dashboard has one executive administrator and one device-bound passkey. Public account creation and web user-management endpoints are disabled. Synced/backed-up credentials are rejected. The passkey's private key remains with the computer's platform authenticator; only its public credential and verification metadata are stored in the local `society.db` file. No passkey private key is uploaded to this application.
-
-The web login uses an in-memory, eight-hour session and a CSRF token. Restarting the server invalidates active sessions. Sign out when finished.
-
-## Local data and backups
-
-The database is stored beside the application. Back up `society.db` securely and keep access to the computer's operating-system account protected. A database backup does **not** back up the passkey private key. If the Windows profile or device-bound authenticator is lost, the passkey must be re-enrolled through a controlled local recovery procedure.
-
-## Desktop application
-
-Run `python main.py` for the separate Tkinter desktop application. Its local sign-in remains password-based and is restricted to administrator-role accounts; the browser dashboard uses the passkey flow described above.
-
-## Verification
-
-Run `python verify_data_flow.py` to check that unauthenticated requests are rejected and that the test does not touch the real society database. The test uses a temporary SQLite database. GitHub Actions also compiles the Python modules and checks the dashboard JavaScript syntax.
+The integration tests use disposable temporary databases. The Windows GUI itself and Windows Hello ceremony still require testing on a Windows computer.
 
 ## Security boundary
 
-This is a single-computer application, not a multi-user or network-hosted service. Keep it bound to loopback. Do not expose it to a LAN or the public internet.
+This is a single-computer application, not a network-hosted multi-user service. Keep the browser dashboard bound to `127.0.0.1` / `localhost`. Never expose port 8000 to the LAN or public internet.
