@@ -28,7 +28,7 @@ jobs:
       - name: Install application dependencies
         run: python -m pip install -r requirements.txt
       - name: Compile Python modules
-        run: python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py test_integration.py
+        run: python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py build_info.py test_integration.py
       - name: Run isolated integration tests
         run: python test_integration.py
       - name: Run passkey safety checks
@@ -72,7 +72,9 @@ jobs:
       - name: Package Windows update
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
-        run: Compress-Archive -Path dist/* -DestinationPath dist/VBCCPAS-Soft-Windows.zip -Force
+        run: |
+          $files = Get-ChildItem dist -File | Where-Object { $_.Name -ne 'VBCCPAS-Soft-Windows.zip' } | ForEach-Object FullName
+          Compress-Archive -Path $files -DestinationPath dist/VBCCPAS-Soft-Windows.zip -Force
       - name: Publish latest Windows release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -83,6 +85,7 @@ jobs:
           files: dist/VBCCPAS-Soft-Windows.zip
           generate_release_notes: true
           make_latest: true
+          overwrite_files: true
       - name: Upload Windows application and launcher
         uses: actions/upload-artifact@v4
         with:
