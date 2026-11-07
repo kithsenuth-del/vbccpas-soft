@@ -5,6 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Society Manager</title>
     <script src="vendor/tailwind.min.js"></script>
+
+    <style>
+      :root { color-scheme: dark; }
+      body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -.01em; }
+      body > div { max-width: 1480px !important; }
+      header { position: relative; overflow: hidden; border-radius: 24px !important; background: linear-gradient(115deg, rgba(6,78,59,.72), rgba(15,23,42,.96) 58%, rgba(30,41,59,.9)) !important; }
+      header:after { content:""; position:absolute; width:260px; height:260px; right:-90px; top:-145px; border:1px solid rgba(110,231,183,.18); border-radius:50%; box-shadow:0 0 0 28px rgba(16,185,129,.035),0 0 0 58px rgba(16,185,129,.025); pointer-events:none; }
+      aside { position:sticky; top:20px; height:fit-content; border-radius:24px !important; background:rgba(10,20,34,.88) !important; }
+      .nav-btn { display:flex; align-items:center; gap:12px; min-height:46px; border:1px solid transparent; transition:all .18s ease; }
+      .nav-btn:hover { transform:translateX(2px); }
+      .nav-btn[aria-current="page"] { background:linear-gradient(100deg,rgba(16,185,129,.24),rgba(16,185,129,.08)) !important; border-color:rgba(52,211,153,.28); color:#d1fae5 !important; box-shadow:inset 3px 0 #34d399; }
+      .section-card { border-radius:26px !important; background:linear-gradient(145deg,rgba(15,28,45,.96),rgba(9,18,32,.96)) !important; box-shadow:0 18px 55px rgba(0,0,0,.18); }
+      .section-card:not(.hidden) { animation:sectionIn .24s ease-out; }
+      @keyframes sectionIn { from {opacity:.55; transform:translateY(5px)} to {opacity:1;transform:translateY(0)} }
+      form { border-radius:20px !important; background:rgba(255,255,255,.035) !important; }
+      input, select, textarea { outline:none; transition:border-color .18s, box-shadow .18s; }
+      input:focus, select:focus, textarea:focus { border-color:rgba(52,211,153,.7) !important; box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+      button { cursor:pointer; }
+      button:focus-visible { outline:2px solid #6ee7b7; outline-offset:3px; }
+      .section-card [id$="-list"] > div { border-radius:16px !important; transition:background .18s,border-color .18s; }
+      .section-card [id$="-list"] > div:hover { background:rgba(255,255,255,.075); border-color:rgba(110,231,183,.2); }
+      .stat-card { min-height:112px; position:relative; overflow:hidden; }
+      .stat-card:after { content:""; position:absolute; width:80px;height:80px;right:-25px;bottom:-35px;border-radius:50%;background:currentColor;opacity:.055; }
+      .eyebrow { font-size:11px; letter-spacing:.22em; font-weight:700; text-transform:uppercase; }
+      @media(max-width:1023px) { aside { position:static; } }
+      @media(max-width:640px) { body > div { padding-left:14px !important;padding-right:14px !important; } header { padding:18px !important; } .section-card { padding:18px !important; } .nav-btn { min-height:42px; } }
+      @media(prefers-reduced-motion:reduce) { *,*::before,*::after {animation:none !important;transition:none !important;scroll-behavior:auto !important} }
+    </style>
   </head>
   <body class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.3),_transparent_30%),linear-gradient(135deg,_#07131f_0%,_#0f172a_45%,_#111827_100%)] text-slate-100">
     <div class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
@@ -15,24 +43,24 @@
             <h1 class="text-2xl font-semibold text-white">Society Manager Dashboard</h1>
           </div>
           <div class="flex flex-wrap gap-3">
-            <button class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400">Open Dashboard</button>
-            <button class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-400/30 transition hover:bg-amber-300">Quick Reports</button>
+            <button id="open-dashboard" class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400">Open Dashboard</button>
+            <button id="open-reports" class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-400/30 transition hover:bg-amber-300">Quick Reports</button>
           </div>
         </div>
       </header>
 
       <main class="grid flex-1 gap-6 lg:grid-cols-[260px_1fr]">
         <aside class="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-2xl shadow-black/30 backdrop-blur">
-          <h2 class="mb-4 px-2 text-sm font-semibold uppercase tracking-[0.25em] text-slate-400">Sections</h2>
+          <div class="mb-5 flex items-center gap-3 px-2"><div class="grid h-10 w-10 place-items-center rounded-xl bg-emerald-400/15 text-lg text-emerald-300">✦</div><div><p class="text-sm font-bold tracking-wide text-white">VBCCPAS</p><p class="text-xs text-slate-500">Workspace</p></div></div><h2 class="mb-4 px-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Workspace</h2>
           <div class="space-y-2">
-            <button data-target="dashboard" class="nav-btn w-full rounded-2xl bg-emerald-500/90 px-4 py-3 text-left font-semibold text-white transition hover:bg-emerald-400">Dashboard</button>
-            <button data-target="members" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Members</button>
-            <button data-target="events" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Events</button>
-            <button data-target="inventory" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Inventory</button>
-            <button data-target="borrowing" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Borrowing</button>
-            <button data-target="attendance" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Attendance</button>
-            <button data-target="reports" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Reports</button>
-            <button data-target="security" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10">Security</button>
+            <button data-target="dashboard" aria-current="page" class="nav-btn w-full rounded-2xl bg-emerald-500/90 px-4 py-3 text-left font-semibold text-white transition hover:bg-emerald-400"><span>▦</span>Dashboard</button>
+            <button data-target="members" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>♙</span>Members</button>
+            <button data-target="events" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>◷</span>Events</button>
+            <button data-target="inventory" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>▤</span>Inventory</button>
+            <button data-target="borrowing" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>⇄</span>Borrowing</button>
+            <button data-target="attendance" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>✓</span>Attendance</button>
+            <button data-target="reports" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>▥</span>Reports</button>
+            <button data-target="security" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>⚙</span>Security</button>
           </div>
         </aside>
 
@@ -254,19 +282,25 @@
       const navButtons = document.querySelectorAll('.nav-btn');
       const cards = document.querySelectorAll('.section-card');
 
+      const openDashboard = document.getElementById('open-dashboard');
+      const openReports = document.getElementById('open-reports');
+      function showSection(target) {
+        cards.forEach((card) => card.classList.toggle('hidden', card.id !== target));
+        navButtons.forEach((btn) => {
+          const active = btn.getAttribute('data-target') === target;
+          btn.setAttribute('aria-current', active ? 'page' : 'false');
+          btn.classList.toggle('bg-emerald-500/90', active);
+          btn.classList.toggle('text-white', active);
+          btn.classList.toggle('bg-white/5', !active);
+          btn.classList.toggle('text-slate-100', !active);
+        });
+      }
+      if (openDashboard) openDashboard.addEventListener('click', () => showSection('dashboard'));
+      if (openReports) openReports.addEventListener('click', () => showSection('reports'));
+
       navButtons.forEach((button) => {
         button.addEventListener('click', () => {
-          const target = button.getAttribute('data-target');
-          cards.forEach((card) => {
-            card.classList.toggle('hidden', card.id !== target);
-          });
-
-          navButtons.forEach((btn) => {
-            btn.classList.toggle('bg-emerald-500/90', btn === button);
-            btn.classList.toggle('text-white', btn === button);
-            btn.classList.toggle('bg-white/5', btn !== button);
-            btn.classList.toggle('text-slate-100', btn !== button);
-          });
+          showSection(button.getAttribute('data-target'));
         });
       });
 
