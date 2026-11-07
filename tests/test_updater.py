@@ -1,7 +1,15 @@
 """Regression tests for the GitHub Releases updater."""
 import json
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+
+# Running a test file directly puts tests/ rather than the repository root
+# on sys.path. Add the project root so the updater module is importable in CI.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import updater
 
