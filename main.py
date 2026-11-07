@@ -238,13 +238,11 @@ def setup_database():
 	)
 	''')
 
-	# Bootstrap a new installation with a unique password, not a shared default.
+	# Bootstrap a fresh installation with the requested first-sign-in password.
+	# An environment variable can override this default for managed deployments.
 	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
 	if not cur.fetchone():
-		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
-		if not initial_password:
-			initial_password = secrets.token_urlsafe(18)
-			print("VBCCPAS initial admin password (save it securely): " + initial_password)
+		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD", "admin123")
 		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
 
 	conn.commit()
