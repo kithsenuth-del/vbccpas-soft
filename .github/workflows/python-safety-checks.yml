@@ -22,7 +22,9 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Compile Python files
-        run: python -m py_compile main.py server.py passkey_auth.py run_server.py verify_data_flow.py check_frontend.py
+        run: python -m py_compile main.py server.py passkey_auth.py run_server.py verify_data_flow.py check_frontend.py tests/test_passkey_recovery.py
+      - name: Test safe passkey registration recovery
+        run: python tests/test_passkey_recovery.py
       - name: Verify local-only passkey access controls
         run: python verify_data_flow.py
       - name: Check dashboard JavaScript syntax
