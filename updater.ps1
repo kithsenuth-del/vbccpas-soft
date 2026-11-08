@@ -4,7 +4,8 @@ param(
     [string]$PackageDirectory = "",
     [int]$UpdaterProcessId = 0,
     [switch]$RepairMode,
-    [switch]$RecoverOnly
+    [switch]$RecoverOnly,
+    [switch]$Quiet
 )
 
 $ErrorActionPreference = 'Stop'
@@ -299,8 +300,9 @@ try {
 
     $message += [Environment]::NewLine + 'Update log: ' + $logPath
     $message += [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message
-    Show-UpdateError $message
+    if (-not $Quiet) { Show-UpdateError $message }
     if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
+    exit 1
 }
