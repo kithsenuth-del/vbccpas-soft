@@ -71,6 +71,13 @@ jobs:
           Copy-Item Create-Desktop-Shortcut.ps1 dist/ -Force
           Copy-Item Setup-VBCCPAS-Shortcut.bat dist/ -Force
           Copy-Item updater.ps1 dist/ -Force
+      - name: Validate PowerShell updater syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/updater.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
       - name: Verify Windows desktop shortcut creation
         shell: pwsh
         run: |
