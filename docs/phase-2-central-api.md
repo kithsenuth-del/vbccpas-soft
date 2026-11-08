@@ -34,13 +34,13 @@ docker compose -f cloud_api/docker-compose.yml up -d --build
 
 The Compose file binds the API to `127.0.0.1:8080`. Put a maintained reverse proxy with HTTPS in front of it. Do not expose port 8080 or PostgreSQL directly to the internet. Use a managed secret store rather than a committed environment file.
 
-Create the first executive administrator once:
+Create the first executive administrator once from a one-off container command:
 
 ```sh
-export VBCCPAS_BOOTSTRAP_ADMIN_EMAIL='your-admin-email'
-export VBCCPAS_BOOTSTRAP_ADMIN_PASSWORD='a-unique-password-of-at-least-12-characters'
-python -m cloud_api.bootstrap_admin
-unset VBCCPAS_BOOTSTRAP_ADMIN_PASSWORD
+docker compose -f cloud_api/docker-compose.yml run --rm \
+  -e VBCCPAS_BOOTSTRAP_ADMIN_EMAIL='your-admin-email' \
+  -e VBCCPAS_BOOTSTRAP_ADMIN_PASSWORD='a-unique-password-of-at-least-12-characters' \
+  api python -m cloud_api.bootstrap_admin
 ```
 
 The bootstrap command refuses to run if any account already exists. It creates the initial tables and first administrator. Remove bootstrap secrets after successful provisioning. Do not reuse the local desktop administrator password.
