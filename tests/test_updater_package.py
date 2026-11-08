@@ -13,7 +13,13 @@ if str(PROJECT_ROOT) not in sys.path:
 import updater
 
 
-def make_zip(entries):
+def make_zip(entries, add_manifest=True):
+    entries = list(entries)
+    if add_manifest and not any(name == updater.MANIFEST_NAME for name, _ in entries):
+        manifest_files = [name for name, _ in entries if not name.endswith("/")]
+        entries.append((updater.MANIFEST_NAME, __import__("json").dumps({
+            "schema_version": 1, "files": manifest_files,
+        })))
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in entries:
@@ -59,7 +65,10 @@ class FullPackageExtractionTests(unittest.TestCase):
                         updater.extract_package(package, folder)
 
     def test_requires_main_application_and_installer(self):
-        package = make_zip([("notes.txt", b"not an application")])
+        package = make_zip([
+            ("notes.txt", b"not an application"),
+            ("updater.ps1", b"installer"),
+        ])
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaisesRegex(ValueError, "missing the application"):
                 updater.extract_package(package, folder)
