@@ -332,6 +332,11 @@ def sync_writer(account: Account):
         raise HTTPException(403, "Your account can view synchronised records but cannot change them.")
     return account
 
+def sync_reader(account: Account):
+    if account.role not in {"executive_admin", "officer", "read_only"}:
+        raise HTTPException(403, "Your account is not authorised to access shared society records.")
+    return account
+
 @app.post("/v1/devices", status_code=201)
 def register_device(body: DeviceRegisterBody, account: Account = Depends(authenticated),
                     db: Session = Depends(db_session)):
@@ -435,6 +440,7 @@ def sync_push(body: SyncPushBody, account: Account = Depends(authenticated),
 @app.get("/v1/sync/pull")
 def sync_pull(device_id: UUID, cursor: int = 0, limit: int = 200,
               account: Account = Depends(authenticated), db: Session = Depends(db_session)):
+    sync_reader(account)
     if cursor < 0:
         raise HTTPException(400, "Cursor cannot be negative.")
     if limit < 1 or limit > 500:
@@ -456,6 +462,7 @@ def sync_pull(device_id: UUID, cursor: int = 0, limit: int = 200,
 @app.get("/v1/sync/status")
 def sync_status(device_id: UUID, account: Account = Depends(authenticated),
                 db: Session = Depends(db_session)):
+    sync_reader(account)
     device = require_device(device_id, account, db)
     latest = db.scalar(select(func.max(SyncEvent.id))) or 0
     db.commit()
