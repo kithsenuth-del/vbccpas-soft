@@ -1,104 +1,132 @@
 param(
     [Parameter(Mandatory=$true)][int]$ProcessId,
     [Parameter(Mandatory=$true)][string]$TargetExe,
-    [Parameter(Mandatory=$true)][string]$NewExe
+    [Parameter(Mandatory=$true)][string]$PackageDirectory,
+    [int]$UpdaterProcessId = 0
 )
 
 $ErrorActionPreference = 'Stop'
+$changed = New-Object System.Collections.ArrayList
+$backupDirectory = $null
+$stageRoot = $null
 
 function Show-UpdateError([string]$Message) {
     try {
         Add-Type -AssemblyName PresentationFramework
         [System.Windows.MessageBox]::Show(
-            $Message,
-            'VBCCPAS Soft updater',
+            $Message, 'VBCCPAS Soft Updater',
             [System.Windows.MessageBoxButton]::OK,
             [System.Windows.MessageBoxImage]::Error
         ) | Out-Null
+    } catch { }
+}
+
+function Wait-ForProcessExit([int]$Id, [string]$Description) {
+    if ($Id -le 0 -or $Id -eq $PID) { return }
+    try {
+        Wait-Process -Id $Id -Timeout 180 -ErrorAction Stop
     } catch {
-        # Keep updater failure handling silent if Windows UI components are unavailable.
+        if (Get-Process -Id $Id -ErrorAction SilentlyContinue) {
+            throw ($Description + ' did not close in time. No application files were replaced.')
+        }
     }
 }
 
 try {
+    $TargetExe = [IO.Path]::GetFullPath($TargetExe)
+    $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
     if ([IO.Path]::GetFileName($TargetExe) -ne 'VBCCPAS-Soft.exe') {
-        throw 'Unexpected application target.'
+        throw 'The selected application target is not VBCCPAS-Soft.exe.'
     }
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) {
-        throw 'The installed application could not be found.'
+        throw 'The installed VBCCPAS application could not be found.'
     }
-    if (-not (Test-Path -LiteralPath $NewExe -PathType Leaf)) {
-        throw 'The staged update executable is missing.'
+    if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'VBCCPAS-Soft.exe') -PathType Leaf)) {
+        throw 'The downloaded package does not contain VBCCPAS-Soft.exe.'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'updater.ps1') -PathType Leaf)) {
+        throw 'The downloaded package is missing its installation helper.'
     }
 
-    # Avoid a UAC prompt for normal user-writable installations. Elevate only
-    # when the install directory does not allow the updater to stage a file.
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
-    $canWriteDirectory = $false
-    if (-not $isAdministrator) {
-        $permissionProbe = Join-Path $targetDirectory ('.vbccpas-write-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
-        try {
-            $stream = [IO.File]::Open($permissionProbe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-            $stream.Dispose()
-            Remove-Item -LiteralPath $permissionProbe -Force
-            $canWriteDirectory = $true
-        } catch {
-            if (Test-Path -LiteralPath $permissionProbe) {
-                Remove-Item -LiteralPath $permissionProbe -Force -ErrorAction SilentlyContinue
+    Wait-ForProcessExit $ProcessId 'VBCCPAS Soft'
+    Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater'
+
+    # Keep rollback files outside the installation folder and never include user data.
+    $backupRoot = Join-Path $env:LOCALAPPDATA 'VBCCPAS\UpdateBackups'
+    New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+    $backupDirectory = Join-Path $backupRoot ([Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
+
+    $files = @(Get-ChildItem -LiteralPath $PackageDirectory -File -Recurse)
+    if ($files.Count -eq 0) { throw 'The update package contains no application files.' }
+
+    foreach ($file in $files) {
+        $relative = $file.FullName.Substring($PackageDirectory.TrimEnd('\').Length).TrimStart('\')
+        $parts = $relative -split '[\\/]'
+        if ($parts -contains '..' -or $parts -contains '.' -or $parts -contains 'society.db') {
+            throw ('Unsafe or protected path in update package: ' + $relative)
+        }
+        $protected = @('backups','exports','logs','user-data','user_data','.vbccpas-data')
+        foreach ($part in $parts) {
+            if ($protected -contains $part.ToLowerInvariant()) {
+                throw ('The update package attempts to replace user data: ' + $relative)
             }
         }
-    }
-    if (-not $isAdministrator -and -not $canWriteDirectory) {
-        $arguments = @(
-            '-NoProfile',
-            '-ExecutionPolicy', 'Bypass',
-            '-File', ('"' + $PSCommandPath + '"'),
-            '-ProcessId', $ProcessId,
-            '-TargetExe', ('"' + $TargetExe + '"'),
-            '-NewExe', ('"' + $NewExe + '"')
-        )
-        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments | Out-Null
-        exit 0
-    }
 
-    # The desktop app closes immediately after starting this updater.
-    try {
-        Wait-Process -Id $ProcessId -Timeout 120 -ErrorAction Stop
-    } catch {
-        if (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) {
-            throw 'VBCCPAS Soft did not close in time. The existing version was kept.'
+        $destination = [IO.Path]::GetFullPath((Join-Path $targetDirectory $relative))
+        $rootPrefix = $targetDirectory.TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
+        if (-not $destination.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw ('The update package contains a path outside the application folder: ' + $relative)
         }
-    }
-
-    $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
-    $replacement = Join-Path $targetDirectory ('.VBCCPAS-Soft-' + [Guid]::NewGuid().ToString('N') + '.tmp')
-    $backup = Join-Path $targetDirectory ('VBCCPAS-Soft-previous-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.exe')
-
-    # Copy to the install volume first, then replace atomically. Keep a rollback copy.
-    Copy-Item -LiteralPath $NewExe -Destination $replacement
-    if (-not (Test-Path -LiteralPath $replacement -PathType Leaf)) {
-        throw 'The replacement executable could not be staged beside the installed application.'
-    }
-    [IO.File]::Replace($replacement, $TargetExe, $backup, $true)
-
-    try {
-        Start-Process -FilePath $TargetExe | Out-Null
-    } catch {
-        if (Test-Path -LiteralPath $backup -PathType Leaf) {
-            Copy-Item -LiteralPath $backup -Destination $TargetExe -Force
+        $backupFile = Join-Path $backupDirectory $relative
+        $existed = Test-Path -LiteralPath $destination -PathType Leaf
+        if ($existed) {
+            $backupParent = Split-Path -Parent $backupFile
+            New-Item -ItemType Directory -Path $backupParent -Force | Out-Null
+            Copy-Item -LiteralPath $destination -Destination $backupFile -Force
         }
-        throw ('The new version could not be started. The previous version was restored. ' + $_.Exception.Message)
+        [void]$changed.Add(@{ Destination = $destination; Backup = $backupFile; Existed = $existed })
+
+        $destinationParent = Split-Path -Parent $destination
+        New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+        $temporary = $destination + '.vbccpas-new-' + [Guid]::NewGuid().ToString('N')
+        Copy-Item -LiteralPath $file.FullName -Destination $temporary
+        Move-Item -LiteralPath $temporary -Destination $destination -Force
+    }
+
+    # Keep the last successful rollback set under LocalAppData for manual recovery.
+    Start-Process -FilePath $TargetExe | Out-Null
+    $stageRoot = Split-Path -Parent $PackageDirectory
+    if (Test-Path -LiteralPath $stageRoot) {
+        Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 } catch {
-    Show-UpdateError (
-        'The update could not be completed. Your existing application and society database were not intentionally changed.' +
-        [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message
-    )
-} finally {
-    if ($replacement -and (Test-Path -LiteralPath $replacement)) {
-        Remove-Item -LiteralPath $replacement -Force -ErrorAction SilentlyContinue
+    $rollbackErrors = @()
+    for ($index = $changed.Count - 1; $index -ge 0; $index--) {
+        $item = $changed[$index]
+        try {
+            if ($item.Existed -and (Test-Path -LiteralPath $item.Backup -PathType Leaf)) {
+                $parent = Split-Path -Parent $item.Destination
+                New-Item -ItemType Directory -Path $parent -Force | Out-Null
+                Copy-Item -LiteralPath $item.Backup -Destination $item.Destination -Force
+            } elseif (-not $item.Existed -and (Test-Path -LiteralPath $item.Destination)) {
+                Remove-Item -LiteralPath $item.Destination -Force
+            }
+        } catch {
+            $rollbackErrors += ($item.Destination + ': ' + $_.Exception.Message)
+        }
+    }
+    $message = 'The complete update failed. The updater attempted to restore the previous application files.'
+    if ($rollbackErrors.Count -gt 0) {
+        $message += [Environment]::NewLine + 'Some rollback operations need attention:' +
+                    [Environment]::NewLine + ($rollbackErrors -join [Environment]::NewLine)
+    } elseif ($backupDirectory) {
+        $message += [Environment]::NewLine + 'Rollback copy: ' + $backupDirectory
+    }
+    $message += [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message
+    Show-UpdateError $message
+    if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
+        Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
