@@ -26,9 +26,27 @@ class UpdaterWindow:
         root.title("VBCCPAS Soft — Software Updater")
         root.geometry("570x310")
         root.minsize(520, 280)
-        root.configure(bg="#202124")
+        root.configure(bg="#111214")
+        self.style = ttk.Style(root)
+        self.style.theme_use("clam")
+        self.style.configure(
+            "TButton", background="#ad603d", foreground="#fff8f1",
+            padding=(16, 9), borderwidth=0, focusthickness=2,
+            focuscolor="#d8b779", font=("Segoe UI", 10, "bold"),
+        )
+        self.style.map(
+            "TButton",
+            background=[("active", "#c87548"), ("pressed", "#8f4e32"), ("disabled", "#51443d")],
+            foreground=[("disabled", "#b7aaa0")],
+        )
+        self.style.configure(
+            "Horizontal.TProgressbar", troughcolor="#171719",
+            background="#c87548", bordercolor="#3a302b", lightcolor="#c87548",
+            darkcolor="#ad603d",
+        )
 
-        panel = tk.Frame(root, bg="#292a2d", padx=26, pady=24)
+        panel = tk.Frame(root, bg="#242528", padx=26, pady=24,
+                         highlightthickness=1, highlightbackground="#554336")
         panel.pack(fill=tk.BOTH, expand=True, padx=18, pady=18)
         tk.Label(panel, text="VBCCPAS SOFT", bg="#292a2d", fg="#f3eee6",
                  font=("Segoe UI", 20, "bold")).pack(anchor="w")
@@ -39,7 +57,7 @@ class UpdaterWindow:
         tk.Label(panel, textvariable=self.status, bg="#292a2d", fg="#e5e7eb",
                  font=("Segoe UI", 10), wraplength=480, justify="left").pack(
                      anchor="w", fill=tk.X, pady=(0, 14))
-        self.progress = ttk.Progressbar(panel, mode="indeterminate")
+        self.progress = ttk.Progressbar(panel, mode="indeterminate", style="Horizontal.TProgressbar")
         self.progress.pack(fill=tk.X, pady=(0, 16))
         self.check_button = ttk.Button(panel, text="Check for Updates",
                                        command=self.check_updates)
