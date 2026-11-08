@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 REPOSITORY = "kithsenuth-del/vbccpas-soft"
 RELEASE_API = "https://api.github.com/repos/" + REPOSITORY + "/releases/latest"
 UPDATE_ASSET = "VBCCPAS-Soft-Windows.zip"
+MANIFEST_NAME = "vbccpas-managed-files.json"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_FILE_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_TOTAL_BYTES = 500 * 1024 * 1024
@@ -134,9 +135,22 @@ def extract_package(package_bytes, destination):
             output.write_bytes(data)
             extracted.append(relative.as_posix())
 
-    required = {"VBCCPAS-Soft.exe", "updater.ps1"}
+    required = {"VBCCPAS-Soft.exe", "VBCCPAS-Updater.exe", "updater.ps1", MANIFEST_NAME}
     if not required.issubset(set(extracted)):
-        raise ValueError("The update package is missing the application or installation helper.")
+        raise ValueError("The update package is missing the application, standalone updater, or package manifest.")
+    try:
+        manifest = json.loads((destination / MANIFEST_NAME).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("The application package manifest is missing or invalid.") from exc
+    manifest_files = manifest.get("files") if isinstance(manifest, dict) else None
+    if manifest.get("schema_version") != 1 or not isinstance(manifest_files, list):
+        raise ValueError("The application package manifest has an unsupported format.")
+    if (not all(isinstance(name, str) for name in manifest_files)
+            or len(manifest_files) != len(set(manifest_files))):
+        raise ValueError("The application package manifest contains invalid file entries.")
+    actual_files = set(extracted) - {MANIFEST_NAME}
+    if set(manifest_files) != actual_files:
+        raise ValueError("The application package manifest does not match its contents.")
     return extracted
 
 
