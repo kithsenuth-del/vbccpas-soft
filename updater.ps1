@@ -1,9 +1,10 @@
 param(
-    [Parameter(Mandatory=$true)][int]$ProcessId,
+    [int]$ProcessId = 0,
     [Parameter(Mandatory=$true)][string]$TargetExe,
-    [Parameter(Mandatory=$true)][string]$PackageDirectory,
+    [string]$PackageDirectory = "",
     [int]$UpdaterProcessId = 0,
-    [switch]$RepairMode
+    [switch]$RepairMode,
+    [switch]$RecoverOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,7 @@ $backupDirectory = $null
 $stageRoot = $null
 $logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
 $journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
+$recoveryScriptPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\Recovery\updater-recovery.ps1"
 $manifestName = 'vbccpas-managed-files.json'
 $protectedParts = @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data')
 
@@ -65,14 +67,63 @@ function Get-AppDestination([string]$Root, [string]$RelativePath) {
     }
     return $destination
 }
+function Save-RecoveryJournal($Journal) {
+    $temporaryJournal = $journalPath + '.tmp'
+    $json = $Journal | ConvertTo-Json -Depth 8
+    [IO.File]::WriteAllText($temporaryJournal, $json, (New-Object System.Text.UTF8Encoding($false)))
+    if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
+        [IO.File]::Replace($temporaryJournal, $journalPath, $null)
+    } else {
+        Move-Item -LiteralPath $temporaryJournal -Destination $journalPath -Force
+    }
+}
+
+function Restore-RecoveryJournal([string]$ExpectedTarget) {
+    if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) { return $false }
+    $saved = Get-Content -LiteralPath $journalPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($saved.state -ne 'installing' -or
+        -not [string]::Equals([IO.Path]::GetFullPath([string]$saved.target), $ExpectedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The recovery journal does not match this application installation. Manual review is required.'
+    }
+    $root = [IO.Path]::GetDirectoryName($ExpectedTarget)
+    $entries = @($saved.entries)
+    for ($index = $entries.Count - 1; $index -ge 0; $index--) {
+        $entry = $entries[$index]
+        $destination = Get-AppDestination $root ([string]$entry.relative)
+        if ([bool]$entry.existed) {
+            $backup = [IO.Path]::GetFullPath([string]$entry.backup)
+            $backupRoot = [IO.Path]::GetFullPath([string]$saved.backup).TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
+            if (-not $backup.StartsWith($backupRoot, [StringComparison]::OrdinalIgnoreCase) -or
+                -not (Test-Path -LiteralPath $backup -PathType Leaf)) {
+                throw ('A required recovery copy is missing: ' + $entry.relative)
+            }
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+            Copy-Item -LiteralPath $backup -Destination $destination -Force
+        } elseif (Test-Path -LiteralPath $destination -PathType Leaf) {
+            Remove-Item -LiteralPath $destination -Force
+        }
+        Get-ChildItem -LiteralPath (Split-Path -Parent $destination) -Filter ((Split-Path -Leaf $destination) + '.vbccpas-new-*') -File -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Item -LiteralPath $journalPath -Force
+    if (Test-Path -LiteralPath $logPath) {
+        Add-Content -LiteralPath $logPath -Value ("[{0}] Interrupted installation was rolled back from its recovery journal." -f (Get-Date -Format o))
+    }
+    return $true
+}
 
 try {
     $TargetExe = [IO.Path]::GetFullPath($TargetExe)
     $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
-    $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
     if ([IO.Path]::GetFileName($TargetExe) -ne 'VBCCPAS-Soft.exe') {
         throw 'The selected application target is not VBCCPAS-Soft.exe.'
     }
+    if ($RecoverOnly) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+        [void](Restore-RecoveryJournal $TargetExe)
+        exit 0
+    }
+    $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
         throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
     }
@@ -164,14 +215,16 @@ try {
     }
 
     New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $recoveryScriptPath) -Force | Out-Null
+    Copy-Item -LiteralPath $PSCommandPath -Destination $recoveryScriptPath -Force
     Add-Content -LiteralPath $logPath -Value ("[{0}] Update started. Target: {1}; Repair: {2}" -f (Get-Date -Format o), $TargetExe, [bool]$RepairMode)
     $backupRoot = Join-Path $env:LOCALAPPDATA 'VBCCPAS\UpdateBackups'
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
     $backupDirectory = Join-Path $backupRoot ([Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
 
-    $journal = [ordered]@{ state='installing'; target=$TargetExe; backup=$backupDirectory; started=(Get-Date -Format o) }
-    $journal | ConvertTo-Json | Set-Content -LiteralPath $journalPath -Encoding UTF8
+    $journal = [ordered]@{ state='installing'; target=$TargetExe; backup=$backupDirectory; started=(Get-Date -Format o); entries=@() }
+    Save-RecoveryJournal $journal
     Add-Content -LiteralPath $logPath -Value ("[{0}] Recovery journal created: {1}" -f (Get-Date -Format o), $backupDirectory)
     $newManaged = @{}
     foreach ($relative in $newRelativeFiles) { $newManaged[[string]$relative] = $true }
@@ -185,7 +238,8 @@ try {
                 $backupFile = Join-Path $backupDirectory ([string]$relative)
                 New-Item -ItemType Directory -Path (Split-Path -Parent $backupFile) -Force | Out-Null
                 Copy-Item -LiteralPath $destination -Destination $backupFile -Force
-                [void]$changed.Add(@{ Destination = $destination; Backup = $backupFile; Existed = $true })
+                $journal.entries += [pscustomobject]@{ relative=[string]$relative; destination=$destination; backup=$backupFile; existed=$true }
+                Save-RecoveryJournal $journal
                 Remove-Item -LiteralPath $destination -Force
             }
         }
@@ -202,10 +256,11 @@ try {
             New-Item -ItemType Directory -Path (Split-Path -Parent $backupFile) -Force | Out-Null
             Copy-Item -LiteralPath $destination -Destination $backupFile -Force
         }
-        [void]$changed.Add(@{ Destination = $destination; Backup = $backupFile; Existed = $existed })
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         $temporary = $destination + '.vbccpas-new-' + [Guid]::NewGuid().ToString('N')
         Copy-Item -LiteralPath $file.FullName -Destination $temporary
+        $journal.entries += [pscustomobject]@{ relative=$relative; destination=$destination; backup=$backupFile; existed=$existed }
+        Save-RecoveryJournal $journal
         Move-Item -LiteralPath $temporary -Destination $destination -Force
     }
 
@@ -217,7 +272,7 @@ try {
     if ($started.HasExited) { throw ('The updated application exited during startup (exit code ' + $started.ExitCode + ').') }
     $journal.state = 'verified'
     $journal.verified = Get-Date -Format o
-    $journal | ConvertTo-Json | Set-Content -LiteralPath $journalPath -Encoding UTF8
+    Save-RecoveryJournal $journal
     Add-Content -LiteralPath $logPath -Value ("[{0}] Application startup verified. Backup retained at {1}" -f (Get-Date -Format o), $backupDirectory)
     $stageRoot = Split-Path -Parent $PackageDirectory
     if (Test-Path -LiteralPath $journalPath) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
@@ -226,19 +281,12 @@ try {
     }
 } catch {
     $rollbackErrors = @()
-    for ($index = $changed.Count - 1; $index -ge 0; $index--) {
-        $item = $changed[$index]
-        try {
-            if ($item.Existed -and (Test-Path -LiteralPath $item.Backup -PathType Leaf)) {
-                $parent = Split-Path -Parent $item.Destination
-                New-Item -ItemType Directory -Path $parent -Force | Out-Null
-                Copy-Item -LiteralPath $item.Backup -Destination $item.Destination -Force
-            } elseif (-not $item.Existed -and (Test-Path -LiteralPath $item.Destination)) {
-                Remove-Item -LiteralPath $item.Destination -Force
-            }
-        } catch {
-            $rollbackErrors += ($item.Destination + ': ' + $_.Exception.Message)
+    try {
+        if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
+            [void](Restore-RecoveryJournal $TargetExe)
         }
+    } catch {
+        $rollbackErrors += ('Recovery journal: ' + $_.Exception.Message)
     }
     if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $_.Exception.Message) } catch { } }
     $message = 'The complete update failed. The updater attempted to restore the previous application files.'
@@ -248,7 +296,7 @@ try {
     } elseif ($backupDirectory) {
         $message += [Environment]::NewLine + 'Rollback copy: ' + $backupDirectory
     }
-    if ($rollbackErrors.Count -eq 0 -and $journalPath -and (Test-Path -LiteralPath $journalPath)) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
+
     $message += [Environment]::NewLine + 'Update log: ' + $logPath
     $message += [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message
     Show-UpdateError $message
