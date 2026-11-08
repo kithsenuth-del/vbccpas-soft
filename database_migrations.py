@@ -81,10 +81,18 @@ def create_verified_backup(
     destination = directory / f"society-pre-migration-{stamp}-{uuid.uuid4().hex[:8]}.db"
     temporary = destination.with_suffix(".db.tmp")
 
+    source = _connect(source_path)
+    target = sqlite3.connect(str(temporary), timeout=30)
     try:
-        with _connect(source_path) as source, sqlite3.connect(str(temporary)) as target:
-            source.backup(target)
-            target.commit()
+        source.backup(target)
+        target.commit()
+    finally:
+        # sqlite3 connection context managers do not close connections.
+        # Explicit close is essential before atomic replacement on Windows.
+        target.close()
+        source.close()
+
+    try:
         after = database_inventory(temporary)
         if after["integrity"] != "ok" or after["tables"] != before["tables"]:
             raise sqlite3.DatabaseError(
