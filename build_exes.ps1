@@ -20,9 +20,8 @@ $Dist = Join-Path $Root "dist"
 $Build = Join-Path $Root "build"
 
 try {
-    Write-Host "Installing application and Windows build dependencies..."
-    & py -3.11 -m pip install --upgrade pip
-    if ($LASTEXITCODE -ne 0) { throw "Could not upgrade pip." }
+    Write-Host "Installing application and Windows build dependencies (using the runner pip cache)..."
+    # Avoid upgrading pip on every build: setup-python caches downloaded wheels.
     & py -3.11 -m pip install -r requirements.txt pyinstaller pillow
     if ($LASTEXITCODE -ne 0) { throw "Could not install build dependencies." }
 
@@ -72,11 +71,13 @@ try {
     New-Item -ItemType Directory -Path $Dist -Force | Out-Null
     New-Item -ItemType Directory -Path $Build -Force | Out-Null
 
-    Write-Host "Building VBCCPAS-Soft.exe with the official society icon... "
-    Invoke-Python -m PyInstaller --noconfirm --clean --distpath $Dist --workpath (Join-Path $Build "desktop") (Join-Path $Root "desktop_app.spec")
+    # Keep PyInstaller's analysis cache between the app and updater builds.
+    # --clean erased that cache before each executable and forced redundant work.
+    Write-Host "Building VBCCPAS-Soft.exe with the official society icon..."
+    Invoke-Python -m PyInstaller --noconfirm --distpath $Dist --workpath (Join-Path $Build "desktop") (Join-Path $Root "desktop_app.spec")
 
     Write-Host "Building VBCCPAS-Updater.exe with the official society icon..."
-    Invoke-Python -m PyInstaller --noconfirm --clean --distpath $Dist --workpath (Join-Path $Build "updater") (Join-Path $Root "updater_app.spec")
+    Invoke-Python -m PyInstaller --noconfirm --distpath $Dist --workpath (Join-Path $Build "updater") (Join-Path $Root "updater_app.spec")
 
     Write-Host "Adding launcher and updater support files..."
     Copy-Item -LiteralPath (Join-Path $Root "Create-Desktop-Shortcut.ps1") -Destination $Dist -Force
