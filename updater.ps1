@@ -46,7 +46,7 @@ function Assert-SafeRelativePath([string]$RelativePath) {
         if ($part -in @('', '.', '..') -or $protectedParts -contains $part.ToLowerInvariant()) {
             throw ('The package manifest contains a protected or unsafe path: ' + $RelativePath)
         }
-        if ($part -match '[<>:"|?*]$' -or $part.EndsWith(' ') -or $part.EndsWith('.')) {
+        if ($part -match '[<>:"|?*]' -or $part.EndsWith(' ') -or $part.EndsWith('.')) {
             throw ('The package manifest contains a Windows-invalid path: ' + $RelativePath)
         }
     }
