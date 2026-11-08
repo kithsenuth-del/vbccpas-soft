@@ -18,7 +18,7 @@ class CloudApiTests(unittest.TestCase):
                 db.close()
         app.dependency_overrides[db_session] = override_db
         with self.Session() as db:
-            db.add(Account(email="admin@example.invalid", display_name="Test Admin", role="executive_admin",
+            db.add(Account(email="admin@example.com", display_name="Test Admin", role="executive_admin",
                            password_hash=password_hash("Correct-Horse-Battery-42!")))
             db.commit()
         self.client = TestClient(app)
@@ -29,7 +29,7 @@ class CloudApiTests(unittest.TestCase):
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
 
-    def login(self, email="admin@example.invalid", password="Correct-Horse-Battery-42!"):
+    def login(self, email="admin@example.com", password="Correct-Horse-Battery-42!"):
         return self.client.post("/v1/auth/login", json={"email": email, "password": password})
 
     def test_health_is_public(self):
@@ -48,7 +48,7 @@ class CloudApiTests(unittest.TestCase):
 
     def test_bad_password_is_rejected_and_does_not_reveal_account(self):
         known = self.login(password="incorrect")
-        unknown = self.login(email="unknown@example.invalid", password="incorrect")
+        unknown = self.login(email="unknown@example.com", password="incorrect")
         self.assertEqual(known.status_code, 401)
         self.assertEqual(unknown.status_code, 401)
         self.assertEqual(known.json(), unknown.json())
@@ -57,7 +57,7 @@ class CloudApiTests(unittest.TestCase):
         token = self.login().json()["access_token"]
         headers = {"Authorization": "Bearer " + token}
         invite = self.client.post("/v1/admin/invitations", headers=headers,
-            json={"email": "member@example.invalid", "display_name": "Test Member", "role": "member"})
+            json={"email": "member@example.com", "display_name": "Test Member", "role": "member"})
         self.assertEqual(invite.status_code, 201, invite.text)
         raw_invite = invite.json()["invitation_token"]
         accepted = self.client.post("/v1/auth/accept-invitation", json={
@@ -69,29 +69,29 @@ class CloudApiTests(unittest.TestCase):
 
     def test_non_admin_cannot_invite(self):
         with self.Session() as db:
-            db.add(Account(email="officer@example.invalid", display_name="Officer", role="officer",
+            db.add(Account(email="officer@example.com", display_name="Officer", role="officer",
                            password_hash=password_hash("Officer-Strong-Password-42!")))
             db.commit()
-        token = self.login("officer@example.invalid", "Officer-Strong-Password-42!").json()["access_token"]
+        token = self.login("officer@example.com", "Officer-Strong-Password-42!").json()["access_token"]
         response = self.client.post("/v1/admin/invitations", headers={"Authorization": "Bearer " + token},
-            json={"email": "new@example.invalid", "display_name": "New", "role": "member"})
+            json={"email": "new@example.com", "display_name": "New", "role": "member"})
         self.assertEqual(response.status_code, 403)
 
     def test_invitation_cannot_create_another_executive_admin(self):
         token = self.login().json()["access_token"]
         response = self.client.post("/v1/admin/invitations", headers={"Authorization": "Bearer " + token},
-            json={"email": "other-admin@example.invalid", "display_name": "Other", "role": "executive_admin"})
+            json={"email": "other-admin@example.com", "display_name": "Other", "role": "executive_admin"})
         self.assertEqual(response.status_code, 400)
 
 
     def test_admin_can_suspend_account_and_revoke_its_session(self):
         with self.Session() as db:
-            member = Account(email="suspend@example.invalid", display_name="Suspend Me", role="member",
+            member = Account(email="suspend@example.com", display_name="Suspend Me", role="member",
                              password_hash=password_hash("Suspend-Strong-Password-42!"))
             db.add(member)
             db.commit()
             member_id = member.id
-        member_token = self.login("suspend@example.invalid", "Suspend-Strong-Password-42!").json()["access_token"]
+        member_token = self.login("suspend@example.com", "Suspend-Strong-Password-42!").json()["access_token"]
         admin_token = self.login().json()["access_token"]
         response = self.client.patch("/v1/admin/accounts/" + member_id + "/status",
             headers={"Authorization": "Bearer " + admin_token}, json={"is_active": False})
@@ -102,7 +102,7 @@ class CloudApiTests(unittest.TestCase):
     def test_last_active_admin_cannot_be_suspended(self):
         token = self.login().json()["access_token"]
         with self.Session() as db:
-            admin_id = db.query(Account).filter_by(email="admin@example.invalid").one().id
+            admin_id = db.query(Account).filter_by(email="admin@example.com").one().id
         response = self.client.patch("/v1/admin/accounts/" + admin_id + "/status",
             headers={"Authorization": "Bearer " + token}, json={"is_active": False})
         self.assertEqual(response.status_code, 400)
