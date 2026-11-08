@@ -1,5 +1,6 @@
 """Regression tests for safe first-time passkey setup recovery."""
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 import sys
@@ -20,7 +21,7 @@ class PasskeyRecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db_path = str(Path(directory) / "society.db")
             passkey_auth.initialize(db_path)
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 conn.execute("""CREATE TABLE Members (
                     MemberID INTEGER PRIMARY KEY, Name TEXT NOT NULL
                 )""")
