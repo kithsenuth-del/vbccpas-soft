@@ -12,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 $changed = New-Object System.Collections.ArrayList
 $backupDirectory = $null
 $stageRoot = $null
+$started = $null
 $logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
 $journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
 $recoveryScriptPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\Recovery\updater-recovery.ps1"
@@ -324,6 +325,9 @@ try {
     }
  } catch {
     $failureMessage = $_.Exception.Message
+    if ($started -and (Get-Process -Id $started.Id -ErrorAction SilentlyContinue)) {
+        try { Stop-Process -Id $started.Id -Force -ErrorAction Stop } catch { }
+    }
     $rollbackErrors = @()
     try {
         if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
