@@ -9,6 +9,8 @@ $ErrorActionPreference = 'Stop'
 $changed = New-Object System.Collections.ArrayList
 $backupDirectory = $null
 $stageRoot = $null
+$manifestName = 'vbccpas-managed-files.json'
+$protectedParts = @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data')
 
 function Show-UpdateError([string]$Message) {
     try {
@@ -32,6 +34,35 @@ function Wait-ForProcessExit([int]$Id, [string]$Description) {
     }
 }
 
+function Assert-SafeRelativePath([string]$RelativePath) {
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or [IO.Path]::IsPathRooted($RelativePath)) {
+        throw 'The package manifest contains an absolute or empty path.'
+    }
+    if ($RelativePath.Contains('\') -or $RelativePath.Contains(':')) {
+        throw ('The package manifest contains an unsafe path: ' + $RelativePath)
+    }
+    $parts = $RelativePath -split '/'
+    foreach ($part in $parts) {
+        if ($part -in @('', '.', '..') -or $protectedParts -contains $part.ToLowerInvariant()) {
+            throw ('The package manifest contains a protected or unsafe path: ' + $RelativePath)
+        }
+        if ($part -match '[<>:"|?*]$' -or $part.EndsWith(' ') -or $part.EndsWith('.')) {
+            throw ('The package manifest contains a Windows-invalid path: ' + $RelativePath)
+        }
+    }
+}
+
+function Get-AppDestination([string]$Root, [string]$RelativePath) {
+    Assert-SafeRelativePath $RelativePath
+    $nativeRelative = $RelativePath.Replace('/', [IO.Path]::DirectorySeparatorChar)
+    $destination = [IO.Path]::GetFullPath((Join-Path $Root $nativeRelative))
+    $rootPrefix = $Root.TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
+    if (-not $destination.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw ('The package path escapes the installation folder: ' + $RelativePath)
+    }
+    return $destination
+}
+
 try {
     $TargetExe = [IO.Path]::GetFullPath($TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
@@ -44,8 +75,38 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'VBCCPAS-Soft.exe') -PathType Leaf)) {
         throw 'The downloaded package does not contain VBCCPAS-Soft.exe.'
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'updater.ps1') -PathType Leaf)) {
-        throw 'The downloaded package is missing its installation helper.'
+    if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'VBCCPAS-Updater.exe') -PathType Leaf)) {
+        throw 'The downloaded package does not contain the standalone updater.'
+    }
+
+    $manifestPath = Join-Path $PackageDirectory $manifestName
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw 'The downloaded package does not contain its managed-file manifest.'
+    }
+    $newManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($newManifest.schema_version -ne 1 -or $null -eq $newManifest.files) {
+        throw 'The update package manifest has an unsupported format.'
+    }
+    $newRelativeFiles = @($newManifest.files)
+    if ($newRelativeFiles.Count -eq 0 -or
+        $newRelativeFiles.Count -ne (@($newRelativeFiles | Select-Object -Unique)).Count) {
+        throw 'The update package manifest is empty or contains duplicate file paths.'
+    }
+    foreach ($relative in $newRelativeFiles) { Assert-SafeRelativePath ([string]$relative) }
+    if ($newRelativeFiles -notcontains 'VBCCPAS-Soft.exe' -or
+        $newRelativeFiles -notcontains 'VBCCPAS-Updater.exe' -or
+        $newRelativeFiles -notcontains 'updater.ps1') {
+        throw 'The update package manifest omits a required application component.'
+    }
+
+    $packageFiles = @(Get-ChildItem -LiteralPath $PackageDirectory -File -Recurse |
+        Where-Object { $_.Name -ne $manifestName })
+    $actualRelativeFiles = @($packageFiles | ForEach-Object {
+        $_.FullName.Substring($PackageDirectory.TrimEnd('\').Length).TrimStart('\').Replace('\', '/')
+    })
+    $difference = @(Compare-Object ($newRelativeFiles | Sort-Object) ($actualRelativeFiles | Sort-Object))
+    if ($difference.Count -gt 0) {
+        throw 'The package manifest does not match the files in the downloaded package.'
     }
 
     $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
@@ -82,50 +143,64 @@ try {
     Wait-ForProcessExit $ProcessId 'VBCCPAS Soft'
     Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater'
 
-    # Keep rollback files outside the installation folder and never include user data.
+    # Parse the previous manifest before changing anything. It allows obsolete
+    # application files to be removed on later updates without touching user files.
+    $oldManifestPath = Join-Path $targetDirectory $manifestName
+    $oldRelativeFiles = @()
+    if (Test-Path -LiteralPath $oldManifestPath -PathType Leaf) {
+        $oldManifest = Get-Content -LiteralPath $oldManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($oldManifest.schema_version -ne 1 -or $null -eq $oldManifest.files) {
+            throw 'The installed application manifest is invalid. No files were changed.'
+        }
+        $oldRelativeFiles = @($oldManifest.files)
+        if ($oldRelativeFiles.Count -ne (@($oldRelativeFiles | Select-Object -Unique)).Count) {
+            throw 'The installed application manifest contains duplicate paths. No files were changed.'
+        }
+        foreach ($relative in $oldRelativeFiles) { Assert-SafeRelativePath ([string]$relative) }
+    }
+
     $backupRoot = Join-Path $env:LOCALAPPDATA 'VBCCPAS\UpdateBackups'
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
     $backupDirectory = Join-Path $backupRoot ([Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
 
-    $files = @(Get-ChildItem -LiteralPath $PackageDirectory -File -Recurse)
-    if ($files.Count -eq 0) { throw 'The update package contains no application files.' }
+    $newManaged = @{}
+    foreach ($relative in $newRelativeFiles) { $newManaged[[string]$relative] = $true }
+    $newManaged[$manifestName] = $true
 
-    foreach ($file in $files) {
-        $relative = $file.FullName.Substring($PackageDirectory.TrimEnd('\').Length).TrimStart('\')
-        $parts = $relative -split '[\\/]'
-        if ($parts -contains '..' -or $parts -contains '.' -or $parts -contains 'society.db') {
-            throw ('Unsafe or protected path in update package: ' + $relative)
-        }
-        $protected = @('backups','exports','logs','user-data','user_data','.vbccpas-data')
-        foreach ($part in $parts) {
-            if ($protected -contains $part.ToLowerInvariant()) {
-                throw ('The update package attempts to replace user data: ' + $relative)
+    # Remove only obsolete files that a previous VBCCPAS manifest explicitly owned.
+    foreach ($relative in $oldRelativeFiles) {
+        if (-not $newManaged.ContainsKey([string]$relative)) {
+            $destination = Get-AppDestination $targetDirectory ([string]$relative)
+            if (Test-Path -LiteralPath $destination -PathType Leaf) {
+                $backupFile = Join-Path $backupDirectory ([string]$relative)
+                New-Item -ItemType Directory -Path (Split-Path -Parent $backupFile) -Force | Out-Null
+                Copy-Item -LiteralPath $destination -Destination $backupFile -Force
+                [void]$changed.Add(@{ Destination = $destination; Backup = $backupFile; Existed = $true })
+                Remove-Item -LiteralPath $destination -Force
             }
         }
+    }
 
-        $destination = [IO.Path]::GetFullPath((Join-Path $targetDirectory $relative))
-        $rootPrefix = $targetDirectory.TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
-        if (-not $destination.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-            throw ('The update package contains a path outside the application folder: ' + $relative)
-        }
+    # Copy every file from the new package, including the manifest itself.
+    $filesToInstall = @($packageFiles) + @(Get-Item -LiteralPath $manifestPath)
+    foreach ($file in $filesToInstall) {
+        $relative = $file.FullName.Substring($PackageDirectory.TrimEnd('\').Length).TrimStart('\').Replace('\', '/')
+        $destination = Get-AppDestination $targetDirectory $relative
         $backupFile = Join-Path $backupDirectory $relative
         $existed = Test-Path -LiteralPath $destination -PathType Leaf
         if ($existed) {
-            $backupParent = Split-Path -Parent $backupFile
-            New-Item -ItemType Directory -Path $backupParent -Force | Out-Null
+            New-Item -ItemType Directory -Path (Split-Path -Parent $backupFile) -Force | Out-Null
             Copy-Item -LiteralPath $destination -Destination $backupFile -Force
         }
         [void]$changed.Add(@{ Destination = $destination; Backup = $backupFile; Existed = $existed })
-
-        $destinationParent = Split-Path -Parent $destination
-        New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+        New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         $temporary = $destination + '.vbccpas-new-' + [Guid]::NewGuid().ToString('N')
         Copy-Item -LiteralPath $file.FullName -Destination $temporary
         Move-Item -LiteralPath $temporary -Destination $destination -Force
     }
 
-    # Keep the last successful rollback set under LocalAppData for manual recovery.
+    # Retain this backup set in LocalAppData for manual recovery if needed.
     Start-Process -FilePath $TargetExe | Out-Null
     $stageRoot = Split-Path -Parent $PackageDirectory
     if (Test-Path -LiteralPath $stageRoot) {
