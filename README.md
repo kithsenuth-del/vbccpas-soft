@@ -23,7 +23,7 @@ On Windows, install **Python 3.11** with the Python launcher (`py`). Node.js is 
 
     .\build_exes.ps1
 
-The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, isolated integration tests, passkey recovery tests, updater/package tests, data-flow safety checks, and the PowerShell updater parser check. If Node.js is installed, it also checks the dashboard JavaScript.
+The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater/package tests, data-flow safety checks, and the PowerShell updater parser check. If Node.js is installed, it also checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
 
 A successful build produces:
 
