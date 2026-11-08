@@ -94,7 +94,8 @@ class UpdaterWindow:
         self.busy = busy
         self.status.set(message)
         self.progress.start(10) if busy else self.progress.stop()
-        self.check_button.configure(state=tk.DISABLED if busy else tk.NORMAL)
+        check_disabled = busy or (not self.target_exe.is_file() and not self.repair_mode)
+        self.check_button.configure(state=tk.DISABLED if check_disabled else tk.NORMAL)
         self.repair_button.configure(state=tk.DISABLED if busy else tk.NORMAL)
 
     def check_updates(self):
