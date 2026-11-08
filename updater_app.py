@@ -69,9 +69,14 @@ class UpdaterWindow:
                      anchor="w", fill=tk.X, pady=(0, 14))
         self.progress = ttk.Progressbar(panel, mode="indeterminate", style="Horizontal.TProgressbar")
         self.progress.pack(fill=tk.X, pady=(0, 16))
-        self.check_button = ttk.Button(panel, text="Check for Updates",
+        actions = tk.Frame(panel, bg="#242528")
+        actions.pack(anchor="e")
+        self.repair_button = ttk.Button(actions, text="Repair Installation",
+                                         command=self.start_repair)
+        self.repair_button.pack(side=tk.LEFT, padx=(0, 8))
+        self.check_button = ttk.Button(actions, text="Check for Updates",
                                        command=self.check_updates)
-        self.check_button.pack(anchor="e")
+        self.check_button.pack(side=tk.LEFT)
         tk.Label(panel,
                  text="Your society database and personal data are excluded from application replacement.",
                  bg="#292a2d", fg="#aeb4bd", wraplength=480,
@@ -79,7 +84,7 @@ class UpdaterWindow:
 
         if self.target_exe.name.lower() != "vbccpas-soft.exe" or (not self.target_exe.is_file() and not self.repair_mode):
             self.check_button.configure(state=tk.DISABLED)
-            self.status.set("The VBCCPAS application could not be located. Keep this updater beside VBCCPAS-Soft.exe.")
+            self.status.set("The application is missing. Use Repair Installation to restore it from GitHub.")
         elif self.process_id or self.repair_mode:
             if self.repair_mode:
                 self.status.set("Repair mode: the latest complete release will be reinstalled.")
@@ -90,6 +95,7 @@ class UpdaterWindow:
         self.status.set(message)
         self.progress.start(10) if busy else self.progress.stop()
         self.check_button.configure(state=tk.DISABLED if busy else tk.NORMAL)
+        self.repair_button.configure(state=tk.DISABLED if busy else tk.NORMAL)
 
     def check_updates(self):
         if self.busy:
@@ -98,6 +104,7 @@ class UpdaterWindow:
 
         def worker():
             try:
+                updater.recover_interrupted_update(self.target_exe)
                 release = updater.check_for_update(BUILD_COMMIT, force=self.repair_mode)
                 self.root.after(0, lambda: self.show_release(release))
             except Exception as exc:
@@ -110,7 +117,7 @@ class UpdaterWindow:
                       else "A complete application update is available.")
         self.release = release
         if release is None:
-            messagebox.showinfo("VBCCPAS Soft", ("The latest release was reinstalled. You can now launch VBCCPAS-Soft.exe." if self.repair_mode else "This installation is already up to date."),
+            messagebox.showinfo("VBCCPAS Soft", ("No published release is currently available for repair." if self.repair_mode else "This installation is already up to date."),
                                 parent=self.root)
             return
         release_name = release.get("name") or release.get("tag_name", "Latest release")
@@ -124,6 +131,12 @@ class UpdaterWindow:
         )
         if proceed:
             self.install_update()
+
+    def start_repair(self):
+        if self.busy:
+            return
+        self.repair_mode = True
+        self.check_updates()
 
     def install_update(self):
         if not self.release or self.busy:
