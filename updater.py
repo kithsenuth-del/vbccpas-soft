@@ -41,7 +41,7 @@ def _request(url):
     return urllib.request.urlopen(request, timeout=30)
 
 
-def check_for_update(current_commit):
+def check_for_update(current_commit, force=False):
     with _request(RELEASE_API) as response:
         release = json.loads(response.read(2 * 1024 * 1024).decode("utf-8"))
 
@@ -53,7 +53,7 @@ def check_for_update(current_commit):
     release_commit = tag[len("build-"):]
     if not re.fullmatch(r"[0-9a-fA-F]{40}", release_commit):
         raise ValueError("The latest GitHub release has an invalid build identifier.")
-    if release_commit.lower() == str(current_commit).lower():
+    if not force and release_commit.lower() == str(current_commit).lower():
         return None
 
     asset = next((item for item in release.get("assets", [])
@@ -155,7 +155,7 @@ def extract_package(package_bytes, destination):
     return extracted
 
 
-def download_and_launch(release, target_exe, process_id, updater_process_id=0):
+def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False):
     """Download a verified complete package and hand installation to PowerShell."""
     asset = release.get("_update_asset")
     if not asset:
@@ -173,8 +173,8 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0):
         raise ValueError("The update checksum does not match GitHub's release checksum.")
 
     target = Path(target_exe).resolve()
-    if target.name.lower() != "vbccpas-soft.exe" or not target.is_file():
-        raise ValueError("The installed application path could not be verified.")
+    if target.name.lower() != "vbccpas-soft.exe" or (not repair_mode and not target.is_file()):
+        raise ValueError("The application installation path could not be verified.")
 
     stage = Path(tempfile.mkdtemp(prefix="vbccpas-full-update-"))
     payload = stage / "payload"
@@ -189,6 +189,8 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0):
             "-TargetExe", str(target),
             "-PackageDirectory", str(payload),
         ]
+        if repair_mode:
+            command.append("-RepairMode")
         flags = (getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
                  | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
         subprocess.Popen(command, close_fds=True, creationflags=flags)
