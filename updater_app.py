@@ -17,10 +17,11 @@ except ImportError:
 
 
 class UpdaterWindow:
-    def __init__(self, root, target_exe, process_id):
+    def __init__(self, root, target_exe, process_id, repair_mode=False):
         self.root = root
         self.target_exe = Path(target_exe).resolve()
         self.process_id = int(process_id or 0)
+        self.repair_mode = bool(repair_mode)
         self.release = None
         self.busy = False
         root.title("VBCCPAS Soft — Software Updater")
@@ -76,10 +77,12 @@ class UpdaterWindow:
                  bg="#292a2d", fg="#aeb4bd", wraplength=480,
                  font=("Segoe UI", 8)).pack(anchor="w", pady=(18, 0))
 
-        if not self.target_exe.is_file() or self.target_exe.name.lower() != "vbccpas-soft.exe":
+        if self.target_exe.name.lower() != "vbccpas-soft.exe" or (not self.target_exe.is_file() and not self.repair_mode):
             self.check_button.configure(state=tk.DISABLED)
             self.status.set("The VBCCPAS application could not be located. Keep this updater beside VBCCPAS-Soft.exe.")
-        elif self.process_id:
+        elif self.process_id or self.repair_mode:
+            if self.repair_mode:
+                self.status.set("Repair mode: the latest complete release will be reinstalled.")
             self.root.after(350, self.check_updates)
 
     def set_busy(self, busy, message):
@@ -95,7 +98,7 @@ class UpdaterWindow:
 
         def worker():
             try:
-                release = updater.check_for_update(BUILD_COMMIT)
+                release = updater.check_for_update(BUILD_COMMIT, force=self.repair_mode)
                 self.root.after(0, lambda: self.show_release(release))
             except Exception as exc:
                 self.root.after(0, lambda error=str(exc): self.show_error(
@@ -107,7 +110,7 @@ class UpdaterWindow:
                       else "A complete application update is available.")
         self.release = release
         if release is None:
-            messagebox.showinfo("VBCCPAS Soft", "This installation is already up to date.",
+            messagebox.showinfo("VBCCPAS Soft", ("The latest release was reinstalled. You can now launch VBCCPAS-Soft.exe." if self.repair_mode else "This installation is already up to date."),
                                 parent=self.root)
             return
         release_name = release.get("name") or release.get("tag_name", "Latest release")
@@ -132,6 +135,7 @@ class UpdaterWindow:
                 updater.download_and_launch(
                     self.release, str(self.target_exe), self.process_id,
                     updater_process_id=os.getpid(),
+                    repair_mode=self.repair_mode,
                 )
                 self.root.after(0, self.root.destroy)
             except Exception as exc:
@@ -148,12 +152,13 @@ def main():
     parser = argparse.ArgumentParser(description="VBCCPAS Soft standalone updater")
     parser.add_argument("--target-exe", default=None)
     parser.add_argument("--process-id", type=int, default=0)
+    parser.add_argument("--repair", action="store_true", help="Reinstall the latest release if the main application is missing or damaged.")
     args = parser.parse_args()
     updater_exe_dir = Path(sys.executable if getattr(sys, "frozen", False)
                            else __file__).resolve().parent
     target = Path(args.target_exe).resolve() if args.target_exe else updater_exe_dir / "VBCCPAS-Soft.exe"
     root = tk.Tk()
-    UpdaterWindow(root, target, args.process_id)
+    UpdaterWindow(root, target, args.process_id, repair_mode=args.repair)
     root.mainloop()
 
 
