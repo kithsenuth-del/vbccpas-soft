@@ -82,13 +82,15 @@ try {
     Copy-Item -LiteralPath (Join-Path $Root "Create-Desktop-Shortcut.ps1") -Destination $Dist -Force
     Copy-Item -LiteralPath (Join-Path $Root "Setup-VBCCPAS-Shortcut.bat") -Destination $Dist -Force
     Copy-Item -LiteralPath (Join-Path $Root "updater.ps1") -Destination $Dist -Force
+    Copy-Item -LiteralPath (Join-Path $Root "Recover-VBCCPAS.bat") -Destination $Dist -Force
 
     $Required = @(
         "VBCCPAS-Soft.exe",
         "VBCCPAS-Updater.exe",
         "Create-Desktop-Shortcut.ps1",
         "Setup-VBCCPAS-Shortcut.bat",
-        "updater.ps1"
+        "updater.ps1",
+        "Recover-VBCCPAS.bat"
     )
     foreach ($Name in $Required) {
         if (-not (Test-Path -LiteralPath (Join-Path $Dist $Name) -PathType Leaf)) {
