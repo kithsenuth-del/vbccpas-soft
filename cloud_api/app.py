@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, select
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, func, select, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
@@ -85,6 +85,9 @@ class InviteBody(BaseModel):
 class AcceptBody(BaseModel):
     invitation_token: str = Field(min_length=20, max_length=200)
     password: str = Field(min_length=12, max_length=256)
+
+class AccountStatusBody(BaseModel):
+    is_active: bool
 
 def db_session():
     db = SessionLocal()
@@ -217,3 +220,25 @@ def accounts(_admin: Account = Depends(administrator), db: Session = Depends(db_
     rows = db.scalars(select(Account).order_by(Account.created_at)).all()
     return [{"id": row.id, "email": row.email, "display_name": row.display_name, "role": row.role,
              "is_active": row.is_active, "created_at": row.created_at.isoformat()} for row in rows]
+
+@app.patch("/v1/admin/accounts/{account_id}/status")
+def update_account_status(account_id: str, body: AccountStatusBody,
+                          admin: Account = Depends(administrator), db: Session = Depends(db_session)):
+    target = db.get(Account, account_id)
+    if not target:
+        raise HTTPException(404, "Account not found.")
+    if target.id == admin.id and not body.is_active:
+        raise HTTPException(400, "You cannot deactivate your own administrator account.")
+    if target.role == "executive_admin" and target.is_active and not body.is_active:
+        active_admins = db.scalar(select(func.count()).select_from(Account).where(
+            Account.role == "executive_admin", Account.is_active.is_(True)))
+        if active_admins <= 1:
+            raise HTTPException(400, "The last active executive administrator cannot be deactivated.")
+    target.is_active = body.is_active
+    if not body.is_active:
+        db.execute(update(ApiSession).where(ApiSession.account_id == target.id,
+                     ApiSession.revoked_at.is_(None)).values(revoked_at=now_utc()))
+    db.add(AuditEvent(actor_id=admin.id, event_type="account.activated" if body.is_active else "account.deactivated",
+                      subject=target.email))
+    db.commit()
+    return {"id": target.id, "email": target.email, "is_active": target.is_active}
