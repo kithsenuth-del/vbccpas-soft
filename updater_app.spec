@@ -19,6 +19,7 @@ exe = EXE(
     a.datas,
     [],
     name="VBCCPAS-Updater",
+    icon="assets/society-logo.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
