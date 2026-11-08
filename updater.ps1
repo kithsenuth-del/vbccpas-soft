@@ -129,6 +129,34 @@ try {
     }
     if ($RecoverOnly) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        $canWriteTarget = $false
+        if (-not $isAdministrator -and (Test-Path -LiteralPath $targetDirectory -PathType Container)) {
+            $probe = Join-Path $targetDirectory ('.vbccpas-recovery-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+            try {
+                $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                $stream.Dispose()
+                Remove-Item -LiteralPath $probe -Force
+                $canWriteTarget = $true
+            } catch {
+                Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+            }
+        }
+        if (-not $isAdministrator -and -not $canWriteTarget) {
+            $arguments = @(
+                '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                '-File', ('"' + $PSCommandPath + '"'),
+                '-TargetExe', ('"' + $TargetExe + '"'),
+                '-RecoverOnly', '-Quiet'
+            )
+            $elevated = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList $arguments
+            if ($elevated.ExitCode -ne 0) {
+                throw ('Elevated recovery failed with exit code ' + $elevated.ExitCode + '.')
+            }
+            exit 0
+        }
         [void](Restore-RecoveryJournal $TargetExe)
         exit 0
     }
