@@ -23,7 +23,7 @@ try {
     Write-Host "Installing application and Windows build dependencies..."
     & py -3.11 -m pip install --upgrade pip
     if ($LASTEXITCODE -ne 0) { throw "Could not upgrade pip." }
-    & py -3.11 -m pip install -r requirements.txt pyinstaller
+    & py -3.11 -m pip install -r requirements.txt pyinstaller pillow
     if ($LASTEXITCODE -ne 0) { throw "Could not install build dependencies." }
 
     $Commit = (& git rev-parse HEAD 2>$null)
@@ -32,6 +32,10 @@ try {
         Write-Warning "Git commit metadata is unavailable; this build will identify itself as development."
     }
     Set-Content -LiteralPath $BuildInfoPath -Value "BUILD_COMMIT = '$Commit'" -Encoding ascii
+
+    Write-Host "Generating the official VBCCPAS Windows application icon..."
+    Invoke-Python -c "from PIL import Image; im=Image.open(r'assets/society-logo.gif').convert('RGBA'); im.save(r'assets/society-logo.ico', format='ICO', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+    if (-not (Test-Path -LiteralPath (Join-Path $Root "assets\society-logo.ico") -PathType Leaf)) { throw "Official society icon generation failed." }
 
     Write-Host "Running Python compilation checks..."
     Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
@@ -65,10 +69,10 @@ try {
     New-Item -ItemType Directory -Path $Dist -Force | Out-Null
     New-Item -ItemType Directory -Path $Build -Force | Out-Null
 
-    Write-Host "Building VBCCPAS-Soft.exe..."
+    Write-Host "Building VBCCPAS-Soft.exe with the official society icon... "
     Invoke-Python -m PyInstaller --noconfirm --clean --distpath $Dist --workpath (Join-Path $Build "desktop") (Join-Path $Root "desktop_app.spec")
 
-    Write-Host "Building VBCCPAS-Updater.exe..."
+    Write-Host "Building VBCCPAS-Updater.exe with the official society icon..."
     Invoke-Python -m PyInstaller --noconfirm --clean --distpath $Dist --workpath (Join-Path $Build "updater") (Join-Path $Root "updater_app.spec")
 
     Write-Host "Adding launcher and updater support files..."
@@ -79,6 +83,7 @@ try {
     $Required = @(
         "VBCCPAS-Soft.exe",
         "VBCCPAS-Updater.exe",
+        "assets\society-logo.ico",
         "Create-Desktop-Shortcut.ps1",
         "Setup-VBCCPAS-Shortcut.bat",
         "updater.ps1"
