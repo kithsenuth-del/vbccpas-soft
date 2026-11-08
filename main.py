@@ -269,8 +269,8 @@ class App:
 	def __init__(self, root):
 		self.root = root
 		root.title("VBCCPAS | Photographic Arts Society")
-		root.geometry("1200x850")
-		root.minsize(1080, 780)
+		root.geometry("1280x820")
+		root.minsize(1000, 700)
 		self.style = ttk.Style(root)
 		self.style.theme_use('clam')
 		self.apply_theme()
@@ -281,7 +281,7 @@ class App:
 			self.brand_logo = tk.PhotoImage(file=os.path.join(assets_dir, "society-logo.gif"))
 			self.root.iconphoto(True, self.brand_logo)
 			self.brand_banner = tk.PhotoImage(file=os.path.join(assets_dir, "society-header.gif"))
-			brand_bar = tk.Frame(root, bg="#000000", height=137)
+			brand_bar = tk.Frame(root, bg="#000000", height=106)
 			brand_bar.pack(side=tk.TOP, fill=tk.X)
 			brand_bar.pack_propagate(False)
 			ttk.Label(brand_bar, image=self.brand_banner, background="#000000").pack(expand=True)
@@ -291,7 +291,7 @@ class App:
 		self.container = ttk.Frame(root, style='Main.TFrame')
 		self.container.pack(fill=tk.BOTH, expand=True)
 
-		self.sidebar = tk.Frame(self.container, bg=self.colors['sidebar'], width=250)
+		self.sidebar = tk.Frame(self.container, bg=self.colors['sidebar'], width=236)
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.sidebar.pack_propagate(False)
 
@@ -416,15 +416,16 @@ class App:
 			self.current_view = None
 
 	def apply_theme(self):
+		# Unified dark workspace palette shared with the browser dashboard.
 		self.colors = {
-			'bg': '#111214',
-			'card': '#242528',
-			'fg': '#f3eee6',
-			'accent1': '#c87548',
-			'accent2': '#d8b779',
-			'accent3': '#e6a778',
-			'sidebar': '#191a1d',
-			'panel': '#2b2928'
+			'bg': '#111319',
+			'card': '#1c202a',
+			'fg': '#f4f2f8',
+			'accent1': '#8b7cf6',
+			'accent2': '#c87548',
+			'accent3': '#a99cff',
+			'sidebar': '#171a22',
+			'panel': '#242936'
 		}
 		bg = self.colors['bg']
 		fg = self.colors['fg']
@@ -433,22 +434,64 @@ class App:
 		accent3 = self.colors['accent3']
 		self.style.configure('TFrame', background=bg)
 		self.style.configure('Main.TFrame', background=bg)
-		self.style.configure('TLabel', background=bg, foreground=fg, font=('Segoe UI', 10))
-		self.style.configure('TNotebook', background=bg)
-		self.style.configure('TButton', foreground='#f8fafc', background=accent, padding=8, relief='flat', font=('Segoe UI', 10, 'bold'))
-		self.style.map('TButton', background=[('active', accent3), ('pressed', accent2)], foreground=[('disabled', '#8b8178')])
-		self.style.configure('Rounded.TButton', foreground='#f8fafc', background=accent, padding=8, relief='flat', font=('Segoe UI', 10, 'bold'))
-		self.style.map('Rounded.TButton', background=[('active', accent3), ('pressed', accent2)], foreground=[('disabled', '#8b8178')])
-		self.style.configure('TCheckbutton', background=bg, foreground=fg, font=('Segoe UI', 10))
-		self.style.map('TCheckbutton', background=[('active', bg)], foreground=[('disabled', '#8b8178')])
-		self.style.configure('Warning.TLabel', background=bg, foreground='#e6b27e', font=('Segoe UI', 10, 'bold'))
-		self.style.configure('Sidebar.TButton', foreground='#e2e8f0', background=self.colors['sidebar'], padding=10, relief='flat', font=('Segoe UI', 10, 'bold'))
-		self.style.map('Sidebar.TButton', background=[('active', accent), ('pressed', accent3)])
-		self.style.configure('Treeview', background=self.colors['card'], fieldbackground=self.colors['card'], foreground=fg, rowheight=28)
-		self.style.map('Treeview', background=[('selected', accent)])
-		self.style.configure('TEntry', fieldbackground='#171719', foreground=fg)
-		self.style.configure('TCombobox', fieldbackground='#171719', foreground=fg)
-		self.style.configure('TSpinbox', fieldbackground='#0f172a', foreground=fg)
+		self.style.configure('TLabel', background=bg, foreground=fg,
+			font=('Segoe UI', 10))
+		self.style.configure('TNotebook', background=bg, borderwidth=0)
+		self.style.configure('TNotebook.Tab', background=self.colors['sidebar'],
+			foreground='#b9bdca', padding=(15, 9), borderwidth=0)
+		self.style.map('TNotebook.Tab',
+			background=[('selected', self.colors['card']), ('active', self.colors['panel'])],
+			foreground=[('selected', '#ffffff'), ('active', fg)])
+		self.style.configure('TButton', foreground='#ffffff', background=accent,
+			padding=(13, 9), relief='flat', borderwidth=0,
+			font=('Segoe UI', 10, 'bold'))
+		self.style.map('TButton',
+			background=[('disabled', '#454653'), ('pressed', accent2), ('active', accent3)],
+			foreground=[('disabled', '#a1a1aa')])
+		self.style.configure('Rounded.TButton', foreground='#ffffff',
+			background=accent, padding=(14, 10), relief='flat', borderwidth=0,
+			font=('Segoe UI', 10, 'bold'))
+		self.style.map('Rounded.TButton',
+			background=[('disabled', '#454653'), ('pressed', accent2), ('active', accent3)],
+			foreground=[('disabled', '#a1a1aa')])
+		self.style.configure('TCheckbutton', background=bg, foreground=fg,
+			font=('Segoe UI', 10), padding=5)
+		self.style.map('TCheckbutton', background=[('active', bg)],
+			foreground=[('disabled', '#8b8d99')])
+		self.style.configure('Warning.TLabel', background=bg,
+			foreground='#e6b27e', font=('Segoe UI', 10, 'bold'))
+		self.style.configure('Sidebar.TButton', foreground='#c8cbd7',
+			background=self.colors['sidebar'], padding=(14, 12), anchor='w',
+			relief='flat', borderwidth=0, font=('Segoe UI', 10, 'bold'))
+		self.style.map('Sidebar.TButton',
+			background=[('pressed', '#343044'), ('active', '#292b39')],
+			foreground=[('active', '#ffffff')])
+		self.style.configure('Treeview', background=self.colors['card'],
+			fieldbackground=self.colors['card'], foreground=fg,
+			rowheight=32, borderwidth=0, font=('Segoe UI', 10))
+		self.style.map('Treeview',
+			background=[('selected', accent)],
+			foreground=[('selected', '#ffffff')])
+		self.style.configure('Treeview.Heading',
+			background=self.colors['panel'], foreground='#d9dbe5',
+			padding=(10, 9), relief='flat', font=('Segoe UI', 9, 'bold'))
+		self.style.map('Treeview.Heading',
+			background=[('active', '#303546')], foreground=[('active', '#ffffff')])
+		self.style.configure('TEntry', fieldbackground='#171a22',
+			foreground=fg, insertcolor=fg, padding=8, bordercolor='#373b4a')
+		self.style.map('TEntry', fieldbackground=[('readonly', '#20232d')])
+		self.style.configure('TCombobox', fieldbackground='#171a22',
+			foreground=fg, padding=7, arrowcolor='#c8cbd7')
+		self.style.map('TCombobox',
+			fieldbackground=[('readonly', '#171a22')],
+			foreground=[('readonly', fg), ('disabled', '#8b8d99')])
+		self.style.configure('TSpinbox', fieldbackground='#171a22',
+			foreground=fg, padding=7, arrowcolor='#c8cbd7')
+		self.style.configure('TLabelframe', background=bg,
+			bordercolor='#343846', relief='solid')
+		self.style.configure('TLabelframe.Label', background=bg,
+			foreground='#c8cbd7', font=('Segoe UI', 10, 'bold'))
+		self.style.configure('TSeparator', background='#343846')
 		try:
 			self.root.configure(bg=bg)
 		except Exception:
