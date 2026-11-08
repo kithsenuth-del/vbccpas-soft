@@ -83,9 +83,18 @@ function Save-RecoveryJournal($Journal) {
 function Restore-RecoveryJournal([string]$ExpectedTarget) {
     if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) { return $false }
     $saved = Get-Content -LiteralPath $journalPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($saved.state -ne 'installing' -or
-        -not [string]::Equals([IO.Path]::GetFullPath([string]$saved.target), $ExpectedTarget, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not [string]::Equals([IO.Path]::GetFullPath([string]$saved.target), $ExpectedTarget, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'The recovery journal does not match this application installation. Manual review is required.'
+    }
+    if ($saved.state -eq 'verified') {
+        Remove-Item -LiteralPath $journalPath -Force
+        if (Test-Path -LiteralPath $logPath) {
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Verified update journal was safely finalised." -f (Get-Date -Format o))
+        }
+        return $false
+    }
+    if ($saved.state -ne 'installing') {
+        throw 'The recovery journal has an unknown state. Manual review is required.'
     }
     $root = [IO.Path]::GetDirectoryName($ExpectedTarget)
     $entries = @($saved.entries)
