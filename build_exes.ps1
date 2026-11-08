@@ -83,7 +83,6 @@ try {
     $Required = @(
         "VBCCPAS-Soft.exe",
         "VBCCPAS-Updater.exe",
-        "assets\society-logo.ico",
         "Create-Desktop-Shortcut.ps1",
         "Setup-VBCCPAS-Shortcut.bat",
         "updater.ps1"
