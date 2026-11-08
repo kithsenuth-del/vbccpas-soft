@@ -1,7 +1,13 @@
 name: VBCCPAS Windows desktop build
 
 permissions:
-  contents: write
+  contents: read
+
+# Superseded pull-request builds are cancelled; manual and main-branch release
+# builds are kept independent so a newer run cannot cancel a release build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
@@ -16,7 +22,49 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Check changed files
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '**/*.py'
+              - '**/*.ps1'
+              - '**/*.bat'
+              - '**/*.cmd'
+              - '**/*.spec'
+              - '**/*.json'
+              - '**/*.toml'
+              - '**/*.yml'
+              - '**/*.yaml'
+              - '**/*.txt'
+              - '**/*.html'
+              - '**/*.css'
+              - '**/*.js'
+              - '**/*.ico'
+              - '**/*.png'
+              - '**/*.jpg'
+              - '**/*.jpeg'
+              - '**/*.svg'
+              - '**/*.webp'
+              - 'assets/**'
+              - 'resources/**'
+              - 'icons/**'
+              - 'requirements*.txt'
+              - 'build_exes.ps1'
+              - 'Create-Desktop-Shortcut.ps1'
+              - 'Setup-VBCCPAS-Shortcut.bat'
+              - '!docs/**'
+              - '!**/*.md'
+
   integration:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -49,8 +97,11 @@ jobs:
         run: python check_frontend.py
 
   windows-build:
-    needs: integration
+    needs: [changes, integration]
+    if: needs.changes.outputs.code == 'true' && needs.integration.result == 'success' || github.event_name != 'pull_request'
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out source
         uses: actions/checkout@v7
