@@ -354,7 +354,8 @@ def apply_relationship_uuid_migration(
             count = conn.execute(
                 'SELECT COUNT(*) FROM "' + table.replace('"', '""') + '"'
             ).fetchone()[0]
-            if count != old["row_count"]:
+            expected_count = old["row_count"] + (1 if table == "SchemaMigrations" else 0)
+            if count != expected_count:
                 raise sqlite3.DatabaseError(f"Record count changed unexpectedly in {table}")
         conn.commit()
     except Exception:
@@ -366,7 +367,8 @@ def apply_relationship_uuid_migration(
     if after["integrity"] != "ok":
         raise sqlite3.DatabaseError("Post-migration integrity check failed")
     for table, old in before["tables"].items():
-        if after["tables"][table]["row_count"] != old["row_count"]:
+        expected_count = old["row_count"] + (1 if table == "SchemaMigrations" else 0)
+        if after["tables"][table]["row_count"] != expected_count:
             raise sqlite3.DatabaseError(f"Post-migration record count changed in {table}")
     return {"status": "migrated", "version": RELATIONSHIP_MIGRATION_VERSION,
             "backup": str(backup), "before": before, "after": after}
