@@ -28,7 +28,9 @@ jobs:
         run: python tests/test_passkey_recovery.py
       - name: Test non-destructive database migration foundation
         run: python -m unittest discover -s tests -p "test_database_migrations.py" -v
-      - name: Test central API and shared account lifecycle\n        run: python -m unittest discover -s tests -p "test_cloud_api.py" -v\n      - name: Run existing passkey safety checks
+      - name: Test central API and shared account lifecycle
+        run: python -m unittest discover -s tests -p "test_cloud_api.py" -v
+      - name: Run existing passkey safety checks
         run: python verify_data_flow.py
       - name: Check dashboard JavaScript syntax
         run: python check_frontend.py
