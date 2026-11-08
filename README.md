@@ -65,3 +65,10 @@ Integration tests use disposable temporary databases. The Windows GUI and Window
 ## Security boundary
 
 This is a single-computer application, not a network-hosted multi-user service. Keep the browser dashboard bound to 127.0.0.1 / localhost. Never expose port 8000 to the LAN or public internet.
+
+
+## Central service foundation (Phase 2)
+
+The repository now includes a separately deployable central API and shared-account foundation in `cloud_api/`. It is not connected to the desktop client yet. The current Windows application continues to use its own local `society.db` and remains available offline.
+
+See [Phase 2 central API and shared accounts](docs/phase-2-central-api.md) for setup, security boundaries, account invitations, and current limitations. Do not upload existing society records or expose the local desktop server to other computers as a substitute for the future sync service.
