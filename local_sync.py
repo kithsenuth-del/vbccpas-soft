@@ -82,7 +82,11 @@ def queue_local_change(database_path, entity_type, entity_uuid, operation="upser
     conn = _connect(database_path)
     try:
         _ensure_ready(conn)
+        conn.execute("BEGIN IMMEDIATE")
         if operation == "delete":
+            exists = conn.execute("SELECT 1 FROM \"" + entity_type + "\" WHERE _sync_uuid=?", (entity_uuid,)).fetchone()
+            if not exists:
+                raise KeyError(entity_type + " record not found.")
             payload = {}
             conn.execute(
                 f'UPDATE "{entity_type}" SET _sync_deleted_at=? WHERE _sync_uuid=?',
@@ -267,6 +271,7 @@ def apply_remote_change(database_path, change):
                         ).fetchone()
                         if not ref:
                             raise MissingDependencyError(f"Missing {table} dependency {ref_uuid}")
+                        values[uuid_field] = str(ref_uuid)
                         values["MemberID" if table == "Members" else "ItemID"] = ref[0]
             elif entity_type == "Attendance":
                 for uuid_field, table, pk in (
@@ -281,6 +286,7 @@ def apply_remote_change(database_path, change):
                         ).fetchone()
                         if not ref:
                             raise MissingDependencyError(f"Missing {table} dependency {ref_uuid}")
+                        values[uuid_field] = str(ref_uuid)
                         values["MemberID" if table == "Members" else "EventID"] = ref[0]
             columns = {r[1] for r in conn.execute(f'PRAGMA table_info("{entity_type}")')}
             values = {key: value for key, value in values.items()
