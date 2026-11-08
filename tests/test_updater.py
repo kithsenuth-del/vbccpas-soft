@@ -52,6 +52,13 @@ class UpdaterTests(unittest.TestCase):
         with patch.object(updater, "_request", return_value=FakeResponse(release_payload())):
             self.assertIsNone(updater.check_for_update(commit))
 
+    def test_force_mode_returns_current_release_for_repair(self):
+        payload = release_payload()
+        with patch.object(updater, "_request", return_value=FakeResponse(payload)):
+            result = updater.check_for_update("a" * 40, force=True)
+        self.assertEqual(result["tag_name"], "build-" + "a" * 40)
+        self.assertEqual(result["_update_asset"]["digest"], "b" * 64)
+
     def test_returns_verified_asset_details_for_new_build(self):
         payload = release_payload()
         with patch.object(updater, "_request", return_value=FakeResponse(payload)):
