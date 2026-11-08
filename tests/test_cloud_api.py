@@ -189,5 +189,18 @@ class CloudApiTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 422)
 
+
+    def test_member_account_cannot_pull_shared_society_records(self):
+        with self.Session() as db:
+            db.add(Account(email="member-sync@example.com", display_name="Member", role="member",
+                           password_hash=password_hash("Member-Strong-Password-42!")))
+            db.commit()
+        token = self.login("member-sync@example.com", "Member-Strong-Password-42!").json()["access_token"]
+        headers = {"Authorization": "Bearer " + token}
+        device = self.register_device(token).json()["device_id"]
+        response = self.client.get("/v1/sync/pull",
+            params={"device_id": device, "cursor": 0}, headers=headers)
+        self.assertEqual(response.status_code, 403)
+
 if __name__ == "__main__":
     unittest.main()
