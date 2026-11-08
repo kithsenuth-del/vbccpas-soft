@@ -190,7 +190,8 @@ try {
     foreach ($relative in $newRelativeFiles) { Assert-SafeRelativePath ([string]$relative) }
     if ($newRelativeFiles -notcontains 'VBCCPAS-Soft.exe' -or
         $newRelativeFiles -notcontains 'VBCCPAS-Updater.exe' -or
-        $newRelativeFiles -notcontains 'updater.ps1') {
+        $newRelativeFiles -notcontains 'updater.ps1' -or
+        $newRelativeFiles -notcontains 'Recover-VBCCPAS.bat') {
         throw 'The update package manifest omits a required application component.'
     }
 
