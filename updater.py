@@ -1,31 +1,36 @@
-"""Secure GitHub Releases updater for the packaged Windows application."""
+"""Secure GitHub Releases downloader and full-package Windows installer launcher."""
 import hashlib
+import io
 import json
+import os
 import re
+import stat
 import subprocess
 import tempfile
 import urllib.parse
 import urllib.request
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPOSITORY = "kithsenuth-del/vbccpas-soft"
 RELEASE_API = "https://api.github.com/repos/" + REPOSITORY + "/releases/latest"
 UPDATE_ASSET = "VBCCPAS-Soft-Windows.zip"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_FILE_BYTES = 250 * 1024 * 1024
-ALLOWED_FILES = {
-    "VBCCPAS-Soft.exe",
-    "updater.ps1",
-    "Create-Desktop-Shortcut.ps1",
-    "Setup-VBCCPAS-Shortcut.bat",
+MAX_EXTRACTED_TOTAL_BYTES = 500 * 1024 * 1024
+MAX_PACKAGE_FILES = 10000
+PROTECTED_PATH_PARTS = {
+    "society.db", "backups", "exports", "logs", "user-data",
+    "user_data", ".vbccpas-data",
 }
 
 
 def _request(url):
     """Open only HTTPS requests to GitHub's API or release download host."""
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname not in {"api.github.com", "github.com", "release-assets.githubusercontent.com"}:
+    if parsed.scheme != "https" or parsed.hostname not in {
+        "api.github.com", "github.com", "release-assets.githubusercontent.com"
+    }:
         raise ValueError("The update server address is not trusted.")
     request = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
@@ -41,53 +46,92 @@ def check_for_update(current_commit):
 
     if release.get("draft") or release.get("prerelease"):
         return None
-
     tag = release.get("tag_name", "")
     if not tag.startswith("build-") or len(tag) != len("build-") + 40:
         raise ValueError("The latest GitHub release has an unrecognised build tag.")
-
     release_commit = tag[len("build-"):]
     if not re.fullmatch(r"[0-9a-fA-F]{40}", release_commit):
         raise ValueError("The latest GitHub release has an invalid build identifier.")
     if release_commit.lower() == str(current_commit).lower():
         return None
 
-    asset = next(
-        (item for item in release.get("assets", []) if item.get("name") == UPDATE_ASSET),
-        None,
-    )
+    asset = next((item for item in release.get("assets", [])
+                  if item.get("name") == UPDATE_ASSET), None)
     if not asset:
         raise ValueError("The latest release does not contain the Windows update package.")
-
     digest = asset.get("digest", "")
-    if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest):
-        raise ValueError(
-            "GitHub has not published a valid SHA-256 checksum for this update yet. "
-            "Please try again shortly."
-        )
-
+    if not isinstance(digest, str) or not re.fullmatch(
+        r"sha256:[0-9a-fA-F]{64}", digest
+    ):
+        raise ValueError("GitHub has not published a valid SHA-256 checksum for this update yet.")
     download_url = asset.get("browser_download_url", "")
     parsed_url = urllib.parse.urlparse(download_url)
-    if (
-        parsed_url.scheme != "https"
-        or parsed_url.hostname != "github.com"
-        or not parsed_url.path.startswith(f"/{REPOSITORY}/releases/download/")
-    ):
+    if (parsed_url.scheme != "https" or parsed_url.hostname != "github.com"
+            or not parsed_url.path.startswith(f"/{REPOSITORY}/releases/download/")):
         raise ValueError("GitHub returned an unexpected update download address.")
-
     size = int(asset.get("size", 0))
     if size <= 0 or size > MAX_DOWNLOAD_BYTES:
         raise ValueError("The published update package size is invalid.")
-
     release["_update_asset"] = {
-        "url": download_url,
-        "digest": digest.split(":", 1)[1].lower(),
+        "url": download_url, "digest": digest.split(":", 1)[1].lower(),
         "size": size,
     }
     return release
 
 
-def download_and_launch(release, target_exe, process_id):
+def extract_package(package_bytes, destination):
+    """Validate and extract every application file without touching user data."""
+    destination = Path(destination).resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    total_size = 0
+    extracted = []
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(package_bytes))
+    except zipfile.BadZipFile as exc:
+        raise ValueError("The downloaded update is not a valid ZIP package.") from exc
+
+    with archive:
+        entries = archive.infolist()
+        if not entries or len(entries) > MAX_PACKAGE_FILES:
+            raise ValueError("The update package contains an invalid number of files.")
+        names = [entry.filename for entry in entries]
+        if len(names) != len(set(names)):
+            raise ValueError("The update package contains duplicate entries.")
+        for entry in entries:
+            raw_name = entry.filename
+            if not raw_name or "\\" in raw_name or ":" in raw_name:
+                raise ValueError("The update package contains an unsafe file path.")
+            relative = PurePosixPath(raw_name)
+            if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
+                raise ValueError("The update package contains a path outside the application folder.")
+            if any(part.lower() in PROTECTED_PATH_PARTS for part in relative.parts):
+                raise ValueError("The update package attempts to include protected user data.")
+            mode = (entry.external_attr >> 16) & 0xFFFF
+            if stat.S_ISLNK(mode):
+                raise ValueError("The update package contains a symbolic link.")
+            if entry.is_dir():
+                continue
+            if entry.file_size < 0 or entry.file_size > MAX_EXTRACTED_FILE_BYTES:
+                raise ValueError("An application file exceeds the extraction size limit.")
+            total_size += entry.file_size
+            if total_size > MAX_EXTRACTED_TOTAL_BYTES:
+                raise ValueError("The extracted application package is too large.")
+            output = destination.joinpath(*relative.parts).resolve()
+            if destination != output and destination not in output.parents:
+                raise ValueError("The update package contains an unsafe destination.")
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(entry, "r") as source, output.open("wb") as target:
+                target.write(source.read(MAX_EXTRACTED_FILE_BYTES + 1))
+            extracted.append(relative.as_posix())
+
+    required = {"VBCCPAS-Soft.exe", "updater.ps1"}
+    if not required.issubset(set(extracted)):
+        raise ValueError("The update package is missing the application or installation helper.")
+    return extracted
+
+
+def download_and_launch(release, target_exe, process_id, updater_process_id=0):
+    """Download a verified complete package and hand installation to PowerShell."""
     asset = release.get("_update_asset")
     if not asset:
         raise ValueError("Update details are missing. Check for updates again.")
@@ -105,42 +149,25 @@ def download_and_launch(release, target_exe, process_id):
 
     target = Path(target_exe).resolve()
     if target.name.lower() != "vbccpas-soft.exe" or not target.is_file():
-        raise ValueError("The running application path could not be verified.")
+        raise ValueError("The installed application path could not be verified.")
 
-    stage = Path(tempfile.mkdtemp(prefix="vbccpas-update-"))
-    archive_path = stage / UPDATE_ASSET
-    archive_path.write_bytes(package)
-
-    with zipfile.ZipFile(archive_path) as archive:
-        entries = archive.infolist()
-        names = [entry.filename for entry in entries]
-        if len(names) != len(set(names)):
-            raise ValueError("The update package contains duplicate file entries.")
-        if not {"VBCCPAS-Soft.exe", "updater.ps1"}.issubset(set(names)):
-            raise ValueError("The update package is missing required application files.")
-        for entry in entries:
-            if (
-                entry.filename not in ALLOWED_FILES
-                or Path(entry.filename).name != entry.filename
-                or entry.is_dir()
-                or entry.file_size > MAX_EXTRACTED_FILE_BYTES
-            ):
-                raise ValueError("The update package contains an unexpected or unsafe file.")
-        bad_file = archive.testzip()
-        if bad_file:
-            raise ValueError("The update package is damaged: " + bad_file)
-        archive.extract("VBCCPAS-Soft.exe", stage)
-        archive.extract("updater.ps1", stage)
-
-    command = [
-        "powershell.exe", "-NoProfile", "-NonInteractive",
-        "-ExecutionPolicy", "Bypass", "-File", str(stage / "updater.ps1"),
-        "-ProcessId", str(int(process_id)),
-        "-TargetExe", str(target),
-        "-NewExe", str(stage / "VBCCPAS-Soft.exe"),
-    ]
-    flags = (
-        getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-    )
-    subprocess.Popen(command, close_fds=True, creationflags=flags)
+    stage = Path(tempfile.mkdtemp(prefix="vbccpas-full-update-"))
+    payload = stage / "payload"
+    try:
+        extract_package(package, payload)
+        script = payload / "updater.ps1"
+        command = [
+            "powershell.exe", "-NoProfile", "-NonInteractive",
+            "-ExecutionPolicy", "Bypass", "-File", str(script),
+            "-ProcessId", str(int(process_id)),
+            "-UpdaterProcessId", str(int(updater_process_id or 0)),
+            "-TargetExe", str(target),
+            "-PackageDirectory", str(payload),
+        ]
+        flags = (getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
+        subprocess.Popen(command, close_fds=True, creationflags=flags)
+    except Exception:
+        import shutil
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
