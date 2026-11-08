@@ -41,6 +41,29 @@ class FullPackageExtractionTests(unittest.TestCase):
             self.assertEqual((Path(folder) / "assets/theme.json").read_bytes(), b"{}")
             self.assertTrue((Path(folder) / "VBCCPAS-Soft.exe").is_file())
 
+    def test_rejects_windows_case_insensitive_path_collisions(self):
+        package = make_zip([
+            ("VBCCPAS-Soft.exe", b"application"),
+            ("VBCCPAS-Updater.exe", b"updater"),
+            ("updater.ps1", b"installer"),
+            ("Assets/Logo.png", b"one"),
+            ("assets/logo.PNG", b"two"),
+        ])
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError, "Windows-colliding"):
+                updater.extract_package(package, folder)
+
+    def test_rejects_empty_path_segments(self):
+        package = make_zip([
+            ("VBCCPAS-Soft.exe", b"application"),
+            ("VBCCPAS-Updater.exe", b"updater"),
+            ("updater.ps1", b"installer"),
+            ("assets//theme.json", b"{}"),
+        ])
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError, "path outside"):
+                updater.extract_package(package, folder)
+
     def test_rejects_path_traversal(self):
         package = make_zip([
             ("VBCCPAS-Soft.exe", b"app"),
