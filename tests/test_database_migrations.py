@@ -72,6 +72,34 @@ class DatabaseMigrationTests(unittest.TestCase):
         with sqlite3.connect(self.db) as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM SchemaMigrations").fetchone()[0], 1)
 
+    def test_missing_sync_table_fails_without_partial_migration(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("DROP TABLE Attendance")
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "required tables are missing"):
+            apply_local_sync_foundation(self.db, self.root / "backups")
+        with sqlite3.connect(self.db) as conn:
+            self.assertNotIn("_sync_uuid", {
+                row[1] for row in conn.execute("PRAGMA table_info(Members)")
+            })
+            self.assertFalse(conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='SyncOutbox'"
+            ).fetchone())
+
+    def test_wrong_primary_key_rolls_back_every_change(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("ALTER TABLE Members RENAME TO Members_old")
+            conn.execute("CREATE TABLE Members (WrongID INTEGER PRIMARY KEY, Name TEXT)")
+            conn.execute("INSERT INTO Members VALUES (7, 'Preserve this member')")
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "expected primary key"):
+            apply_local_sync_foundation(self.db, self.root / "backups")
+        with sqlite3.connect(self.db) as conn:
+            self.assertNotIn("_sync_uuid", {
+                row[1] for row in conn.execute("PRAGMA table_info(Events)")
+            })
+            self.assertFalse(conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='SyncOutbox'"
+            ).fetchone())
+
     def test_missing_database_is_not_created_silently(self):
         missing = self.root / "missing.db"
         with self.assertRaises(FileNotFoundError):
