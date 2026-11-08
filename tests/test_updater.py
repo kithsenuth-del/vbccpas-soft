@@ -59,6 +59,28 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(result["tag_name"], "build-" + "a" * 40)
         self.assertEqual(result["_update_asset"]["digest"], "b" * 64)
 
+    def test_recovery_bootstrap_is_invoked_when_present(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "updater-recovery.ps1"
+            script.write_text("# recovery bootstrap", encoding="utf-8")
+            completed = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            with patch.object(updater.subprocess, "run", return_value=completed) as run:
+                updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
+            self.assertIn("-RecoverOnly", run.call_args.args[0])
+
+    def test_recovery_bootstrap_failure_blocks_new_update(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "updater-recovery.ps1"
+            script.write_text("# recovery bootstrap", encoding="utf-8")
+            completed = type("Result", (), {"returncode": 1, "stdout": "", "stderr": "rollback failed"})()
+            with patch.object(updater.subprocess, "run", return_value=completed):
+                with self.assertRaisesRegex(RuntimeError, "rollback failed"):
+                    updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
+
     def test_returns_verified_asset_details_for_new_build(self):
         payload = release_payload()
         with patch.object(updater, "_request", return_value=FakeResponse(payload)):
