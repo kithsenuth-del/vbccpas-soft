@@ -62,6 +62,65 @@
       .stat-card { border-color:rgba(216,183,121,.18) !important; }
       @media(prefers-reduced-motion:reduce) { *,*::before,*::after {animation:none !important;transition:none !important;scroll-behavior:auto !important} }
 
+
+      /* Shared visual tokens and component states */
+      :root {
+        --photo-bg: #111214;
+        --photo-panel: #1d1e21;
+        --photo-card: #242528;
+        --photo-copper: #c87548;
+        --photo-copper-hover: #d4875d;
+        --photo-gold: #d8b779;
+        --photo-ivory: #f3eee6;
+        --photo-muted: #aaa39a;
+        --photo-success: #8fc99b;
+        --photo-danger: #ef8d86;
+      }
+      button[class*="bg-emerald-"],
+      button[class*="bg-amber-"],
+      button[class*="bg-sky-"],
+      button[class*="bg-violet-"] {
+        background: var(--photo-copper) !important;
+        color: #fff8f1 !important;
+        border: 1px solid rgba(216,183,121,.22) !important;
+        box-shadow: 0 5px 16px rgba(0,0,0,.18) !important;
+      }
+      button[class*="bg-emerald-"]:hover,
+      button[class*="bg-amber-"]:hover,
+      button[class*="bg-sky-"]:hover,
+      button[class*="bg-violet-"]:hover {
+        background: var(--photo-copper-hover) !important;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: .58;
+        filter: saturate(.65);
+      }
+      .status-success { color: var(--photo-success) !important; }
+      .status-error { color: var(--photo-danger) !important; }
+      .status-info { color: var(--photo-muted) !important; }
+      input, select, textarea {
+        border-radius: 10px;
+        min-height: 40px;
+      }
+      textarea { min-height: 88px; }
+      input::placeholder, textarea::placeholder { color: #817a73; opacity: 1; }
+      select option { background: #1d1e21; color: var(--photo-ivory); }
+      .nav-btn { border-radius: 13px !important; }
+      .section-card { border-radius: 22px !important; }
+      .section-card form { border-radius: 16px !important; }
+      .section-card [id$="-list"] > div {
+        border: 1px solid rgba(216,183,121,.12);
+      }
+      #auth-action { min-height: 48px; }
+      #auth-action:focus-visible, .nav-btn:focus-visible {
+        outline: 2px solid var(--photo-gold);
+        outline-offset: 3px;
+      }
+      @media (max-width: 640px) {
+        .section-card { border-radius: 18px !important; }
+        #auth-gate > div { padding: 22px !important; }
+      }
     </style>
   </head>
   <body class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.3),_transparent_30%),linear-gradient(135deg,_#07131f_0%,_#0f172a_45%,_#111827_100%)] text-slate-100">
@@ -529,9 +588,9 @@
         if (!status) return;
         status.textContent = message || '';
         const toneClasses = {
-          success: 'text-emerald-300',
-          error: 'text-rose-300',
-          info: 'text-slate-400',
+          success: 'status-success',
+          error: 'status-error',
+          info: 'status-info',
         };
         status.className = `text-sm ${toneClasses[tone] || toneClasses.info}`;
       }
