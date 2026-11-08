@@ -83,5 +83,29 @@ class CloudApiTests(unittest.TestCase):
             json={"email": "other-admin@example.invalid", "display_name": "Other", "role": "executive_admin"})
         self.assertEqual(response.status_code, 400)
 
+
+    def test_admin_can_suspend_account_and_revoke_its_session(self):
+        with self.Session() as db:
+            member = Account(email="suspend@example.invalid", display_name="Suspend Me", role="member",
+                             password_hash=password_hash("Suspend-Strong-Password-42!"))
+            db.add(member)
+            db.commit()
+            member_id = member.id
+        member_token = self.login("suspend@example.invalid", "Suspend-Strong-Password-42!").json()["access_token"]
+        admin_token = self.login().json()["access_token"]
+        response = self.client.patch("/v1/admin/accounts/" + member_id + "/status",
+            headers={"Authorization": "Bearer " + admin_token}, json={"is_active": False})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.client.get("/v1/auth/me",
+            headers={"Authorization": "Bearer " + member_token}).status_code, 401)
+
+    def test_last_active_admin_cannot_be_suspended(self):
+        token = self.login().json()["access_token"]
+        with self.Session() as db:
+            admin_id = db.query(Account).filter_by(email="admin@example.invalid").one().id
+        response = self.client.patch("/v1/admin/accounts/" + admin_id + "/status",
+            headers={"Authorization": "Bearer " + token}, json={"is_active": False})
+        self.assertEqual(response.status_code, 400)
+
 if __name__ == "__main__":
     unittest.main()
