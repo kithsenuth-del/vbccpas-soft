@@ -72,3 +72,8 @@ This is a single-computer application, not a network-hosted multi-user service. 
 The repository now includes a separately deployable central API and shared-account foundation in `cloud_api/`. It is not connected to the desktop client yet. The current Windows application continues to use its own local `society.db` and remains available offline.
 
 See [Phase 2 central API and shared accounts](docs/phase-2-central-api.md) for setup, security boundaries, account invitations, and current limitations. Do not upload existing society records or expose the local desktop server to other computers as a substitute for the future sync service.
+
+
+## Local-first sync foundation (Phase 3)
+
+The repository now includes versioned device sync endpoints and a local SQLite sync engine. This is a foundation only: the Windows desktop app is not yet connected to the central service, and existing society records are not uploaded or modified. Read [Phase 3 local-first synchronisation](docs/phase-3-local-first-sync.md) before testing the explicit migrations on a disposable database copy.
