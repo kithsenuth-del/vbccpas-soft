@@ -104,6 +104,13 @@ def extract_package(package_bytes, destination):
             relative = PurePosixPath(raw_name)
             if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
                 raise ValueError("The update package contains a path outside the application folder.")
+            reserved_names = {"CON", "PRN", "AUX", "NUL"} | {
+                f"{prefix}{number}" for prefix in ("COM", "LPT") for number in range(1, 10)
+            }
+            for part in relative.parts:
+                if (part.rstrip(" .") != part or any(char in part for char in '<>:"|?*')
+                        or part.split(".", 1)[0].upper() in reserved_names):
+                    raise ValueError("The update package contains a Windows-invalid file name.")
             if any(part.lower() in PROTECTED_PATH_PARTS for part in relative.parts):
                 raise ValueError("The update package attempts to include protected user data.")
             mode = (entry.external_attr >> 16) & 0xFFFF
@@ -120,8 +127,11 @@ def extract_package(package_bytes, destination):
             if destination != output and destination not in output.parents:
                 raise ValueError("The update package contains an unsafe destination.")
             output.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(entry, "r") as source, output.open("wb") as target:
-                target.write(source.read(MAX_EXTRACTED_FILE_BYTES + 1))
+            with archive.open(entry, "r") as source:
+                data = source.read(MAX_EXTRACTED_FILE_BYTES + 1)
+            if len(data) != entry.file_size or len(data) > MAX_EXTRACTED_FILE_BYTES:
+                raise ValueError("An application file has an invalid uncompressed size.")
+            output.write_bytes(data)
             extracted.append(relative.as_posix())
 
     required = {"VBCCPAS-Soft.exe", "updater.ps1"}
