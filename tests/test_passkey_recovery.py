@@ -41,7 +41,7 @@ class PasskeyRecoveryTests(unittest.TestCase):
 
             self.assertEqual(removed, 1)
             self.assertFalse(passkey_auth.configured(db_path))
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn, conn:
                 self.assertEqual(conn.execute("SELECT Name FROM Members").fetchone()[0],
                                  "Test Member")
                 self.assertEqual(
