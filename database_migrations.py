@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 MIGRATION_VERSION = 1
+RELATIONSHIP_MIGRATION_VERSION = 2
 SYNC_TABLES = {
     "Members": "MemberID",
     "Events": "EventID",
@@ -257,6 +258,121 @@ def apply_local_sync_foundation(
     }
 
 
+
+def apply_relationship_uuid_migration(
+    database_path: str | os.PathLike[str],
+    backup_directory: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Add stable UUID foreign references while preserving integer IDs and rows."""
+    path = Path(database_path).expanduser().resolve()
+    before = database_inventory(path)
+    if before["integrity"] != "ok":
+        raise sqlite3.DatabaseError("Refusing relationship migration on an invalid database")
+    if not path.is_file():
+        raise FileNotFoundError(f"Database not found: {path}")
+    if "SchemaMigrations" not in before["tables"]:
+        raise sqlite3.DatabaseError("Apply migration 1 before relationship UUID migration")
+    backup = create_verified_backup(path, backup_directory)
+    conn = _connect(path)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        if not conn.execute(
+            "SELECT 1 FROM SchemaMigrations WHERE Version=?", (MIGRATION_VERSION,)
+        ).fetchone():
+            raise sqlite3.DatabaseError("Apply migration 1 before relationship UUID migration")
+        if conn.execute(
+            "SELECT 1 FROM SchemaMigrations WHERE Version=?",
+            (RELATIONSHIP_MIGRATION_VERSION,),
+        ).fetchone():
+            conn.rollback()
+            return {"status": "already_applied", "version": RELATIONSHIP_MIGRATION_VERSION,
+                    "backup": str(backup)}
+        required = {
+            "Members": {"MemberID", "_sync_uuid"},
+            "Events": {"EventID", "_sync_uuid"},
+            "Inventory": {"ItemID", "_sync_uuid"},
+            "BorrowedItems": {"BorrowID", "MemberID", "ItemID", "_sync_uuid"},
+            "Attendance": {"AttID", "MemberID", "EventID", "_sync_uuid"},
+        }
+        for table, columns in required.items():
+            present = _table_columns(conn, table)
+            if not columns.issubset(present):
+                raise sqlite3.DatabaseError(
+                    f"{table} is missing required columns: {', '.join(sorted(columns-present))}"
+                )
+        additions = {
+            "BorrowedItems": (("MemberUUID", "TEXT"), ("ItemUUID", "TEXT")),
+            "Attendance": (("MemberUUID", "TEXT"), ("EventUUID", "TEXT")),
+        }
+        for table, columns in additions.items():
+            present = _table_columns(conn, table)
+            quoted = '"' + table + '"'
+            for column, declaration in columns:
+                if column not in present:
+                    conn.execute(f"ALTER TABLE {quoted} ADD COLUMN {column} {declaration}")
+        conn.execute(
+            "UPDATE BorrowedItems SET MemberUUID=(SELECT _sync_uuid FROM Members "
+            "WHERE Members.MemberID=BorrowedItems.MemberID) WHERE MemberID IS NOT NULL"
+        )
+        conn.execute(
+            "UPDATE BorrowedItems SET ItemUUID=(SELECT _sync_uuid FROM Inventory "
+            "WHERE Inventory.ItemID=BorrowedItems.ItemID) WHERE ItemID IS NOT NULL"
+        )
+        conn.execute(
+            "UPDATE Attendance SET MemberUUID=(SELECT _sync_uuid FROM Members "
+            "WHERE Members.MemberID=Attendance.MemberID) WHERE MemberID IS NOT NULL"
+        )
+        conn.execute(
+            "UPDATE Attendance SET EventUUID=(SELECT _sync_uuid FROM Events "
+            "WHERE Events.EventID=Attendance.EventID) WHERE EventID IS NOT NULL"
+        )
+        orphan_checks = (
+            ("BorrowedItems", "MemberID", "MemberUUID"),
+            ("BorrowedItems", "ItemID", "ItemUUID"),
+            ("Attendance", "MemberID", "MemberUUID"),
+            ("Attendance", "EventID", "EventUUID"),
+        )
+        for table, local_fk, uuid_fk in orphan_checks:
+            count = conn.execute(
+                f'SELECT COUNT(*) FROM "{table}" WHERE "{local_fk}" IS NOT NULL AND '
+                f'("{uuid_fk}" IS NULL OR "{uuid_fk}" = \'\')'
+            ).fetchone()[0]
+            if count:
+                raise sqlite3.DatabaseError(
+                    f"Cannot map {count} orphaned {table}.{local_fk} references to stable UUIDs"
+                )
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_sync_outbox_pending_entity ON SyncOutbox(EntityType,EntityUUID) WHERE Status='pending'")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_borrowed_member_uuid ON BorrowedItems(MemberUUID)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_borrowed_item_uuid ON BorrowedItems(ItemUUID)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_attendance_member_uuid ON Attendance(MemberUUID)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_attendance_event_uuid ON Attendance(EventUUID)")
+        conn.execute(
+            "INSERT INTO SchemaMigrations (Version, AppliedAt, Description) VALUES (?, ?, ?)",
+            (RELATIONSHIP_MIGRATION_VERSION, datetime.now(timezone.utc).isoformat(),
+             "Add stable UUID references for cross-device relationships"),
+        )
+        for table, old in before["tables"].items():
+            count = conn.execute(
+                'SELECT COUNT(*) FROM "' + table.replace('"', '""') + '"'
+            ).fetchone()[0]
+            if count != old["row_count"]:
+                raise sqlite3.DatabaseError(f"Record count changed unexpectedly in {table}")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    after = database_inventory(path)
+    if after["integrity"] != "ok":
+        raise sqlite3.DatabaseError("Post-migration integrity check failed")
+    for table, old in before["tables"].items():
+        if after["tables"][table]["row_count"] != old["row_count"]:
+            raise sqlite3.DatabaseError(f"Post-migration record count changed in {table}")
+    return {"status": "migrated", "version": RELATIONSHIP_MIGRATION_VERSION,
+            "backup": str(backup), "before": before, "after": after}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Inspect or explicitly prepare a VBCCPAS SQLite database for synchronisation."
@@ -266,10 +382,14 @@ def main() -> int:
                         help="Create and verify a backup without changing the database")
     parser.add_argument("--apply-sync-foundation", action="store_true",
                         help="Back up and apply migration 1; use a test copy first")
+    parser.add_argument("--apply-relationship-uuids", action="store_true",
+                        help="Back up and apply migration 2 after migration 1")
     args = parser.parse_args()
-    if args.backup_only and args.apply_sync_foundation:
+    if sum((args.backup_only, args.apply_sync_foundation, args.apply_relationship_uuids)) > 1:
         parser.error("Choose only one operation")
-    if args.apply_sync_foundation:
+    if args.apply_relationship_uuids:
+        result = apply_relationship_uuid_migration(args.database)
+    elif args.apply_sync_foundation:
         result = apply_local_sync_foundation(args.database)
     elif args.backup_only:
         result = {"backup": str(create_verified_backup(args.database))}

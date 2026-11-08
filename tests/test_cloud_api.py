@@ -107,5 +107,100 @@ class CloudApiTests(unittest.TestCase):
             headers={"Authorization": "Bearer " + token}, json={"is_active": False})
         self.assertEqual(response.status_code, 400)
 
+
+    def register_device(self, token, name="Test desktop"):
+        return self.client.post("/v1/devices",
+            headers={"Authorization": "Bearer " + token},
+            json={"device_name": name, "platform": "Windows 11"})
+
+    def test_device_sync_push_pull_idempotency_and_conflict_detection(self):
+        token = self.login().json()["access_token"]
+        headers = {"Authorization": "Bearer " + token}
+        registered = self.register_device(token)
+        self.assertEqual(registered.status_code, 201, registered.text)
+        device_id = registered.json()["device_id"]
+        entity_uuid = "f45a21d1-5b76-4a4e-9a2c-1f5b9c8d5a10"
+        change_id = "9c2c2f8b-4d32-4e1b-a0b5-22b46b8c0c14"
+        change = {"change_id": change_id, "entity_type": "Members",
+                  "entity_uuid": entity_uuid, "operation": "upsert",
+                  "base_version": 0, "payload": {"Name": "Synced member", "Class": "10-A"}}
+        pushed = self.client.post("/v1/sync/push", headers=headers,
+            json={"device_id": device_id, "changes": [change]})
+        self.assertEqual(pushed.status_code, 200, pushed.text)
+        self.assertEqual(pushed.json()["accepted"][0]["version"], 1)
+        duplicate = self.client.post("/v1/sync/push", headers=headers,
+            json={"device_id": device_id, "changes": [change]})
+        self.assertTrue(duplicate.json()["accepted"][0]["duplicate"])
+        pulled = self.client.get("/v1/sync/pull",
+            params={"device_id": device_id, "cursor": 0}, headers=headers)
+        self.assertEqual(pulled.status_code, 200, pulled.text)
+        self.assertEqual(pulled.json()["changes"][0]["payload"]["Name"], "Synced member")
+        self.assertGreater(pulled.json()["next_cursor"], 0)
+        stale = dict(change, change_id="b04d1c75-7c6a-43a9-8b5f-1ad5b5f19b44",
+                     payload={"Name": "Stale edit"})
+        conflict = self.client.post("/v1/sync/push", headers=headers,
+            json={"device_id": device_id, "changes": [stale]})
+        self.assertEqual(conflict.status_code, 200, conflict.text)
+        self.assertEqual(conflict.json()["conflicts"][0]["server_version"], 1)
+        self.assertEqual(conflict.json()["conflicts"][0]["server_payload"]["Name"], "Synced member")
+
+    def test_revoked_device_cannot_sync(self):
+        token = self.login().json()["access_token"]
+        headers = {"Authorization": "Bearer " + token}
+        registered = self.register_device(token)
+        device_id = registered.json()["device_id"]
+        self.assertEqual(self.client.delete("/v1/devices/" + device_id,
+            headers=headers).status_code, 200)
+        denied = self.client.get("/v1/sync/pull",
+            params={"device_id": device_id, "cursor": 0}, headers=headers)
+        self.assertEqual(denied.status_code, 403)
+
+    def test_read_only_account_cannot_push_sync_changes(self):
+        with self.Session() as db:
+            db.add(Account(email="readonly@example.com", display_name="Read Only", role="read_only",
+                           password_hash=password_hash("Read-Only-Strong-Password-42!")))
+            db.commit()
+        token = self.login("readonly@example.com", "Read-Only-Strong-Password-42!").json()["access_token"]
+        headers = {"Authorization": "Bearer " + token}
+        device = self.register_device(token).json()["device_id"]
+        response = self.client.post("/v1/sync/push", headers=headers, json={
+            "device_id": device, "changes": [{
+                "change_id": "bc0b3b4e-5f74-4c2f-9a5a-7e8f9b1c2d3e",
+                "entity_type": "Members",
+                "entity_uuid": "aa0b3b4e-5f74-4c2f-9a5a-7e8f9b1c2d3e",
+                "operation": "upsert", "base_version": 0,
+                "payload": {"Name": "Not allowed"}
+            }]
+        })
+        self.assertEqual(response.status_code, 403)
+
+    def test_sync_rejects_account_and_security_tables(self):
+        token = self.login().json()["access_token"]
+        headers = {"Authorization": "Bearer " + token}
+        device = self.register_device(token).json()["device_id"]
+        response = self.client.post("/v1/sync/push", headers=headers, json={
+            "device_id": device, "changes": [{
+                "change_id": "dc0b3b4e-5f74-4c2f-9a5a-7e8f9b1c2d3e",
+                "entity_type": "Members",
+                "entity_uuid": "da0b3b4e-5f74-4c2f-9a5a-7e8f9b1c2d3e",
+                "operation": "upsert", "base_version": 0,
+                "payload": {"Name": "Bad field", "Password": "must never sync"}
+            }]
+        })
+        self.assertEqual(response.status_code, 422)
+
+
+    def test_member_account_cannot_pull_shared_society_records(self):
+        with self.Session() as db:
+            db.add(Account(email="member-sync@example.com", display_name="Member", role="member",
+                           password_hash=password_hash("Member-Strong-Password-42!")))
+            db.commit()
+        token = self.login("member-sync@example.com", "Member-Strong-Password-42!").json()["access_token"]
+        headers = {"Authorization": "Bearer " + token}
+        device = self.register_device(token).json()["device_id"]
+        response = self.client.get("/v1/sync/pull",
+            params={"device_id": device, "cursor": 0}, headers=headers)
+        self.assertEqual(response.status_code, 403)
+
 if __name__ == "__main__":
     unittest.main()

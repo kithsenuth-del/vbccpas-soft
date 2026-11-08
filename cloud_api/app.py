@@ -2,10 +2,13 @@
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Literal
+from uuid import UUID
+import json
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, func, select, update
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, JSON, Text, UniqueConstraint, create_engine, func, select, update, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, VerifyMismatchError
@@ -74,6 +77,49 @@ class AuditEvent(Base):
     subject: Mapped[str | None] = mapped_column(String(254), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
+
+class Device(Base):
+    __tablename__ = "devices"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"), index=True)
+    device_name: Mapped[str] = mapped_column(String(100))
+    platform: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class SyncRecord(Base):
+    __tablename__ = "sync_records"
+    __table_args__ = (UniqueConstraint("entity_type", "entity_uuid", name="uq_sync_record_entity"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    entity_type: Mapped[str] = mapped_column(String(32), index=True)
+    entity_uuid: Mapped[str] = mapped_column(String(36))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    payload: Mapped[dict] = mapped_column(JSON)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+class SyncEvent(Base):
+    __tablename__ = "sync_events"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entity_type: Mapped[str] = mapped_column(String(32), index=True)
+    entity_uuid: Mapped[str] = mapped_column(String(36), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    payload: Mapped[dict] = mapped_column(JSON)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+class SyncReceipt(Base):
+    __tablename__ = "sync_receipts"
+    change_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"))
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"))
+    entity_type: Mapped[str] = mapped_column(String(32))
+    entity_uuid: Mapped[str] = mapped_column(String(36))
+    applied_version: Mapped[int] = mapped_column(Integer)
+    payload_digest: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
 class LoginBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
@@ -86,6 +132,23 @@ class InviteBody(BaseModel):
 class AcceptBody(BaseModel):
     invitation_token: str = Field(min_length=20, max_length=200)
     password: str = Field(min_length=12, max_length=256)
+
+
+class DeviceRegisterBody(BaseModel):
+    device_name: str = Field(min_length=1, max_length=100)
+    platform: str = Field(min_length=1, max_length=40)
+
+class SyncChangeInput(BaseModel):
+    change_id: UUID
+    entity_type: Literal["Members", "Events", "Inventory", "BorrowedItems", "Attendance"]
+    entity_uuid: UUID
+    operation: Literal["upsert", "delete"]
+    base_version: int = Field(ge=0)
+    payload: dict = Field(default_factory=dict)
+
+class SyncPushBody(BaseModel):
+    device_id: UUID
+    changes: list[SyncChangeInput] = Field(min_length=1, max_length=100)
 
 class AccountStatusBody(BaseModel):
     is_active: bool
@@ -248,3 +311,159 @@ def update_account_status(account_id: str, body: AccountStatusBody,
                       subject=target.email))
     db.commit()
     return {"id": target.id, "email": target.email, "is_active": target.is_active}
+
+SYNC_ENTITIES = {
+    "Members": {"Name", "Class", "Roll", "Email"},
+    "Events": {"Title", "Date", "Location", "Notes"},
+    "Inventory": {"Name", "Quantity", "Notes"},
+    "BorrowedItems": {"MemberUUID", "ItemUUID", "BorrowDate", "ReturnDate", "Returned"},
+    "Attendance": {"MemberUUID", "EventUUID", "Present", "Timestamp"},
+}
+
+def require_device(device_id: UUID, account: Account, db: Session) -> Device:
+    device = db.get(Device, str(device_id))
+    if not device or device.account_id != account.id or device.revoked_at:
+        raise HTTPException(403, "This device is not registered or has been revoked.")
+    device.last_seen_at = now_utc()
+    return device
+
+def sync_writer(account: Account):
+    if account.role not in {"executive_admin", "officer"}:
+        raise HTTPException(403, "Your account can view synchronised records but cannot change them.")
+    return account
+
+def sync_reader(account: Account):
+    if account.role not in {"executive_admin", "officer", "read_only"}:
+        raise HTTPException(403, "Your account is not authorised to access shared society records.")
+    return account
+
+@app.post("/v1/devices", status_code=201)
+def register_device(body: DeviceRegisterBody, account: Account = Depends(authenticated),
+                    db: Session = Depends(db_session)):
+    active_count = db.scalar(select(func.count()).select_from(Device).where(
+        Device.account_id == account.id, Device.revoked_at.is_(None)))
+    if active_count >= 10:
+        raise HTTPException(409, "This account already has ten active devices. Revoke an unused device first.")
+    device = Device(account_id=account.id, device_name=body.device_name.strip(),
+                    platform=body.platform.strip())
+    db.add(device)
+    db.add(AuditEvent(actor_id=account.id, event_type="device.registered", subject=body.device_name[:100]))
+    db.commit()
+    return {"device_id": device.id, "device_name": device.device_name, "platform": device.platform,
+            "created_at": device.created_at.isoformat()}
+
+@app.get("/v1/devices")
+def list_devices(account: Account = Depends(authenticated), db: Session = Depends(db_session)):
+    rows = db.scalars(select(Device).where(Device.account_id == account.id).order_by(Device.created_at)).all()
+    return [{"device_id": row.id, "device_name": row.device_name, "platform": row.platform,
+             "created_at": row.created_at.isoformat(), "last_seen_at": row.last_seen_at.isoformat(),
+             "revoked": row.revoked_at is not None} for row in rows]
+
+@app.delete("/v1/devices/{device_id}")
+def revoke_device(device_id: UUID, account: Account = Depends(authenticated), db: Session = Depends(db_session)):
+    device = db.get(Device, str(device_id))
+    if not device or device.account_id != account.id:
+        raise HTTPException(404, "Device not found.")
+    if not device.revoked_at:
+        device.revoked_at = now_utc()
+        db.add(AuditEvent(actor_id=account.id, event_type="device.revoked", subject=device.device_name))
+        db.commit()
+    return {"device_id": device.id, "revoked": True}
+
+@app.post("/v1/sync/push")
+def sync_push(body: SyncPushBody, account: Account = Depends(authenticated),
+              db: Session = Depends(db_session)):
+    sync_writer(account)
+    device = require_device(body.device_id, account, db)
+    # Serialize concurrent writes to the shared version table on PostgreSQL.
+    if db.bind.dialect.name == "postgresql":
+        db.execute(text("LOCK TABLE sync_records IN SHARE ROW EXCLUSIVE MODE"))
+    accepted, conflicts = [], []
+    for change in body.changes:
+        entity_type = change.entity_type
+        entity_uuid = str(change.entity_uuid)
+        change_id = str(change.change_id)
+        allowed = SYNC_ENTITIES[entity_type]
+        if set(change.payload) - allowed:
+            raise HTTPException(422, f"Unsupported fields in {entity_type} payload.")
+        if len(json.dumps(change.payload, ensure_ascii=False).encode("utf-8")) > 262144:
+            raise HTTPException(413, "A synchronisation record exceeds 256 KB.")
+        if change.operation == "delete" and change.payload:
+            raise HTTPException(422, "Delete changes must use an empty payload.")
+        fingerprint = digest(json.dumps({
+            "entity_type": entity_type, "entity_uuid": entity_uuid,
+            "operation": change.operation, "base_version": change.base_version,
+            "payload": change.payload
+        }, sort_keys=True, separators=(",", ":")))
+        receipt = db.get(SyncReceipt, change_id)
+        if receipt:
+            if receipt.account_id != account.id or receipt.device_id != device.id:
+                raise HTTPException(409, "Change identifier was already used by another device.")
+            if receipt.payload_digest != fingerprint:
+                raise HTTPException(409, "Change identifier was reused with different content.")
+            accepted.append({"change_id": change_id, "version": receipt.applied_version, "duplicate": True})
+            continue
+        record = db.scalar(select(SyncRecord).where(
+            SyncRecord.entity_type == entity_type, SyncRecord.entity_uuid == entity_uuid).with_for_update())
+        current_version = record.version if record else 0
+        if change.base_version != current_version:
+            conflicts.append({"change_id": change_id, "entity_type": entity_type,
+                "entity_uuid": entity_uuid, "local_base_version": change.base_version,
+                "server_version": current_version,
+                "server_payload": record.payload if record else {},
+                "server_deleted": record.deleted if record else False})
+            continue
+        next_version = current_version + 1
+        payload = {} if change.operation == "delete" else change.payload
+        deleted = change.operation == "delete"
+        if record:
+            record.version = next_version
+            record.payload = payload
+            record.deleted = deleted
+            record.updated_at = now_utc()
+        else:
+            record = SyncRecord(entity_type=entity_type, entity_uuid=entity_uuid,
+                version=next_version, payload=payload, deleted=deleted, updated_at=now_utc())
+            db.add(record)
+        db.flush()
+        db.add(SyncEvent(entity_type=entity_type, entity_uuid=entity_uuid, version=next_version,
+                         payload=payload, deleted=deleted, changed_at=now_utc()))
+        db.add(SyncReceipt(change_id=change_id, account_id=account.id, device_id=device.id,
+            entity_type=entity_type, entity_uuid=entity_uuid, applied_version=next_version,
+            payload_digest=fingerprint))
+        accepted.append({"change_id": change_id, "version": next_version, "duplicate": False})
+    db.add(AuditEvent(actor_id=account.id, event_type="sync.push",
+                      subject=f"{len(accepted)} accepted; {len(conflicts)} conflicts"))
+    db.commit()
+    return {"accepted": accepted, "conflicts": conflicts}
+
+@app.get("/v1/sync/pull")
+def sync_pull(device_id: UUID, cursor: int = 0, limit: int = 200,
+              account: Account = Depends(authenticated), db: Session = Depends(db_session)):
+    sync_reader(account)
+    if cursor < 0:
+        raise HTTPException(400, "Cursor cannot be negative.")
+    if limit < 1 or limit > 500:
+        raise HTTPException(400, "Pull limit must be between 1 and 500.")
+    device = require_device(device_id, account, db)
+    rows = db.scalars(select(SyncEvent).where(SyncEvent.id > cursor)
+        .order_by(SyncEvent.id).limit(limit + 1)).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = rows[-1].id if rows else cursor
+    db.add(AuditEvent(actor_id=account.id, event_type="sync.pull", subject=f"device:{device.id}"))
+    db.commit()
+    return {"changes": [{"sequence": row.id, "entity_type": row.entity_type,
+        "entity_uuid": row.entity_uuid, "version": row.version,
+        "payload": row.payload, "deleted": row.deleted,
+        "changed_at": row.changed_at.isoformat()} for row in rows],
+        "next_cursor": next_cursor, "has_more": has_more}
+
+@app.get("/v1/sync/status")
+def sync_status(device_id: UUID, account: Account = Depends(authenticated),
+                db: Session = Depends(db_session)):
+    sync_reader(account)
+    device = require_device(device_id, account, db)
+    latest = db.scalar(select(func.max(SyncEvent.id))) or 0
+    db.commit()
+    return {"device_id": device.id, "latest_sequence": latest, "status": "ready"}

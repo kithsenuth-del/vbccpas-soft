@@ -6,6 +6,7 @@ from pathlib import Path
 
 from database_migrations import (
     apply_local_sync_foundation,
+    apply_relationship_uuid_migration,
     create_verified_backup,
     database_inventory,
 )
@@ -21,15 +22,15 @@ class DatabaseMigrationTests(unittest.TestCase):
                 CREATE TABLE Members (MemberID INTEGER PRIMARY KEY, Name TEXT NOT NULL);
                 CREATE TABLE Events (EventID INTEGER PRIMARY KEY, Title TEXT NOT NULL);
                 CREATE TABLE Inventory (ItemID INTEGER PRIMARY KEY, Name TEXT NOT NULL);
-                CREATE TABLE BorrowedItems (BorrowID INTEGER PRIMARY KEY, ItemID INTEGER);
-                CREATE TABLE Attendance (AttID INTEGER PRIMARY KEY, MemberID INTEGER);
+                CREATE TABLE BorrowedItems (BorrowID INTEGER PRIMARY KEY, ItemID INTEGER, MemberID INTEGER);
+                CREATE TABLE Attendance (AttID INTEGER PRIMARY KEY, MemberID INTEGER, EventID INTEGER);
                 CREATE TABLE Users (UserID INTEGER PRIMARY KEY, Username TEXT UNIQUE);
                 CREATE TABLE CustomLegacyTable (LegacyID INTEGER PRIMARY KEY, Payload TEXT);
                 INSERT INTO Members VALUES (7, 'Preserve this member');
                 INSERT INTO Events VALUES (8, 'Preserve this event');
                 INSERT INTO Inventory VALUES (9, 'Preserve this camera');
-                INSERT INTO BorrowedItems VALUES (10, 9);
-                INSERT INTO Attendance VALUES (11, 7);
+                INSERT INTO BorrowedItems VALUES (10, 9, 7);
+                INSERT INTO Attendance VALUES (11, 7, 8);
                 INSERT INTO Users VALUES (12, 'existing-admin');
                 INSERT INTO CustomLegacyTable VALUES (13, 'untouched');
             """)
@@ -99,6 +100,41 @@ class DatabaseMigrationTests(unittest.TestCase):
             self.assertFalse(conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='SyncOutbox'"
             ).fetchone())
+
+
+    def test_relationship_migration_preserves_integer_links_and_adds_stable_uuids(self):
+        apply_local_sync_foundation(self.db, self.root / "backups")
+        first = apply_relationship_uuid_migration(self.db, self.root / "backups")
+        second = apply_relationship_uuid_migration(self.db, self.root / "backups")
+        self.assertEqual(first["status"], "migrated")
+        self.assertEqual(second["status"], "already_applied")
+        with sqlite3.connect(self.db) as conn:
+            member_uuid = conn.execute(
+                "SELECT _sync_uuid FROM Members WHERE MemberID=7").fetchone()[0]
+            item_uuid = conn.execute(
+                "SELECT _sync_uuid FROM Inventory WHERE ItemID=9").fetchone()[0]
+            event_uuid = conn.execute(
+                "SELECT _sync_uuid FROM Events WHERE EventID=8").fetchone()[0]
+            self.assertEqual(conn.execute(
+                "SELECT ItemID,MemberID,ItemUUID,MemberUUID FROM BorrowedItems WHERE BorrowID=10"
+            ).fetchone(), (9, 7, item_uuid, member_uuid))
+            self.assertEqual(conn.execute(
+                "SELECT MemberID,EventID,MemberUUID,EventUUID FROM Attendance WHERE AttID=11"
+            ).fetchone(), (7, 8, member_uuid, event_uuid))
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM SchemaMigrations").fetchone()[0], 2)
+
+    def test_relationship_migration_refuses_orphaned_links(self):
+        apply_local_sync_foundation(self.db, self.root / "backups")
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE BorrowedItems SET MemberID=999 WHERE BorrowID=10")
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "orphaned"):
+            apply_relationship_uuid_migration(self.db, self.root / "backups")
+        with sqlite3.connect(self.db) as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(BorrowedItems)")}
+            self.assertNotIn("MemberUUID", columns)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM BorrowedItems WHERE MemberID=999").fetchone()[0], 1)
 
     def test_missing_database_is_not_created_silently(self):
         missing = self.root / "missing.db"
