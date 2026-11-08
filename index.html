@@ -121,6 +121,100 @@
         .section-card { border-radius: 18px !important; }
         #auth-gate > div { padding: 22px !important; }
       }
+    
+      /* Structured data-entry panels — Proton Drive-inspired spacing and hierarchy */
+      .section-card form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        gap: 16px 18px !important;
+        padding: 22px !important;
+        margin-top: 18px;
+        border: 1px solid rgba(216,183,121,.18) !important;
+        border-radius: 18px !important;
+        background: linear-gradient(155deg, rgba(255,255,255,.045), rgba(255,255,255,.018)) !important;
+        box-shadow: inset 0 1px rgba(255,255,255,.025), 0 12px 28px rgba(0,0,0,.12);
+      }
+      .section-card form > input[type="hidden"] { display: none !important; }
+      .section-card form > label {
+        display: flex !important;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        margin: 0 !important;
+        color: #e4ddd3 !important;
+        font-size: 12px !important;
+        font-weight: 650;
+        letter-spacing: .025em;
+      }
+      .section-card form > label input,
+      .section-card form > label select,
+      .section-card form > label textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        margin: 0 !important;
+        padding: 11px 13px !important;
+        border: 1px solid rgba(216,183,121,.2) !important;
+        border-radius: 10px !important;
+        background: #17181a !important;
+        color: var(--photo-ivory) !important;
+        font: inherit;
+        font-size: 14px;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,.16);
+      }
+      .section-card form > label textarea { min-height: 104px; resize: vertical; }
+      .section-card form > label input:hover,
+      .section-card form > label select:hover,
+      .section-card form > label textarea:hover { border-color: rgba(216,183,121,.38) !important; }
+      .section-card form > label input:focus,
+      .section-card form > label select:focus,
+      .section-card form > label textarea:focus {
+        border-color: var(--photo-copper) !important;
+        box-shadow: 0 0 0 3px rgba(200,117,72,.14) !important;
+      }
+      .section-card form > div:has(> button[type="submit"]) {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 2px 0 0 !important;
+        padding-top: 16px;
+        border-top: 1px solid rgba(216,183,121,.13);
+      }
+      .section-card form > div:has(> button[type="submit"]) button {
+        min-height: 42px;
+        padding: 10px 18px !important;
+        border-radius: 10px !important;
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .section-card form > div:has(> button[type="submit"]) button[type="button"] {
+        border: 1px solid rgba(216,183,121,.18);
+        background: rgba(255,255,255,.045) !important;
+        color: #ded6cc !important;
+        box-shadow: none !important;
+      }
+      .section-card form > p[id$="-status"] {
+        grid-column: 1 / -1;
+        margin: -5px 0 0 !important;
+        padding: 10px 12px;
+        border: 1px solid rgba(216,183,121,.1);
+        border-radius: 9px;
+        background: rgba(255,255,255,.025);
+        color: #aaa39a !important;
+        font-size: 12px;
+      }
+      #auth-gate label { display: block; }
+      #auth-gate label input { width: 100%; box-sizing: border-box; }
+      @media (max-width: 680px) {
+        .section-card form { grid-template-columns: minmax(0, 1fr); padding: 17px !important; gap: 14px !important; }
+        .section-card form > div:has(> button[type="submit"]) { grid-column: 1; }
+        .section-card form > p[id$="-status"] { grid-column: 1; }
+      }
+
     </style>
   </head>
   <body class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.3),_transparent_30%),linear-gradient(135deg,_#07131f_0%,_#0f172a_45%,_#111827_100%)] text-slate-100">
