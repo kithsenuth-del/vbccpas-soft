@@ -341,6 +341,7 @@ def apply_relationship_uuid_migration(
                 raise sqlite3.DatabaseError(
                     f"Cannot map {count} orphaned {table}.{local_fk} references to stable UUIDs"
                 )
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_sync_outbox_pending_entity ON SyncOutbox(EntityType,EntityUUID) WHERE Status='pending'")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_borrowed_member_uuid ON BorrowedItems(MemberUUID)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_borrowed_item_uuid ON BorrowedItems(ItemUUID)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_attendance_member_uuid ON Attendance(MemberUUID)")
