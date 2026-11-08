@@ -42,6 +42,17 @@ try {
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly
     if ($LASTEXITCODE -eq 0) { throw 'Recovery unexpectedly succeeded without its required backup.' }
     if (-not (Test-Path -LiteralPath $journalPath)) { throw 'Failed recovery journal was not retained.' }
+
+    # A verified install only needs journal cleanup; it must not be rolled back.
+    $journal.state = 'verified'
+    $journal.entries = @()
+    $journal | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $journalPath -Encoding UTF8
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly -Quiet
+    if ($LASTEXITCODE -ne 0) { throw 'Verified journal finalisation failed.' }
+    if (Test-Path -LiteralPath $journalPath) { throw 'Verified journal was not finalised.' }
+    if ((Get-Content -LiteralPath $targetExe -Raw).Trim() -ne 'previous working application') {
+        throw 'Verified journal finalisation unexpectedly changed the application.'
+    }
     Write-Host 'PowerShell updater recovery tests passed.'
 } finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
