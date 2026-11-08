@@ -62,6 +62,9 @@ try {
     if ($ParseErrors.Count -gt 0) {
         throw ("PowerShell updater syntax check failed:" + [Environment]::NewLine + ($ParseErrors | Out-String))
     }
+    Write-Host "Testing interrupted-update recovery and database preservation..."
+    & (Join-Path $Root "tests\test_updater_recovery.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "PowerShell recovery regression tests failed." }
 
     if (Test-Path -LiteralPath $Dist) {
         Remove-Item -LiteralPath $Dist -Recurse -Force
