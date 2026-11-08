@@ -303,7 +303,7 @@ try {
     } catch {
         $rollbackErrors += ('Recovery journal: ' + $_.Exception.Message)
     }
-    if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $_.Exception.Message) } catch { } }
+    if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureMessage) } catch { } }
     $message = 'The complete update failed. The updater attempted to restore the previous application files.'
     if ($rollbackErrors.Count -gt 0) {
         $message += [Environment]::NewLine + 'Some rollback operations need attention:' +
