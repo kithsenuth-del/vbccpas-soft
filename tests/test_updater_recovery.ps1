@@ -23,7 +23,7 @@ try {
         )
     }
     $journal | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $journalPath -Encoding UTF8
-    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly -Quiet
     if ($LASTEXITCODE -ne 0) { throw 'Recovery bootstrap returned a failure exit code.' }
     if ((Get-Content -LiteralPath $targetExe -Raw).Trim() -ne 'previous working application') {
         throw 'The previous application executable was not restored.'
