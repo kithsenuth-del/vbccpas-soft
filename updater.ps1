@@ -91,6 +91,14 @@ function Restore-RecoveryJournal([string]$ExpectedTarget) {
     for ($index = $entries.Count - 1; $index -ge 0; $index--) {
         $entry = $entries[$index]
         $destination = Get-AppDestination $root ([string]$entry.relative)
+        if ($entry.temporary) {
+            $temporaryPath = [IO.Path]::GetFullPath([string]$entry.temporary)
+            $destinationParent = [IO.Path]::GetDirectoryName($destination).TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
+            if ($temporaryPath.StartsWith($destinationParent, [StringComparison]::OrdinalIgnoreCase) -and
+                (Test-Path -LiteralPath $temporaryPath -PathType Leaf)) {
+                Remove-Item -LiteralPath $temporaryPath -Force
+            }
+        }
         if ([bool]$entry.existed) {
             $backup = [IO.Path]::GetFullPath([string]$entry.backup)
             $backupRoot = [IO.Path]::GetFullPath([string]$saved.backup).TrimEnd('\') + [IO.Path]::DirectorySeparatorChar
@@ -259,10 +267,15 @@ try {
         }
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         $temporary = $destination + '.vbccpas-new-' + [Guid]::NewGuid().ToString('N')
-        Copy-Item -LiteralPath $file.FullName -Destination $temporary
-        $journal.entries += [pscustomobject]@{ relative=$relative; destination=$destination; backup=$backupFile; existed=$existed }
+        $journal.entries += [pscustomobject]@{ relative=$relative; destination=$destination; backup=$backupFile; existed=$existed; temporary=$temporary }
         Save-RecoveryJournal $journal
+        Copy-Item -LiteralPath $file.FullName -Destination $temporary
         Move-Item -LiteralPath $temporary -Destination $destination -Force
+        $sourceHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+        $installedHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+        if ($sourceHash -ne $installedHash) {
+            throw ('Installed file verification failed: ' + $relative)
+        }
     }
 
     # Verify the replacement can launch before declaring success.
@@ -280,7 +293,8 @@ try {
     if (Test-Path -LiteralPath $stageRoot) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
-} catch {
+ } catch {
+    $failureMessage = $_.Exception.Message
     $rollbackErrors = @()
     try {
         if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
@@ -299,7 +313,7 @@ try {
     }
 
     $message += [Environment]::NewLine + 'Update log: ' + $logPath
-    $message += [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message
+    $message += [Environment]::NewLine + [Environment]::NewLine + $failureMessage
     if (-not $Quiet) { Show-UpdateError $message }
     if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
