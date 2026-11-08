@@ -30,6 +30,7 @@ A successful build produces:
 - `dist\VBCCPAS-Soft.exe` — the main desktop application
 - `dist\VBCCPAS-Updater.exe` — the independent graphical updater
 - `dist\updater.ps1` — the safe package installation/rollback script
+- `dist\Recover-VBCCPAS.bat` — emergency recovery launcher for interrupted installs or a damaged updater
 - `dist\vbccpas-managed-files.json` — the updater's managed-file manifest
 - `dist\VBCCPAS-Soft-Windows.zip` — the complete distributable package, including shortcut setup files
 
@@ -63,6 +64,7 @@ The web dashboard uses a device-bound passkey and an in-memory eight-hour sessio
 - The package is SHA-256 verified, each installed file is hash-checked, and the previous managed files are retained in `%LOCALAPPDATA%\\VBCCPAS\\UpdateBackups`.
 - The installer writes a per-file recovery journal before replacing files. If Windows restarts or the update is interrupted, launch `VBCCPAS-Updater.exe`; it will attempt to roll back the unfinished transaction before checking for another update.
 - To reinstall the latest complete application package, open `VBCCPAS-Updater.exe` and select **Repair Installation**. This can restore a missing main EXE as long as the updater EXE and installation folder are still available.
+- If the updater will not open after an interrupted replacement, double-click `Recover-VBCCPAS.bat`. It uses the separate recovery bootstrap and then opens the updater (or the main app if the updater is unavailable).
 - Update diagnostics are stored in `%LOCALAPPDATA%\\VBCCPAS\\update.log`. Keep the matching rollback folder if support/recovery is needed.
 - New updates are published automatically when changes are pushed to the `main` branch and the Windows build and integration checks pass.
 
