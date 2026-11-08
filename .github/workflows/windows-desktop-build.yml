@@ -98,10 +98,10 @@ jobs:
 
   windows-build:
     needs: [changes, integration]
-    if: needs.changes.outputs.code == 'true' && needs.integration.result == 'success' || github.event_name != 'pull_request'
+    if: (needs.changes.outputs.code == 'true' && needs.integration.result == 'success') || github.event_name != 'pull_request'
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -118,8 +118,26 @@ jobs:
           $shortcut = Join-Path $env:RUNNER_TEMP "VBCCPAS-Soft-test.lnk"
           ./Create-Desktop-Shortcut.ps1 -TargetExe "$PWD/dist/VBCCPAS-Soft.exe" -ShortcutPath $shortcut
           if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw "Shortcut was not created." }
+      - name: Upload Windows application and launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: VBCCPAS-Soft-Windows
+          path: dist/*
+          if-no-files-found: error
+
+  publish-release:
+    needs: windows-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: VBCCPAS-Soft-Windows
+          path: dist
       - name: Publish latest Windows release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.sha }}
@@ -129,9 +147,3 @@ jobs:
           generate_release_notes: true
           make_latest: true
           overwrite_files: true
-      - name: Upload Windows application and launcher
-        uses: actions/upload-artifact@v4
-        with:
-          name: VBCCPAS-Soft-Windows
-          path: dist/*
-          if-no-files-found: error
