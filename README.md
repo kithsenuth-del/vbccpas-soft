@@ -84,3 +84,13 @@ Integration tests use disposable temporary databases. The Windows GUI, shortcut 
 ## Security boundary
 
 This is a single-computer application, not a network-hosted multi-user service. Keep the browser dashboard bound to 127.0.0.1 / localhost. Never expose port 8000 to the LAN or public internet.
+
+
+## Central service and local-first synchronisation
+
+The repository now contains a separately deployable central account API and the first versioned sync protocol/local SQLite engine. These components are not yet connected to the Windows desktop screens; offline desktop operation is unchanged. Existing society records, local passwords and passkeys are not uploaded.
+
+- [Phase 2: central API and shared accounts](docs/phase-2-central-api.md)
+- [Phase 3: local-first synchronisation foundation](docs/phase-3-local-first-sync.md)
+
+Only test copies should be used for the explicit schema migrations until the later desktop integration and two-computer tests are complete.
