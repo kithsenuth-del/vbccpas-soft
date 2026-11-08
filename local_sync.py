@@ -157,13 +157,13 @@ def pending_changes(database_path, limit=100):
         conn.close()
 
 
-def acknowledge_change(database_path, change_id, sent_payload, applied_version):
+def acknowledge_change(database_path, change_id, sent_payload, applied_version, sent_operation=None):
     """Acknowledge only the exact snapshot sent; preserve edits made in-flight."""
     conn = _connect(database_path)
     try:
         _ensure_ready(conn)
         row = conn.execute(
-            "SELECT EntityType,EntityUUID,Payload,Status FROM SyncOutbox WHERE ChangeID=?",
+            "SELECT EntityType,EntityUUID,Operation,Payload,Status FROM SyncOutbox WHERE ChangeID=?",
             (str(change_id),),
         ).fetchone()
         if not row:
@@ -171,7 +171,7 @@ def acknowledge_change(database_path, change_id, sent_payload, applied_version):
         key = f"remote_version:{row['EntityType']}:{row['EntityUUID']}"
         _set_state(conn, key, int(applied_version))
         current_payload = json.loads(row["Payload"])
-        if current_payload == sent_payload:
+        if current_payload == sent_payload and (sent_operation is None or row["Operation"] == sent_operation):
             conn.execute("UPDATE SyncOutbox SET Status='synced',LastError=NULL WHERE ChangeID=?",
                          (str(change_id),))
         else:
