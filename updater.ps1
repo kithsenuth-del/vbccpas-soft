@@ -265,7 +265,9 @@ try {
 
     New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
     New-Item -ItemType Directory -Path (Split-Path -Parent $recoveryScriptPath) -Force | Out-Null
-    Copy-Item -LiteralPath $PSCommandPath -Destination $recoveryScriptPath -Force
+    $recoveryTemp = $recoveryScriptPath + '.tmp-' + [Guid]::NewGuid().ToString('N')
+    Copy-Item -LiteralPath $PSCommandPath -Destination $recoveryTemp -Force
+    Move-Item -LiteralPath $recoveryTemp -Destination $recoveryScriptPath -Force
     Add-Content -LiteralPath $logPath -Value ("[{0}] Update started. Target: {1}; Repair: {2}" -f (Get-Date -Format o), $TargetExe, [bool]$RepairMode)
     $backupRoot = Join-Path $env:LOCALAPPDATA 'VBCCPAS\UpdateBackups'
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
