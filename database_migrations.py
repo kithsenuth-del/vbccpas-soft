@@ -143,9 +143,14 @@ def apply_local_sync_foundation(
             return {"status": "already_applied", "backup": str(backup),
                     "version": MIGRATION_VERSION}
 
+        missing_tables = sorted(set(SYNC_TABLES) - set(before["tables"]))
+        if missing_tables:
+            raise sqlite3.DatabaseError(
+                "Refusing partial migration; required tables are missing: "
+                + ", ".join(missing_tables)
+            )
+
         for table, expected_pk in SYNC_TABLES.items():
-            if table not in before["tables"]:
-                continue
             columns = _table_columns(conn, table)
             quoted = '"' + table.replace('"', '""') + '"'
             pk_columns = [row[1] for row in conn.execute(
@@ -209,6 +214,25 @@ def apply_local_sync_foundation(
             (MIGRATION_VERSION, datetime.now(timezone.utc).isoformat(),
              "Add stable UUIDs and local-first synchronisation bookkeeping"),
         )
+        # Validate the complete migration while it is still rollback-safe.
+        for table, old in before["tables"].items():
+            current_count = conn.execute(
+                'SELECT COUNT(*) FROM "' + table.replace('"', '""') + '"'
+            ).fetchone()[0]
+            if current_count != old["row_count"]:
+                raise sqlite3.DatabaseError(
+                    f"Record count changed unexpectedly in {table}"
+                )
+        for table in SYNC_TABLES:
+            null_count, distinct_count, total_count = conn.execute(
+                f'SELECT COUNT(*) - COUNT(_sync_uuid), '
+                f'COUNT(DISTINCT _sync_uuid), COUNT(*) FROM "{table}"'
+            ).fetchone()
+            if null_count or distinct_count != total_count:
+                raise sqlite3.DatabaseError(
+                    f"Stable UUID validation failed for {table}"
+                )
+
         conn.commit()
     except Exception:
         conn.rollback()
