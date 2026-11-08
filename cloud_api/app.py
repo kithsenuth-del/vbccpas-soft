@@ -21,7 +21,6 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 bearer = HTTPBearer(auto_error=False)
 SESSION_HOURS = int(os.environ.get("VBCCPAS_SESSION_HOURS", "12"))
-ROLES = {"executive_admin", "officer", "member", "read_only"}
 
 class Base(DeclarativeBase):
     pass
@@ -122,10 +121,15 @@ async def add_security_headers(request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 @app.get("/v1/health")
-def health():
+def health(db: Session = Depends(db_session)):
+    try:
+        db.execute(select(1))
+    except Exception:
+        raise HTTPException(503, "Central database is unavailable.")
     return {"status": "ok", "service": "vbccpas-central-api"}
 
 def authenticated(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(db_session)):
