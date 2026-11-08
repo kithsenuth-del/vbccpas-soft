@@ -49,6 +49,36 @@ try {
     }
 
     $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
+
+    # Request elevation only for protected installation folders.
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    $canWriteDirectory = $false
+    if (-not $isAdministrator) {
+        $probe = Join-Path $targetDirectory ('.vbccpas-write-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+        try {
+            $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            $stream.Dispose()
+            Remove-Item -LiteralPath $probe -Force
+            $canWriteDirectory = $true
+        } catch {
+            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if (-not $isAdministrator -and -not $canWriteDirectory) {
+        $arguments = @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', ('"' + $PSCommandPath + '"'),
+            '-ProcessId', $ProcessId,
+            '-UpdaterProcessId', $UpdaterProcessId,
+            '-TargetExe', ('"' + $TargetExe + '"'),
+            '-PackageDirectory', ('"' + $PackageDirectory + '"')
+        )
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments | Out-Null
+        exit 0
+    }
+
     Wait-ForProcessExit $ProcessId 'VBCCPAS Soft'
     Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater'
 
