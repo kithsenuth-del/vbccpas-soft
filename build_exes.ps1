@@ -108,6 +108,7 @@ try {
     Compress-Archive -Path (Join-Path $Dist "*") -DestinationPath $ZipPath -Force
 
     Write-Host "Verifying the update package contents..."
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
     $Archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
     try {
         $Entries = @($Archive.Entries | ForEach-Object { $_.FullName })
