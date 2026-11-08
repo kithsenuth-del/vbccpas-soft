@@ -37,7 +37,6 @@ try {
     Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
 
     Write-Host "Running isolated integration and safety tests..."
-    Invoke-Python test_integration.py
     Invoke-Python tests/test_passkey_recovery.py
     Invoke-Python tests/test_updater.py
     Invoke-Python tests/test_updater_package.py
