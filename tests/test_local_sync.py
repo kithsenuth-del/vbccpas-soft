@@ -59,7 +59,7 @@ class LocalSyncTests(unittest.TestCase):
         with sqlite3.connect(self.db) as conn:
             conn.execute("UPDATE Members SET Name='Changed while uploading' WHERE MemberID=1")
         queue_local_change(self.db, "Members", member_uuid)
-        self.assertTrue(acknowledge_change(self.db, sent["change_id"], sent_payload, 1))
+        self.assertTrue(acknowledge_change(self.db, sent["change_id"], sent_payload, 1, sent["operation"]))
         pending = pending_changes(self.db)
         self.assertEqual(len(pending), 1)
         self.assertNotEqual(pending[0]["change_id"], sent["change_id"])
