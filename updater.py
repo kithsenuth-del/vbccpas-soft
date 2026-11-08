@@ -95,16 +95,24 @@ def extract_package(package_bytes, destination):
         entries = archive.infolist()
         if not entries or len(entries) > MAX_PACKAGE_FILES:
             raise ValueError("The update package contains an invalid number of files.")
-        names = [entry.filename for entry in entries]
-        if len(names) != len(set(names)):
-            raise ValueError("The update package contains duplicate entries.")
+        names = set()
         for entry in entries:
             raw_name = entry.filename
             if not raw_name or "\\" in raw_name or ":" in raw_name:
                 raise ValueError("The update package contains an unsafe file path.")
-            relative = PurePosixPath(raw_name)
-            if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
+            directory_entry = entry.is_dir()
+            path_text = raw_name[:-1] if directory_entry and raw_name.endswith("/") else raw_name
+            raw_parts = path_text.split("/")
+            if (not path_text or path_text.startswith("/")
+                    or any(part in ("", ".", "..") for part in raw_parts)):
                 raise ValueError("The update package contains a path outside the application folder.")
+            relative = PurePosixPath(path_text)
+            if relative.is_absolute():
+                raise ValueError("The update package contains a path outside the application folder.")
+            collision_key = relative.as_posix().casefold()
+            if collision_key in names:
+                raise ValueError("The update package contains duplicate or Windows-colliding entries.")
+            names.add(collision_key)
             reserved_names = {"CON", "PRN", "AUX", "NUL"} | {
                 f"{prefix}{number}" for prefix in ("COM", "LPT") for number in range(1, 10)
             }
@@ -117,7 +125,7 @@ def extract_package(package_bytes, destination):
             mode = (entry.external_attr >> 16) & 0xFFFF
             if stat.S_ISLNK(mode):
                 raise ValueError("The update package contains a symbolic link.")
-            if entry.is_dir():
+            if directory_entry:
                 continue
             if entry.file_size < 0 or entry.file_size > MAX_EXTRACTED_FILE_BYTES:
                 raise ValueError("An application file exceeds the extraction size limit.")
@@ -153,6 +161,35 @@ def extract_package(package_bytes, destination):
     if set(manifest_files) != actual_files:
         raise ValueError("The application package manifest does not match its contents.")
     return extracted
+
+
+def recover_interrupted_update(target_exe, recovery_script=None):
+    """Run the persistent recovery bootstrap before checking or applying updates."""
+    target = Path(target_exe).resolve()
+    if recovery_script is None:
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if not local_app_data:
+            return
+        recovery_script = Path(local_app_data) / "VBCCPAS" / "Recovery" / "updater-recovery.ps1"
+    script = Path(recovery_script)
+    if not script.is_file():
+        return
+    command = [
+        "powershell.exe", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass", "-File", str(script),
+        "-TargetExe", str(target), "-RecoverOnly",
+    ]
+    completed = subprocess.run(
+        command, capture_output=True, text=True, timeout=180, check=False,
+        creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                       if os.name == "nt" else 0),
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()
+        raise RuntimeError(
+            "An interrupted VBCCPAS update needs recovery before another update"
+            + (": " + detail if detail else ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log.")
+        )
 
 
 def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False):
