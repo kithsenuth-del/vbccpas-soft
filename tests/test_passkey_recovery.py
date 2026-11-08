@@ -1,6 +1,7 @@
 """Regression tests for safe first-time passkey setup recovery."""
 import sqlite3
 import tempfile
+from contextlib import closing
 import unittest
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ class PasskeyRecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db_path = str(Path(directory) / "society.db")
             passkey_auth.initialize(db_path)
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn:
                 conn.execute("""CREATE TABLE Members (
                     MemberID INTEGER PRIMARY KEY, Name TEXT NOT NULL
                 )""")
@@ -34,13 +35,14 @@ class PasskeyRecoveryTests(unittest.TestCase):
                     "INSERT INTO PasskeyMeta (MetaKey, MetaValue) VALUES "
                     "('user_handle', 'preserved-handle')"
                 )
+                conn.commit()
 
             self.assertTrue(passkey_auth.configured(db_path))
             removed = passkey_auth.reset_registration_state(db_path)
 
             self.assertEqual(removed, 1)
             self.assertFalse(passkey_auth.configured(db_path))
-            with sqlite3.connect(db_path) as conn:
+            with closing(sqlite3.connect(db_path)) as conn:
                 self.assertEqual(conn.execute("SELECT Name FROM Members").fetchone()[0],
                                  "Test Member")
                 self.assertEqual(
