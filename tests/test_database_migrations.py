@@ -1,0 +1,83 @@
+"""Tests for the non-destructive local-first database migration foundation."""
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
+
+from database_migrations import (
+    apply_local_sync_foundation,
+    create_verified_backup,
+    database_inventory,
+)
+
+
+class DatabaseMigrationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.db = self.root / "society.db"
+        with sqlite3.connect(self.db) as conn:
+            conn.executescript("""
+                CREATE TABLE Members (MemberID INTEGER PRIMARY KEY, Name TEXT NOT NULL);
+                CREATE TABLE Events (EventID INTEGER PRIMARY KEY, Title TEXT NOT NULL);
+                CREATE TABLE Inventory (ItemID INTEGER PRIMARY KEY, Name TEXT NOT NULL);
+                CREATE TABLE BorrowedItems (BorrowID INTEGER PRIMARY KEY, ItemID INTEGER);
+                CREATE TABLE Attendance (AttID INTEGER PRIMARY KEY, MemberID INTEGER);
+                CREATE TABLE Users (UserID INTEGER PRIMARY KEY, Username TEXT UNIQUE);
+                CREATE TABLE CustomLegacyTable (LegacyID INTEGER PRIMARY KEY, Payload TEXT);
+                INSERT INTO Members VALUES (7, 'Preserve this member');
+                INSERT INTO Events VALUES (8, 'Preserve this event');
+                INSERT INTO Inventory VALUES (9, 'Preserve this camera');
+                INSERT INTO BorrowedItems VALUES (10, 9);
+                INSERT INTO Attendance VALUES (11, 7);
+                INSERT INTO Users VALUES (12, 'existing-admin');
+                INSERT INTO CustomLegacyTable VALUES (13, 'untouched');
+            """)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_verified_backup_matches_source(self):
+        backup = create_verified_backup(self.db, self.root / "backups")
+        self.assertTrue(backup.is_file())
+        self.assertEqual(database_inventory(self.db)["tables"],
+                         database_inventory(backup)["tables"])
+
+    def test_migration_preserves_existing_records_and_primary_keys(self):
+        result = apply_local_sync_foundation(self.db, self.root / "backups")
+        self.assertEqual(result["status"], "migrated")
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT Name FROM Members WHERE MemberID=7").fetchone()[0],
+                             "Preserve this member")
+            self.assertEqual(conn.execute("SELECT Title FROM Events WHERE EventID=8").fetchone()[0],
+                             "Preserve this event")
+            self.assertEqual(conn.execute("SELECT Name FROM Inventory WHERE ItemID=9").fetchone()[0],
+                             "Preserve this camera")
+            self.assertEqual(conn.execute("SELECT Username FROM Users WHERE UserID=12").fetchone()[0],
+                             "existing-admin")
+            self.assertEqual(conn.execute("SELECT Payload FROM CustomLegacyTable WHERE LegacyID=13").fetchone()[0],
+                             "untouched")
+            for table in ("Members", "Events", "Inventory", "BorrowedItems", "Attendance"):
+                uuids = conn.execute(f"SELECT _sync_uuid FROM {table}").fetchall()
+                self.assertTrue(uuids and all(row[0] for row in uuids))
+                self.assertEqual(len(uuids), len(set(row[0] for row in uuids)))
+        self.assertEqual(result["before"]["tables"]["Members"]["row_count"],
+                         result["after"]["tables"]["Members"]["row_count"])
+
+    def test_migration_is_idempotent(self):
+        first = apply_local_sync_foundation(self.db, self.root / "backups")
+        second = apply_local_sync_foundation(self.db, self.root / "backups")
+        self.assertEqual(first["status"], "migrated")
+        self.assertEqual(second["status"], "already_applied")
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM SchemaMigrations").fetchone()[0], 1)
+
+    def test_missing_database_is_not_created_silently(self):
+        missing = self.root / "missing.db"
+        with self.assertRaises(FileNotFoundError):
+            apply_local_sync_foundation(missing, self.root / "backups")
+        self.assertFalse(missing.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
