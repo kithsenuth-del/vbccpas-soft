@@ -129,6 +129,7 @@ try {
     }
     if ($RecoverOnly) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+        if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) { exit 0 }
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
