@@ -143,9 +143,9 @@ def extract_package(package_bytes, destination):
             output.write_bytes(data)
             extracted.append(relative.as_posix())
 
-    required = {"VBCCPAS-Soft.exe", "VBCCPAS-Updater.exe", "updater.ps1", MANIFEST_NAME}
+    required = {"VBCCPAS-Soft.exe", "VBCCPAS-Updater.exe", "updater.ps1", "Recover-VBCCPAS.bat", MANIFEST_NAME}
     if not required.issubset(set(extracted)):
-        raise ValueError("The update package is missing the application, standalone updater, or package manifest.")
+        raise ValueError("The update package is missing the application, standalone updater, recovery launcher, or package manifest.")
     try:
         manifest = json.loads((destination / MANIFEST_NAME).read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
