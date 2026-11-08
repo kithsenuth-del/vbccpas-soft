@@ -31,6 +31,8 @@ def now_utc():
 def is_after(value, reference):
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
     return value > reference
 
 class Account(Base):
