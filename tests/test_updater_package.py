@@ -64,6 +64,21 @@ class FullPackageExtractionTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "protected user data"):
                         updater.extract_package(package, folder)
 
+    def test_rejects_manifest_that_does_not_match_package_contents(self):
+        package = make_zip([
+            ("VBCCPAS-Soft.exe", b"application"),
+            ("VBCCPAS-Updater.exe", b"updater"),
+            ("updater.ps1", b"installer"),
+            ("assets/new-module.py", b"module"),
+            (updater.MANIFEST_NAME, __import__("json").dumps({
+                "schema_version": 1,
+                "files": ["VBCCPAS-Soft.exe", "VBCCPAS-Updater.exe", "updater.ps1"],
+            })),
+        ], add_manifest=False)
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError, "manifest does not match"):
+                updater.extract_package(package, folder)
+
     def test_requires_main_application_and_installer(self):
         package = make_zip([
             ("notes.txt", b"not an application"),
