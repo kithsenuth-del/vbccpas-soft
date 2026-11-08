@@ -2,13 +2,16 @@ param(
     [Parameter(Mandatory=$true)][int]$ProcessId,
     [Parameter(Mandatory=$true)][string]$TargetExe,
     [Parameter(Mandatory=$true)][string]$PackageDirectory,
-    [int]$UpdaterProcessId = 0
+    [int]$UpdaterProcessId = 0,
+    [switch]$RepairMode
 )
 
 $ErrorActionPreference = 'Stop'
 $changed = New-Object System.Collections.ArrayList
 $backupDirectory = $null
 $stageRoot = $null
+$logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
+$journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
 $manifestName = 'vbccpas-managed-files.json'
 $protectedParts = @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data')
 
@@ -65,13 +68,15 @@ function Get-AppDestination([string]$Root, [string]$RelativePath) {
 
 try {
     $TargetExe = [IO.Path]::GetFullPath($TargetExe)
+    $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
     if ([IO.Path]::GetFileName($TargetExe) -ne 'VBCCPAS-Soft.exe') {
         throw 'The selected application target is not VBCCPAS-Soft.exe.'
     }
-    if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) {
-        throw 'The installed VBCCPAS application could not be found.'
+    if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
+        throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
     }
+    if (-not (Test-Path -LiteralPath $targetDirectory -PathType Container)) { throw 'The installation folder does not exist.' }
     if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory 'VBCCPAS-Soft.exe') -PathType Leaf)) {
         throw 'The downloaded package does not contain VBCCPAS-Soft.exe.'
     }
@@ -109,8 +114,6 @@ try {
         throw 'The package manifest does not match the files in the downloaded package.'
     }
 
-    $targetDirectory = [IO.Path]::GetDirectoryName($TargetExe)
-
     # Request elevation only for protected installation folders.
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -136,6 +139,7 @@ try {
             '-TargetExe', ('"' + $TargetExe + '"'),
             '-PackageDirectory', ('"' + $PackageDirectory + '"')
         )
+        if ($RepairMode) { $arguments += '-RepairMode' }
         Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments | Out-Null
         exit 0
     }
@@ -159,11 +163,16 @@ try {
         foreach ($relative in $oldRelativeFiles) { Assert-SafeRelativePath ([string]$relative) }
     }
 
+    New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Update started. Target: {1}; Repair: {2}" -f (Get-Date -Format o), $TargetExe, [bool]$RepairMode)
     $backupRoot = Join-Path $env:LOCALAPPDATA 'VBCCPAS\UpdateBackups'
     New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
     $backupDirectory = Join-Path $backupRoot ([Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
 
+    $journal = [ordered]@{ state='installing'; target=$TargetExe; backup=$backupDirectory; started=(Get-Date -Format o) }
+    $journal | ConvertTo-Json | Set-Content -LiteralPath $journalPath -Encoding UTF8
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Recovery journal created: {1}" -f (Get-Date -Format o), $backupDirectory)
     $newManaged = @{}
     foreach ($relative in $newRelativeFiles) { $newManaged[[string]$relative] = $true }
     $newManaged[$manifestName] = $true
@@ -200,9 +209,18 @@ try {
         Move-Item -LiteralPath $temporary -Destination $destination -Force
     }
 
-    # Retain this backup set in LocalAppData for manual recovery if needed.
-    Start-Process -FilePath $TargetExe | Out-Null
+    # Verify the replacement can launch before declaring success.
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Files replaced; checking application startup." -f (Get-Date -Format o))
+    $started = Start-Process -FilePath $TargetExe -PassThru
+    Start-Sleep -Seconds 8
+    $started.Refresh()
+    if ($started.HasExited) { throw ('The updated application exited during startup (exit code ' + $started.ExitCode + ').') }
+    $journal.state = 'verified'
+    $journal.verified = Get-Date -Format o
+    $journal | ConvertTo-Json | Set-Content -LiteralPath $journalPath -Encoding UTF8
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Application startup verified. Backup retained at {1}" -f (Get-Date -Format o), $backupDirectory)
     $stageRoot = Split-Path -Parent $PackageDirectory
+    if (Test-Path -LiteralPath $journalPath) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $stageRoot) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -222,6 +240,7 @@ try {
             $rollbackErrors += ($item.Destination + ': ' + $_.Exception.Message)
         }
     }
+    if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $_.Exception.Message) } catch { } }
     $message = 'The complete update failed. The updater attempted to restore the previous application files.'
     if ($rollbackErrors.Count -gt 0) {
         $message += [Environment]::NewLine + 'Some rollback operations need attention:' +
@@ -229,6 +248,8 @@ try {
     } elseif ($backupDirectory) {
         $message += [Environment]::NewLine + 'Rollback copy: ' + $backupDirectory
     }
+    if ($rollbackErrors.Count -eq 0 -and $journalPath -and (Test-Path -LiteralPath $journalPath)) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
+    $message += [Environment]::NewLine + 'Update log: ' + $logPath
     $message += [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message
     Show-UpdateError $message
     if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
