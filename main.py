@@ -9,6 +9,7 @@ import os
 import csv
 import sys
 from datetime import datetime
+from database_migrations import create_verified_backup
 
 if getattr(sys, 'frozen', False):
 	BASE_DIR = os.path.dirname(sys.executable)
@@ -169,6 +170,20 @@ def setup_database():
 			SELECT AttendanceID, MemberID, EventID, Present, datetime('now') FROM Attendance_old
 			''')
 			cur.execute('DROP TABLE Attendance_old')
+
+	# Preserve a verified copy before any legacy conversion can rename/drop tables.
+	legacy_migration_needed = (
+		(table_exists('Members') and {'memberid', 'name'}.issubset(set(c.lower() for c in get_columns('Members'))) and
+		 any(x in set(c.lower() for c in get_columns('Members')) for x in ('contact', 'role', 'status', 'itemname', 'description', 'location')) and
+		 not {'memberid', 'name', 'class', 'roll', 'email'}.issubset(set(c.lower() for c in get_columns('Members')))) or
+		(table_exists('Events') and 'notes' not in set(c.lower() for c in get_columns('Events')) and 'description' in set(c.lower() for c in get_columns('Events'))) or
+		(table_exists('Inventory') and 'name' not in set(c.lower() for c in get_columns('Inventory')) and 'itemname' in set(c.lower() for c in get_columns('Inventory'))) or
+		(table_exists('BorrowedItems') and 'borrowdate' not in set(c.lower() for c in get_columns('BorrowedItems')) and 'dateborrowed' in set(c.lower() for c in get_columns('BorrowedItems'))) or
+		(table_exists('Attendance') and 'attid' not in set(c.lower() for c in get_columns('Attendance')) and 'attendanceid' in set(c.lower() for c in get_columns('Attendance')))
+	)
+	if legacy_migration_needed:
+		# Fail closed: if backup or verification fails, do not run destructive conversions.
+		create_verified_backup(DB_PATH)
 
 	# Run migrations for any legacy schema before creating the expected tables.
 	migrate_members()
