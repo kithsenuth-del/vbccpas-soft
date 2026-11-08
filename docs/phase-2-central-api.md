@@ -28,7 +28,7 @@ python -m pip install -r cloud_api/requirements.txt
 For deployment, set a unique database password in the host's secret environment. Then start the stack:
 
 ```sh
-export VBCCPAS_DB_PASSWORD='use-a-long-random-secret'
+export VBCCPAS_DB_PASSWORD="$(openssl rand -hex 32)"
 docker compose -f cloud_api/docker-compose.yml up -d --build
 ```
 
