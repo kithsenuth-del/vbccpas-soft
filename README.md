@@ -19,11 +19,25 @@ Do not move or delete the extracted application folder after creating the shortc
 
 ## Build from source
 
-On Windows, install Python 3.10+ and the Python launcher (py), then run in PowerShell:
+On Windows, install **Python 3.11** with the Python launcher (`py`). Node.js is recommended for the dashboard JavaScript syntax check. From PowerShell, run:
 
     .\build_exes.ps1
 
-The script builds dist\VBCCPAS-Soft.exe, copies the shortcut setup files into dist, and creates a desktop shortcut on the build computer. Distribute the entire dist folder (or ZIP its contents) so other computers receive the shortcut setup files too.
+The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, isolated integration tests, passkey recovery tests, updater/package tests, data-flow safety checks, and the PowerShell updater parser check. If Node.js is installed, it also checks the dashboard JavaScript.
+
+A successful build produces:
+
+- `dist\VBCCPAS-Soft.exe` — the main desktop application
+- `dist\VBCCPAS-Updater.exe` — the independent graphical updater
+- `dist\updater.ps1` — the safe package installation/rollback script
+- `dist\vbccpas-managed-files.json` — the updater's managed-file manifest
+- `dist\VBCCPAS-Soft-Windows.zip` — the complete distributable package, including shortcut setup files
+
+The build script does not create a shortcut on the build computer by default. To also create one there, run:
+
+    .\build_exes.ps1 -CreateDesktopShortcut
+
+Distribute the complete `VBCCPAS-Soft-Windows.zip` rather than only the main EXE. Extract it to a permanent folder on the destination computer and run `Setup-VBCCPAS-Shortcut.bat`.
 
 ## First-time administrator setup
 
@@ -45,7 +59,7 @@ The web dashboard uses a device-bound passkey and an in-memory eight-hour sessio
 - Open **Maintenance & Backups → Check for Software Updates** while connected to the internet.
 - The app checks the latest published Windows release from this official GitHub repository.
 - If an update is available, you can choose whether to install it. The package is downloaded over HTTPS and verified against GitHub's SHA-256 asset digest before installation.
-- The updater replaces only the application executable after the app closes. It does not include or overwrite `society.db`, backups, or passkey data.
+- The updater replaces only application-managed files after the app closes. It does not include or overwrite `society.db`, backups, or passkey data.
 - New updates are published automatically when changes are pushed to the `main` branch and the Windows build and integration checks pass.
 
 ## Data storage
@@ -54,13 +68,18 @@ The existing society.db remains beside the application executable. Keep the appl
 
 ## Developer verification
 
+Install dependencies and run the checks from the repository root:
+
     python -m pip install -r requirements.txt
-    python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py
+    python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
     python test_integration.py
+    python tests/test_passkey_recovery.py
+    python tests/test_updater.py
+    python tests/test_updater_package.py
     python verify_data_flow.py
     python check_frontend.py
 
-Integration tests use disposable temporary databases. The Windows GUI and Windows Hello ceremony still require testing on a Windows computer.
+Integration tests use disposable temporary databases. The Windows GUI, shortcut COM integration, Windows Hello ceremony, and final packaged executable still require testing on a Windows computer. The GitHub Actions workflow performs the automated Windows build and package checks on pushes to `main`.
 
 ## Security boundary
 
