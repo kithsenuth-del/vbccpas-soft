@@ -23,7 +23,7 @@ On Windows, install **Python 3.11** with the Python launcher (`py`). Node.js is 
 
     .\build_exes.ps1
 
-The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater/package tests, data-flow safety checks, and the PowerShell updater parser check. If Node.js is installed, it also checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
+The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater/package tests, data-flow safety checks, PowerShell syntax validation, and a PowerShell rollback-journal recovery test (including a check that society.db is preserved). If Node.js is installed, it also checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
 
 A successful build produces:
 
@@ -59,7 +59,11 @@ The web dashboard uses a device-bound passkey and an in-memory eight-hour sessio
 - Open **Maintenance & Backups → Check for Software Updates** while connected to the internet.
 - The app checks the latest published Windows release from this official GitHub repository.
 - If an update is available, you can choose whether to install it. The package is downloaded over HTTPS and verified against GitHub's SHA-256 asset digest before installation.
-- The updater replaces only application-managed files after the app closes. It does not include or overwrite `society.db`, backups, or passkey data.
+- The updater replaces only application-managed files after the app closes. It does not include or overwrite `society.db`, backups, exports, logs, or protected user-data folders.
+- The package is SHA-256 verified, each installed file is hash-checked, and the previous managed files are retained in `%LOCALAPPDATA%\\VBCCPAS\\UpdateBackups`.
+- The installer writes a per-file recovery journal before replacing files. If Windows restarts or the update is interrupted, launch `VBCCPAS-Updater.exe`; it will attempt to roll back the unfinished transaction before checking for another update.
+- To reinstall the latest complete application package, open `VBCCPAS-Updater.exe` and select **Repair Installation**. This can restore a missing main EXE as long as the updater EXE and installation folder are still available.
+- Update diagnostics are stored in `%LOCALAPPDATA%\\VBCCPAS\\update.log`. Keep the matching rollback folder if support/recovery is needed.
 - New updates are published automatically when changes are pushed to the `main` branch and the Windows build and integration checks pass.
 
 ## Data storage
