@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vbccpas
+      POSTGRES_USER: vbccpas
+      POSTGRES_PASSWORD: ${VBCCPAS_DB_PASSWORD:?Set VBCCPAS_DB_PASSWORD in the deployment environment}
+    volumes:
+      - vbccpas-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vbccpas -d vbccpas"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  api:
+    build:
+      context: ..
+      dockerfile: cloud_api/Dockerfile
+    restart: unless-stopped
+    environment:
+      VBCCPAS_DATABASE_URL: postgresql+psycopg://vbccpas:${VBCCPAS_DB_PASSWORD}@db:5432/vbccpas
+      VBCCPAS_SESSION_HOURS: "12"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+volumes:
+  vbccpas-postgres:
