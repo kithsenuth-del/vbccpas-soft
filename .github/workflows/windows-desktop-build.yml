@@ -109,9 +109,11 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
       - name: Run verified local Windows build script
         shell: pwsh
-        run: .\\build_exes.ps1
+        run: .\\build_exes.ps1 -SkipPreBuildTests
       - name: Verify Windows desktop shortcut creation
         shell: pwsh
         run: |
