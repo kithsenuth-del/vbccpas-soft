@@ -93,8 +93,7 @@ jobs:
           }
           $manifest = @{ schema_version = 1; files = @($files | Sort-Object) }
           $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path dist/vbccpas-managed-files.json -Encoding utf8
-          $packageFiles = Get-ChildItem dist -File -Recurse | Where-Object { $_.Name -ne 'VBCCPAS-Soft-Windows.zip' } | ForEach-Object FullName
-          Compress-Archive -Path $packageFiles -DestinationPath dist/VBCCPAS-Soft-Windows.zip -Force
+          Compress-Archive -Path dist/* -DestinationPath dist/VBCCPAS-Soft-Windows.zip -Force
       - name: Publish latest Windows release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
