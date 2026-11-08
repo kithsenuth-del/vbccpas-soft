@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install application dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt -r cloud_api/requirements.txt httpx==0.28.1
       - name: Compile Python modules
         run: python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py build_info.py test_integration.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py updater_app.py
       - name: Run isolated integration tests
@@ -37,7 +37,7 @@ jobs:
         run: python tests/test_updater.py
       - name: Test safe full-application package extraction
         run: python tests/test_updater_package.py
-      - name: Run passkey safety checks
+      - name: Test central API and shared account lifecycle\n        run: python -m unittest discover -s tests -p "test_cloud_api.py" -v\n      - name: Run passkey safety checks
         run: python verify_data_flow.py
       - name: Check dashboard JavaScript
         run: python check_frontend.py
