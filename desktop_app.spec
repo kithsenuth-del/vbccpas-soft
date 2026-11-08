@@ -7,7 +7,7 @@ a = Analysis(
     ["desktop_app.py"],
     pathex=["."],
     binaries=webauthn_binaries,
-    datas=webauthn_datas + [("vendor", "vendor"), ("index.html", ".")],
+    datas=webauthn_datas + [("vendor", "vendor"), ("index.html", "."), ("assets", "assets")],
     hiddenimports=webauthn_hiddenimports,
     hookspath=[],
     hooksconfig={},

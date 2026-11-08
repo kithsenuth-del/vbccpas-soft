@@ -24,8 +24,8 @@ class UpdaterWindow:
         self.release = None
         self.busy = False
         root.title("VBCCPAS Soft — Software Updater")
-        root.geometry("570x310")
-        root.minsize(520, 280)
+        root.geometry("570x455")
+        root.minsize(520, 420)
         root.configure(bg="#111214")
         self.style = ttk.Style(root)
         self.style.theme_use("clam")
@@ -44,6 +44,15 @@ class UpdaterWindow:
             background="#c87548", bordercolor="#3a302b", lightcolor="#c87548",
             darkcolor="#ad603d",
         )
+
+        assets_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "assets"
+        try:
+            self.brand_logo = tk.PhotoImage(file=str(assets_dir / "society-logo.gif"))
+            root.iconphoto(True, self.brand_logo)
+            self.brand_banner = tk.PhotoImage(file=str(assets_dir / "society-header.gif"))
+            tk.Label(root, image=self.brand_banner, bg="#000000").pack(fill=tk.X, padx=18, pady=(14, 0))
+        except (tk.TclError, OSError) as exc:
+            print(f"VBCCPAS branding assets could not be loaded: {exc}")
 
         panel = tk.Frame(root, bg="#242528", padx=26, pady=24,
                          highlightthickness=1, highlightbackground="#554336")

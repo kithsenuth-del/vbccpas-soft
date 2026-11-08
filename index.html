@@ -215,11 +215,19 @@
         .section-card form > p[id$="-status"] { grid-column: 1; }
       }
 
+    
+      /* Official society identity assets */
+      .society-header-image { display:block; width:min(100%,480px); height:auto; object-fit:contain; background:#000; border-radius:8px; }
+      .society-login-brand { width:min(100%,420px); margin:0 auto 22px; }
+      #auth-gate > div { max-width:560px; }
+      header .society-header-image { flex:0 1 480px; }
+      @media(max-width:640px) { .society-header-image { width:100%; } header .society-header-image { max-width:100%; } }
     </style>
   </head>
   <body class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.3),_transparent_30%),linear-gradient(135deg,_#07131f_0%,_#0f172a_45%,_#111827_100%)] text-slate-100">
     <div id="auth-gate" class="fixed inset-0 z-50 flex min-h-screen items-center justify-center bg-slate-950 px-4 py-8">
       <div class="w-full max-w-lg rounded-3xl border border-emerald-400/20 bg-slate-900 p-8 shadow-2xl shadow-emerald-950/40">
+        <img src="assets/society-header.gif" alt="Bandaranayake Central College Photographic Art Society, Veyangoda" class="society-header-image society-login-brand" />
         <p class="eyebrow text-emerald-300">VBCCPAS SOFT · LOCAL SECURITY</p>
         <h1 id="auth-title" class="mt-3 text-3xl font-semibold text-white">Executive administrator login</h1>
         <p id="auth-description" class="mt-3 text-sm leading-6 text-slate-300">Sign in using the passkey registered on this computer. Society records stay on this computer.</p>
@@ -237,10 +245,7 @@
     <div id="app-shell" class="hidden mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
       <header class="mb-6 rounded-[28px] border border-white/10 bg-white/10 px-4 py-4 shadow-2xl shadow-emerald-500/10 backdrop-blur md:px-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.35em] text-emerald-300">VBCCPAS Soft</p>
-            <h1 class="text-2xl font-semibold text-white">Photographic Arts Society</h1>
-          </div>
+          <img src="assets/society-header.gif" alt="Bandaranayake Central College Photographic Art Society, Veyangoda" class="society-header-image" />
           <div class="flex flex-wrap gap-3">
             <button id="open-dashboard" class="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400">Open Dashboard</button>
             <button id="open-reports" class="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-400/30 transition hover:bg-amber-300">Quick Reports</button>
@@ -251,7 +256,7 @@
 
       <main class="grid flex-1 gap-6 lg:grid-cols-[260px_1fr]">
         <aside class="rounded-[28px] border border-white/10 bg-slate-900/70 p-4 shadow-2xl shadow-black/30 backdrop-blur">
-          <div class="mb-5 flex items-center gap-3 px-2"><div class="grid h-10 w-10 place-items-center rounded-xl bg-emerald-400/15 text-2xl text-emerald-300">◉</div><div><p class="text-sm font-bold tracking-wide text-white">VBCCPAS</p><p class="text-xs text-slate-500">The Darkroom</p></div></div><h2 class="mb-4 px-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Society Studio</h2>
+          <div class="mb-5 flex items-center gap-3 px-2"><img src="assets/society-logo.gif" alt="VBCCPAS society emblem" class="h-12 w-12 rounded-xl bg-white object-contain p-0.5" /><div><p class="text-sm font-bold tracking-wide text-white">VBCCPAS</p><p class="text-xs text-slate-500">The Darkroom</p></div></div><h2 class="mb-4 px-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Society Studio</h2>
           <div class="space-y-2">
             <button data-target="dashboard" aria-current="page" class="nav-btn w-full rounded-2xl bg-emerald-500/90 px-4 py-3 text-left font-semibold text-white transition hover:bg-emerald-400"><span>▦</span>Dashboard</button>
             <button data-target="members" class="nav-btn w-full rounded-2xl bg-white/5 px-4 py-3 text-left font-semibold text-slate-100 transition hover:bg-white/10"><span>♙</span>Members</button>
