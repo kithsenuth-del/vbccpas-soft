@@ -29,6 +29,11 @@ class Base(DeclarativeBase):
 def now_utc():
     return datetime.now(timezone.utc)
 
+def is_after(value, reference):
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value > reference
+
 class Account(Base):
     __tablename__ = "accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -105,7 +110,7 @@ def password_matches(value: str, encoded: str) -> bool:
     except (VerifyMismatchError, VerificationError, ValueError, TypeError):
         return False
 
-app = FastAPI(title="VBCCPAS Central API", version="1.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="VBCCPAS Central API", version="1.0", docs_url=None, redoc_url=None, openapi_url=None)
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
@@ -124,7 +129,7 @@ def authenticated(credentials: HTTPAuthorizationCredentials | None = Depends(bea
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(401, "Sign in is required.")
     session = db.scalar(select(ApiSession).where(ApiSession.digest == digest(credentials.credentials)))
-    if not session or session.revoked_at or session.expires_at <= now_utc():
+    if not session or session.revoked_at or is_after(now_utc(), session.expires_at.replace(tzinfo=timezone.utc) if session.expires_at.tzinfo is None else session.expires_at):
         raise HTTPException(401, "Session is invalid or expired.")
     account = db.get(Account, session.account_id)
     if not account or not account.is_active:
@@ -143,7 +148,7 @@ def login(body: LoginBody, db: Session = Depends(db_session)):
     now = now_utc()
     if not account or not account.is_active:
         raise HTTPException(401, "Email or password is incorrect.")
-    if account.locked_until and account.locked_until > now:
+    if account.locked_until and is_after(account.locked_until, now):
         raise HTTPException(429, "Too many attempts. Try again later.")
     if not password_matches(body.password, account.password_hash):
         account.failed_logins += 1
@@ -194,7 +199,7 @@ def invite(body: InviteBody, admin: Account = Depends(administrator), db: Sessio
 def accept_invitation(body: AcceptBody, db: Session = Depends(db_session)):
     invitation = db.scalar(select(Invitation).where(Invitation.digest == digest(body.invitation_token)))
     now = now_utc()
-    if not invitation or invitation.accepted_at or invitation.expires_at <= now:
+    if not invitation or invitation.accepted_at or is_after(now, invitation.expires_at):
         raise HTTPException(400, "Invitation is invalid or expired.")
     if db.scalar(select(Account.id).where(Account.email == invitation.email)):
         raise HTTPException(409, "An account with this email already exists.")
