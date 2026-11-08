@@ -315,14 +315,14 @@ class App:
 		tk.Entry(form, textvariable=self.password_var, show='*', bg='#0f172a', fg='#f8fafc', insertbackground='white', width=34).grid(row=3, column=0, sticky=tk.W, pady=(0, 12))
 		btn_frame = tk.Frame(login_card, bg=self.colors['card'])
 		btn_frame.place(x=24, y=290)
-		tttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+		ttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
 
 		# sidebar buttons (hidden until login)
 		self.side_buttons = {}
 		self.sidebar_title = tk.Label(self.sidebar, text="Modules", bg=self.colors['sidebar'], fg='#cbd5e1', font=('Segoe UI', 11, 'bold'))
 		self.sidebar_title.pack(anchor='w', padx=18, pady=(18, 10))
 		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
-			b = tttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
+			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
 			b.pack(fill=tk.X, padx=12, pady=6)
 			self.side_buttons[key] = b
 		self.sidebar.pack_forget()
@@ -407,7 +407,7 @@ class App:
 			messagebox.showinfo('Created', 'Account created successfully. Please sign in.')
 			d.destroy()
 
-		btn = tttk.Button(frm, text='Register', command=save_signup, style='Rounded.TButton')
+		btn = ttk.Button(frm, text='Register', command=save_signup, style='Rounded.TButton')
 		btn.grid(row=4, column=0, columnspan=2, pady=12)
 
 	def clear_content(self):
@@ -538,8 +538,8 @@ class App:
 			tk.Label(panel, text="Use the sidebar to open members, events, inventory, borrowing, attendance, reports, and security modules.", bg=self.colors['panel'], fg='#cbd5e1', justify=tk.LEFT).pack(anchor='w', padx=18, pady=(0, 10))
 			buttons = tk.Frame(panel, bg=self.colors['panel'])
 			buttons.pack(anchor='w', padx=18, pady=6)
-			tttk.Button(buttons, text='Open Members', command=lambda: self.show_view('members'), style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
-			tttk.Button(buttons, text='Open Events', command=lambda: self.show_view('events'), style='Rounded.TButton').pack(side=tk.LEFT)
+			ttk.Button(buttons, text='Open Members', command=lambda: self.show_view('members'), style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+			ttk.Button(buttons, text='Open Events', command=lambda: self.show_view('events'), style='Rounded.TButton').pack(side=tk.LEFT)
 		elif key == 'members':
 			self.view_members(frame)
 		elif key == 'events':
@@ -564,7 +564,7 @@ class App:
 		left.pack(side=tk.LEFT)
 		right = ttk.Frame(tb)
 		right.pack(side=tk.RIGHT)
-		tttk.Button(left, text='Add Member', command=self.add_member_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(left, text='Add Member', command=self.add_member_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
 		ttk.Button(left, text='Export CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])).pack(side=tk.LEFT, padx=6)
 		cols = ('MemberID','Name','Class','Roll','Email')
 		tree = ttk.Treeview(top, columns=cols, show='headings')
@@ -579,7 +579,7 @@ class App:
 			mid = tree.item(sel[0])['values'][0]
 			if messagebox.askyesno('Delete','Remove member?'):
 				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Members WHERE MemberID=?',(mid,));conn.commit();conn.close();self.populate_members(tree)
-		tttk.Button(right, text='Delete Selected', command=on_delete).pack()
+		ttk.Button(right, text='Delete Selected', command=on_delete).pack()
 	def add_member_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Member')
 		f=ttk.Frame(d, padding=12);f.pack()
@@ -590,7 +590,7 @@ class App:
 		ttk.Label(f,text='Email').grid(row=3,column=0);ttk.Entry(f,textvariable=email).grid(row=3,column=1)
 		def save():
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name.get(),cls.get(),roll.get(),email.get()));conn.commit();conn.close();d.destroy(); self.show_view('members')
-		tttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
+		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
 
 	# Events
 	def view_events(self, parent):
@@ -598,7 +598,7 @@ class App:
 		tb=ttk.Frame(top);tb.pack(fill=tk.X)
 		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
 		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
-		tttk.Button(left,text='Add Event',command=self.add_event_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(left,text='Add Event',command=self.add_event_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
 		cols=('EventID','Title','Date','Location')
 		tree=ttk.Treeview(top,columns=cols,show='headings')
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
@@ -615,7 +615,7 @@ class App:
 		ttk.Label(f,text='Notes').grid(row=3,column=0);ttk.Entry(f,textvariable=notes).grid(row=3,column=1)
 		def save():
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title.get(),date.get(),loc.get(),notes.get()));conn.commit();conn.close();d.destroy();self.show_view('events')
-		tttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
+		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
 
 	# Inventory
 	def view_inventory(self, parent):
@@ -623,7 +623,7 @@ class App:
 		tb=ttk.Frame(top);tb.pack(fill=tk.X)
 		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
 		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
-		tttk.Button(left,text='Add Item',command=self.add_item_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(left,text='Add Item',command=self.add_item_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
 		cols=('ItemID','Name','Quantity','Notes')
 		tree=ttk.Treeview(top,columns=cols,show='headings')
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
@@ -639,16 +639,16 @@ class App:
 		ttk.Label(f,text='Notes').grid(row=2,column=0);ttk.Entry(f,textvariable=notes).grid(row=2,column=1)
 		def save():
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name.get(), qty.get(), notes.get()));conn.commit();conn.close();d.destroy();self.show_view('inventory')
-		tttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
 
 	# Borrowing
 	def view_borrowing(self, parent):
 		top=parent
 		tb=ttk.Frame(top);tb.pack(fill=tk.X)
 		left=ttk.Frame(tb); left.pack(side=tk.LEFT)
-		tttk.Button(left,text='Borrow Item',command=self.borrow_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
-		tttk.Button(left,text='Return Selected',command=lambda: self.return_selected_borrow(tree)).pack(side=tk.LEFT, padx=6)
-		tttk.Button(left,text='Refresh',command=lambda: self.populate_borrowed(tree)).pack(side=tk.LEFT, padx=6)
+		ttk.Button(left,text='Borrow Item',command=self.borrow_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(left,text='Return Selected',command=lambda: self.return_selected_borrow(tree)).pack(side=tk.LEFT, padx=6)
+		ttk.Button(left,text='Refresh',command=lambda: self.populate_borrowed(tree)).pack(side=tk.LEFT, padx=6)
 		cols=('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned')
 		tree=ttk.Treeview(top,columns=cols,show='headings')
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
@@ -711,7 +711,7 @@ class App:
 				return
 			rd=return_on.get() or None
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)', (iid,mid,datetime.now().isoformat(), rd));cur.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=?',(iid,));conn.commit();conn.close();d.destroy();self.show_view('borrow')
-		tttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
 
 	# Attendance
 	def view_attendance(self, parent):
@@ -748,7 +748,7 @@ class App:
 			except Exception:
 				messagebox.showerror('Error','Select member and event');return
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Attendance (MemberID,EventID,Present,Timestamp) VALUES (?,?,?,?)',(mid,eid,present_var.get(),datetime.now().isoformat()));conn.commit();conn.close();d.destroy();self.show_view('attendance')
-		tttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
 
 	# Reports & Security
 	def view_reports(self, parent):
@@ -756,11 +756,11 @@ class App:
 		ttk.Label(top, text='Reports', font=('Segoe UI', 14, 'bold')).pack(pady=8)
 		btns = ttk.Frame(top)
 		btns.pack(pady=8)
-		tttk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		tttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		tttk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		tttk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		tttk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 
 	def view_security(self, parent):
 		top=parent
@@ -769,8 +769,8 @@ class App:
 			ttk.Label(top, text='Admin access required to manage users.', style='Warning.TLabel').pack(pady=12)
 			return
 		toolbar=ttk.Frame(top); toolbar.pack(fill=tk.X, pady=(0,8))
-		tttk.Button(toolbar, text='Reset admin password', command=self.reset_admin_password, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		tttk.Button(toolbar, text='Refresh', command=lambda: self.populate_users(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(toolbar, text='Reset admin password', command=self.reset_admin_password, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(toolbar, text='Refresh', command=lambda: self.populate_users(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
 		form = ttk.Frame(top, padding=10)
 		form.pack(fill=tk.X, pady=(0,8))
 		selected_user_id = {'value': None}
@@ -789,10 +789,10 @@ class App:
 		ttk.Entry(form, textvariable=member_id_var, width=18).grid(row=1, column=3, pady=4)
 		btns = ttk.Frame(form)
 		btns.grid(row=2, column=0, columnspan=4, sticky=tk.W, pady=(8,0))
-		tttk.Button(btns, text='Save / Update', command=lambda: self.save_security_user(username_var, password_var, role_var, member_id_var, selected_user_id, tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		tttk.Button(btns, text='Clear', command=lambda: self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		tttk.Button(btns, text='Reset selected password', command=lambda: self.reset_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		tttk.Button(btns, text='Delete selected', command=lambda: self.delete_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(btns, text='Save / Update', command=lambda: self.save_security_user(username_var, password_var, role_var, member_id_var, selected_user_id, tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(btns, text='Clear', command=lambda: self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(btns, text='Reset selected password', command=lambda: self.reset_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(btns, text='Delete selected', command=lambda: self.delete_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
 		cols=('UserID','Username','Role','MemberID')
 		tree=ttk.Treeview(top,columns=cols,show='headings')
 		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
