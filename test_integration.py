@@ -50,6 +50,10 @@ class WebDesktopIntegrationTests(unittest.TestCase):
         passkey_auth.initialize(self.db_path)
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+        # Wait for request-handler threads before deleting the temporary SQLite DB.
+        # Windows locks open database files, unlike POSIX unlink semantics.
+        self.httpd.daemon_threads = False
+        self.httpd.block_on_close = True
         server.PORT = self.httpd.server_port
         server.EXPECTED_HOST = "localhost:" + str(server.PORT)
         server.EXPECTED_ORIGIN = "http://localhost:" + str(server.PORT)
@@ -68,8 +72,8 @@ class WebDesktopIntegrationTests(unittest.TestCase):
 
     def tearDown(self):
         self.httpd.shutdown()
+        self.thread.join(timeout=5)
         self.httpd.server_close()
-        self.thread.join(timeout=2)
         server.SESSIONS.clear()
         main.DB_PATH = self.old_main_db
         server.DB_PATH = self.old_server_db
