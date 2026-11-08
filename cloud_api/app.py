@@ -312,6 +312,8 @@ def update_account_status(account_id: str, body: AccountStatusBody,
     db.commit()
     return {"id": target.id, "email": target.email, "is_active": target.is_active}
 
+SYNC_REQUIRED = {"Members": {"Name"}, "Events": {"Title"}, "Inventory": {"Name"}}
+
 SYNC_ENTITIES = {
     "Members": {"Name", "Class", "Roll", "Email"},
     "Events": {"Title", "Date", "Location", "Notes"},
@@ -386,6 +388,8 @@ def sync_push(body: SyncPushBody, account: Account = Depends(authenticated),
         allowed = SYNC_ENTITIES[entity_type]
         if set(change.payload) - allowed:
             raise HTTPException(422, f"Unsupported fields in {entity_type} payload.")
+        if change.operation == "upsert" and not SYNC_REQUIRED.get(entity_type, set()).issubset(change.payload):
+            raise HTTPException(422, f"{entity_type} payload is missing required fields.")
         if len(json.dumps(change.payload, ensure_ascii=False).encode("utf-8")) > 262144:
             raise HTTPException(413, "A synchronisation record exceeds 256 KB.")
         if change.operation == "delete" and change.payload:
