@@ -143,7 +143,8 @@ def extract_package(package_bytes, destination):
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError("The application package manifest is missing or invalid.") from exc
     manifest_files = manifest.get("files") if isinstance(manifest, dict) else None
-    if manifest.get("schema_version") != 1 or not isinstance(manifest_files, list):
+    if (not isinstance(manifest, dict) or manifest.get("schema_version") != 1
+            or not isinstance(manifest_files, list)):
         raise ValueError("The application package manifest has an unsupported format.")
     if (not all(isinstance(name, str) for name in manifest_files)
             or len(manifest_files) != len(set(manifest_files))):
