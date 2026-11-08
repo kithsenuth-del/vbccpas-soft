@@ -35,6 +35,7 @@ class PasskeyRecoveryTests(unittest.TestCase):
                     "INSERT INTO PasskeyMeta (MetaKey, MetaValue) VALUES "
                     "('user_handle', 'preserved-handle')"
                 )
+                conn.commit()
 
             self.assertTrue(passkey_auth.configured(db_path))
             removed = passkey_auth.reset_registration_state(db_path)
