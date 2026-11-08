@@ -1,0 +1,7 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+SQLAlchemy==2.0.41
+psycopg[binary]==3.2.9
+argon2-cffi==25.1.0
+email-validator==2.2.0
+httpx==0.28.1
