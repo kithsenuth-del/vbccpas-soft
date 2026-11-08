@@ -33,6 +33,7 @@ class FullPackageExtractionTests(unittest.TestCase):
             ("VBCCPAS-Soft.exe", b"application"),
             ("VBCCPAS-Updater.exe", b"updater"),
             ("updater.ps1", b"installer"),
+            ("Recover-VBCCPAS.bat", b"recovery"),
             ("assets/theme.json", b"{}"),
         ])
         with tempfile.TemporaryDirectory() as folder:
@@ -46,6 +47,7 @@ class FullPackageExtractionTests(unittest.TestCase):
             ("VBCCPAS-Soft.exe", b"application"),
             ("VBCCPAS-Updater.exe", b"updater"),
             ("updater.ps1", b"installer"),
+            ("Recover-VBCCPAS.bat", b"recovery"),
             ("Assets/Logo.png", b"one"),
             ("assets/logo.PNG", b"two"),
         ])
@@ -58,6 +60,7 @@ class FullPackageExtractionTests(unittest.TestCase):
             ("VBCCPAS-Soft.exe", b"application"),
             ("VBCCPAS-Updater.exe", b"updater"),
             ("updater.ps1", b"installer"),
+            ("Recover-VBCCPAS.bat", b"recovery"),
             ("assets//theme.json", b"{}"),
         ])
         with tempfile.TemporaryDirectory() as folder:
@@ -68,6 +71,7 @@ class FullPackageExtractionTests(unittest.TestCase):
         package = make_zip([
             ("VBCCPAS-Soft.exe", b"app"),
             ("updater.ps1", b"script"),
+            ("Recover-VBCCPAS.bat", b"recovery"),
             ("../outside.txt", b"bad"),
         ])
         with tempfile.TemporaryDirectory() as folder:
@@ -80,6 +84,7 @@ class FullPackageExtractionTests(unittest.TestCase):
             package = make_zip([
                 ("VBCCPAS-Soft.exe", b"app"),
                 ("updater.ps1", b"script"),
+                ("Recover-VBCCPAS.bat", b"recovery"),
                 (unsafe_name, b"user data"),
             ])
             with tempfile.TemporaryDirectory() as folder:
@@ -92,6 +97,7 @@ class FullPackageExtractionTests(unittest.TestCase):
             ("VBCCPAS-Soft.exe", b"application"),
             ("VBCCPAS-Updater.exe", b"updater"),
             ("updater.ps1", b"installer"),
+            ("Recover-VBCCPAS.bat", b"recovery"),
             ("assets/new-module.py", b"module"),
             (updater.MANIFEST_NAME, __import__("json").dumps({
                 "schema_version": 1,
