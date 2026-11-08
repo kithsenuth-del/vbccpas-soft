@@ -1,5 +1,6 @@
 """Non-destructive tests for the local-only executive administrator API."""
 import json
+from contextlib import closing
 import os
 import tempfile
 import threading
@@ -94,7 +95,7 @@ def run_checks():
             status, body = call(base, "/")
             results["local_login_page_served"] = status == 200 and "Executive administrator login" in body
 
-            with sqlite3_connect(db_path) as conn:
+            with closing(sqlite3_connect(db_path)) as conn, conn:
                 count = conn.execute("SELECT COUNT(*) FROM Members").fetchone()[0]
             results["unauthorized_write_did_not_change_database"] = count == 0
             results["all_passed"] = all(results.values())
