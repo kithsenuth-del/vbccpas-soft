@@ -80,7 +80,7 @@ class FullPackageExtractionTests(unittest.TestCase):
             self.assertFalse((Path(folder).parent / "outside.txt").exists())
 
     def test_rejects_database_or_backup_payloads(self):
-        for unsafe_name in ("society.db", "backups/old.db", "exports/members.csv"):
+        for unsafe_name in ("society.db", "society.db-wal", "society.db-shm", "society.db-journal", "backups/old.db", "exports/members.csv"):
             package = make_zip([
                 ("VBCCPAS-Soft.exe", b"app"),
                 ("updater.ps1", b"script"),

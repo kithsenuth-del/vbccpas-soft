@@ -120,7 +120,7 @@ jobs:
             if ($unexpected.Count -gt 0 -or $managedFiles.Count -ne $actualManagedFiles.Count) {
               throw "Windows ZIP entries do not exactly match the managed-file manifest."
             }
-            $protected = @($actualManagedFiles | Where-Object { $_ -match '(^|/)(society\.db|backups|exports|logs|user-data|user_data|\.vbccpas-data)(/|$)' })
+            $protected = @($actualManagedFiles | Where-Object { $_ -match '(^|/)(society\.db(?:-(?:wal|shm|journal))?|backups|exports|logs|user-data|user_data|\.vbccpas-data)(/|$)' })
             if ($protected.Count -gt 0) { throw ("Windows ZIP contains protected user data: " + ($protected -join ", ")) }
             foreach ($entry in $archive.Entries) {
               if ($entry.FullName.EndsWith('/')) { continue }

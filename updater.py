@@ -21,8 +21,8 @@ MAX_EXTRACTED_FILE_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_TOTAL_BYTES = 500 * 1024 * 1024
 MAX_PACKAGE_FILES = 10000
 PROTECTED_PATH_PARTS = {
-    "society.db", "backups", "exports", "logs", "user-data",
-    "user_data", ".vbccpas-data",
+    "society.db", "society.db-wal", "society.db-shm", "society.db-journal",
+    "backups", "exports", "logs", "user-data", "user_data", ".vbccpas-data",
 }
 
 

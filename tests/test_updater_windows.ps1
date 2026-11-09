@@ -62,12 +62,7 @@ function Invoke-StandardUserProbe([PSCredential]$Credential, [string]$Permission
         '-TargetExe', ('"' + $Executable + '"'),
         '-CheckPermissionsOnly'
     )
-    $process = Start-Process -FilePath 'powershell.exe' -Credential $Credential -LoadUserProfile -ArgumentList $arguments -RedirectStandardOutput $OutputPath -PassThru
-    if (-not $process.WaitForExit(30000)) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        throw 'Standard-user permission probe did not finish within 30 seconds.'
-    }
-    $process.Refresh()
+    $process = Start-Process -FilePath 'powershell.exe' -Credential $Credential -LoadUserProfile -ArgumentList $arguments -RedirectStandardOutput $OutputPath -Wait -PassThru
     $output = if (Test-Path -LiteralPath $OutputPath) { Get-Content -LiteralPath $OutputPath -Raw } else { '' }
     if ([string]::IsNullOrWhiteSpace($output)) {
         throw "Standard-user permission probe returned no result (exit $($process.ExitCode))."
@@ -154,7 +149,7 @@ try {
         $standardWritable = Invoke-StandardUserProbe $credential $standardScript $standardTarget (Join-Path $standardUserDirectory 'writable-result.json')
         if ($standardWritable.exit_code -ne 0 -or $standardWritable.result.is_administrator -or
             -not $standardWritable.result.can_write_target -or $standardWritable.result.requires_elevation) {
-            throw 'The standard-user writable-installation permission test failed.'
+            throw ("The standard-user writable-installation permission test failed. Exit={0}; Admin={1}; CanWrite={2}; RequiresElevation={3}" -f $standardWritable.exit_code, $standardWritable.result.is_administrator, $standardWritable.result.can_write_target, $standardWritable.result.requires_elevation)
         }
 
         $standardDenyRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
@@ -191,6 +186,13 @@ try {
     $databaseContent = 'existing society records must remain byte-for-byte unchanged'
     [IO.File]::WriteAllText($databasePath, $databaseContent)
     $databaseHash = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+    $databaseSidecarNames = @('society.db-wal','society.db-shm','society.db-journal')
+    $databaseSidecarHashes = @{}
+    foreach ($sidecarName in $databaseSidecarNames) {
+        $sidecarPath = Join-Path $installDirectory $sidecarName
+        [IO.File]::WriteAllText($sidecarPath, ('preserve ' + $sidecarName))
+        $databaseSidecarHashes[$sidecarName] = (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash
+    }
     New-Item -ItemType Directory -Path (Join-Path $installDirectory 'backups'), (Join-Path $installDirectory 'user-data') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $installDirectory 'backups\keep.txt') -Value 'backup marker'
     Set-Content -LiteralPath (Join-Path $installDirectory 'user-data\keep.txt') -Value 'user data marker'
@@ -284,6 +286,13 @@ try {
     if ((Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash -ne $databaseHash) {
         throw 'The society database changed during the update.'
     }
+    foreach ($sidecarName in $databaseSidecarNames) {
+        $sidecarPath = Join-Path $installDirectory $sidecarName
+        if (-not (Test-Path -LiteralPath $sidecarPath -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash -ne $databaseSidecarHashes[$sidecarName]) {
+            throw ('The updater changed or removed protected SQLite sidecar: ' + $sidecarName)
+        }
+    }
     if ((Get-Content -LiteralPath (Join-Path $installDirectory 'backups\keep.txt') -Raw).Trim() -ne 'backup marker') {
         throw 'The existing backups folder was changed during the update.'
     }
@@ -309,7 +318,55 @@ try {
         throw 'The updated application did not restart with its new GUI.'
     }
     $newProcess.CloseMainWindow() | Out-Null
-    [void]$newProcess.WaitForExit(10000)
+    if (-not $newProcess.WaitForExit(10000)) {
+        throw 'The newly installed test application did not close after its health check.'
+    }
+
+    # Force the replacement executable to exit immediately. The installer must
+    # report failure and restore the previously working managed files.
+    $failureStage = Join-Path $tempRoot 'failure-stage'
+    $failurePayload = Join-Path $failureStage 'payload'
+    New-Item -ItemType Directory -Path (Join-Path $failurePayload 'assets') -Force | Out-Null
+    $failingSource = @"
+using System;
+public static class VBCCPASFailingUpdaterSimulation {
+    public static void Main() { Environment.Exit(7); }
+}
+"@
+    $failingExe = Join-Path $failurePayload 'VBCCPAS-Soft.exe'
+    Add-Type -TypeDefinition $failingSource -Language CSharp -OutputAssembly $failingExe -OutputType ConsoleApplication
+    Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $failurePayload 'updater.ps1') -Force
+    Set-Content -LiteralPath (Join-Path $failurePayload 'VBCCPAS-Updater.exe') -Value 'test updater placeholder'
+    Set-Content -LiteralPath (Join-Path $failurePayload 'Recover-VBCCPAS.bat') -Value 'test recovery launcher'
+    Set-Content -LiteralPath (Join-Path $failurePayload 'assets\version.txt') -Value 'failing-package'
+    @{ schema_version = 1; files = $newFiles } |
+        ConvertTo-Json -Depth 4 |
+        Set-Content -LiteralPath (Join-Path $failurePayload 'vbccpas-managed-files.json') -Encoding UTF8
+    $failureOutput = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -PackageDirectory $failurePayload -Quiet 2>&1 | Out-String
+    $failureExitCode = $LASTEXITCODE
+    if ($failureExitCode -eq 0) {
+        throw 'The updater reported success even though the replacement application exited during startup.'
+    }
+    if ((Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash -ne $expectedHash) {
+        throw 'A failed startup did not restore the previously working application executable.'
+    }
+    if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'VBCCPAS\update-recovery.json')) {
+        throw 'A failed-startup rollback left an unfinished recovery journal.'
+    }
+    if (-not (Select-String -LiteralPath $logPath -Pattern 'Update failed' -Quiet) -or
+        -not (Select-String -LiteralPath $logPath -Pattern 'Rollback completed successfully' -Quiet)) {
+        throw ("The updater did not report failure and successful rollback. Output: " + $failureOutput)
+    }
+    if ((Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash -ne $databaseHash) {
+        throw 'The society database changed during failed-startup rollback.'
+    }
+    foreach ($sidecarName in $databaseSidecarNames) {
+        $sidecarPath = Join-Path $installDirectory $sidecarName
+        if ((Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash -ne $databaseSidecarHashes[$sidecarName]) {
+            throw ('Failed-startup rollback changed protected SQLite sidecar: ' + $sidecarName)
+        }
+    }
+    Remove-Item -LiteralPath $failureStage -Recurse -Force -ErrorAction SilentlyContinue
 
     # Simulate a crash after the new executable has been copied but before the
     # install journal is marked verified. Recovery must close the partial app,
@@ -366,6 +423,13 @@ try {
     }
     if ((Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash -ne $databaseHash) {
         throw 'The society database changed during interrupted-update recovery.'
+    }
+    foreach ($sidecarName in $databaseSidecarNames) {
+        $sidecarPath = Join-Path $installDirectory $sidecarName
+        if (-not (Test-Path -LiteralPath $sidecarPath -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $sidecarPath -Algorithm SHA256).Hash -ne $databaseSidecarHashes[$sidecarName]) {
+            throw ('Recovery changed or removed protected SQLite sidecar: ' + $sidecarName)
+        }
     }
     if (-not (Select-String -LiteralPath $logPath -Pattern 'Recovered application restarted' -Quiet)) {
         throw 'Recovery did not record a successful application restart.'

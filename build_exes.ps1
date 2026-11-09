@@ -143,7 +143,7 @@ try {
         }
         $ProtectedEntries = @($FileEntries | Where-Object {
             $parts = $_ -split '/'
-            @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data') |
+            @('society.db','society.db-wal','society.db-shm','society.db-journal','backups','exports','logs','user-data','user_data','.vbccpas-data') |
                 Where-Object { $parts -contains $_ } | Select-Object -First 1
         })
         if ($ProtectedEntries.Count -gt 0) {

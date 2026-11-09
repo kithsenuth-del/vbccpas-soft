@@ -20,7 +20,7 @@ $logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
 $journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
 $recoveryScriptPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\Recovery\updater-recovery.ps1"
 $manifestName = 'vbccpas-managed-files.json'
-$protectedParts = @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data')
+$protectedParts = @('society.db','society.db-wal','society.db-shm','society.db-journal','backups','exports','logs','user-data','user_data','.vbccpas-data')
 
 function Show-UpdateError([string]$Message) {
     try {
@@ -298,6 +298,7 @@ try {
     New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
     Add-Content -LiteralPath $logPath -Value ("[{0}] Standalone updater started. Target: {1}" -f (Get-Date -Format o), $TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
+    $stageRoot = Split-Path -Parent $PackageDirectory
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
         throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
     }
@@ -363,6 +364,19 @@ try {
     Stop-TargetApplication $TargetExe
     Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater' 'VBCCPAS-Updater'
     Add-Content -LiteralPath $logPath -Value ("[{0}] Confirmed no matching application process remains." -f (Get-Date -Format o))
+
+    # Record the existing SQLite database and journal sidecars after the app
+    # has closed. The update is not allowed to add, remove, or alter these files.
+    $databaseNames = @('society.db','society.db-wal','society.db-shm','society.db-journal')
+    $databaseSnapshot = @{}
+    foreach ($databaseName in $databaseNames) {
+        $databasePath = Join-Path $targetDirectory $databaseName
+        if (Test-Path -LiteralPath $databasePath -PathType Leaf) {
+            $databaseSnapshot[$databaseName] = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+        } else {
+            $databaseSnapshot[$databaseName] = $null
+        }
+    }
 
     # Parse the previous manifest before changing anything. It allows obsolete
     # application files to be removed on later updates without touching user files.
@@ -437,6 +451,23 @@ try {
         }
     }
 
+    # Verify the update did not touch the society database or SQLite sidecars.
+    foreach ($databaseName in $databaseNames) {
+        $databasePath = Join-Path $targetDirectory $databaseName
+        $expectedDatabaseHash = $databaseSnapshot[$databaseName]
+        $databaseExists = Test-Path -LiteralPath $databasePath -PathType Leaf
+        if ($null -eq $expectedDatabaseHash) {
+            if ($databaseExists) { throw ('The update unexpectedly created protected database file: ' + $databaseName) }
+        } else {
+            if (-not $databaseExists) { throw ('The update removed protected database file: ' + $databaseName) }
+            $actualDatabaseHash = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+            if ($actualDatabaseHash -ne $expectedDatabaseHash) {
+                throw ('The update changed protected database file: ' + $databaseName)
+            }
+        }
+    }
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Society database and SQLite sidecar preservation checks passed." -f (Get-Date -Format o))
+
     # Verify the replacement can launch before declaring success.
     Add-Content -LiteralPath $logPath -Value ("[{0}] Files replaced; checking application startup." -f (Get-Date -Format o))
     $started = Start-Process -FilePath $TargetExe -PassThru
@@ -466,10 +497,18 @@ try {
     } catch {
         $rollbackErrors += ('Recovery journal: ' + $_.Exception.Message)
     }
+    $failureLog = $failureMessage
+    if ($rollbackErrors.Count -gt 0) {
+        $failureLog += ' | Rollback needs attention: ' + ($rollbackErrors -join '; ')
+    } elseif ($backupDirectory) {
+        $failureLog += ' | Rollback completed successfully. Recovery copy: ' + $backupDirectory
+    } else {
+        $failureLog += ' | No installation files were changed.'
+    }
     if ($logPath) {
         try {
             New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
-            Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureMessage)
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureLog)
         } catch { }
     }
     if ($RecoverOnly -and $recoveryCompleted) {
