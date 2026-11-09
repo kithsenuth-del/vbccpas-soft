@@ -163,12 +163,16 @@ jobs:
           EXPECTED_PACKAGE_SIZE: ${{ steps.verify-package.outputs.package_size }}
           EXPECTED_CHECKSUM_HASH: ${{ steps.verify-package.outputs.checksum_hash }}
           EXPECTED_CHECKSUM_SIZE: ${{ steps.verify-package.outputs.checksum_size }}
+          RELEASE_ID: ${{ steps.draft-release.outputs.id }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const tag = `build-${context.sha}`;
-            const { data: draft } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            const releaseId = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error("Draft release ID was not returned by the upload step.");
+            const { data: draft } = await github.rest.repos.getRelease({ owner, repo, release_id: releaseId });
+            if (draft.tag_name !== tag) throw new Error(`Draft release tag mismatch: expected ${tag}, received ${draft.tag_name}.`);
             if (!draft.draft) throw new Error("Release is not a draft; refusing to change latest-release state.");
             const zip = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Windows.zip");
             const checksum = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Windows.zip.sha256");
@@ -183,11 +187,13 @@ jobs:
             }
             const makeLatest = context.ref === "refs/heads/main";
             await github.rest.repos.updateRelease({
-              owner, repo, release_id: draft.id, draft: false,
+              owner, repo, release_id: draft.id, tag_name: tag,
+              target_commitish: context.sha, draft: false,
               make_latest: makeLatest ? "true" : "false"
             });
             const { data: published } = await github.rest.repos.getRelease({ owner, repo, release_id: draft.id });
             if (published.draft) throw new Error("GitHub did not publish the verified release.");
+            if (published.tag_name !== tag) throw new Error(`Published release tag mismatch: expected ${tag}, received ${published.tag_name}.`);
             if (makeLatest) {
               const { data: latest } = await github.rest.repos.getLatestRelease({ owner, repo });
               if (latest.id !== published.id) throw new Error("The verified main-branch build was published but did not become the latest release.");
