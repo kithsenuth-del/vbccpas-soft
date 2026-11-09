@@ -302,6 +302,9 @@ try {
     if (Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'VBCCPAS\update-recovery.json')) {
         throw 'A successful update left an unfinished recovery journal.'
     }
+    if (-not (Test-Path -LiteralPath (Join-Path $downloadDirectory 'verified') -PathType Container)) {
+        throw 'The updater removed a caller-owned package directory while cleaning temporary staging.'
+    }
 
     $logPath = Join-Path $env:LOCALAPPDATA 'VBCCPAS\update.log'
     if (-not (Select-String -LiteralPath $logPath -Pattern 'Update completed successfully' -Quiet)) {

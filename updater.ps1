@@ -485,7 +485,7 @@ try {
     Save-RecoveryJournal $journal
     Add-Content -LiteralPath $logPath -Value ("[{0}] Update completed successfully. Responsive application window verified (PID {1}). Backup retained at {2}" -f (Get-Date -Format o), $started.Id, $backupDirectory)
     if (Test-Path -LiteralPath $journalPath) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
-    if (Test-Path -LiteralPath $stageRoot) {
+    if ($stageRoot -and (Test-Path -LiteralPath $stageRoot -PathType Container)) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (-not $Quiet) {
