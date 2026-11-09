@@ -180,7 +180,14 @@ function Save-RecoveryJournal($Journal) {
     $json = $Journal | ConvertTo-Json -Depth 8
     [IO.File]::WriteAllText($temporaryJournal, $json, (New-Object System.Text.UTF8Encoding($false)))
     if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
-        [IO.File]::Replace($temporaryJournal, $journalPath, $null)
+        # File.Replace requires a valid same-volume backup path on Windows.
+        # Keep a unique one-step backup so a failed replacement never destroys
+        # the last readable recovery journal.
+        $previousJournal = $journalPath + '.previous-' + [Guid]::NewGuid().ToString('N')
+        [IO.File]::Replace($temporaryJournal, $journalPath, $previousJournal)
+        if (Test-Path -LiteralPath $previousJournal -PathType Leaf) {
+            Remove-Item -LiteralPath $previousJournal -Force
+        }
     } else {
         Move-Item -LiteralPath $temporaryJournal -Destination $journalPath -Force
     }
