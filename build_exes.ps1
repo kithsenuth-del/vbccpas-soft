@@ -1,6 +1,9 @@
 [CmdletBinding()]
 param(
-    [switch]$CreateDesktopShortcut
+    [switch]$CreateDesktopShortcut,
+    # CI has already run the Python test suite in the required integration job.
+    # Keep the full checks enabled by default for local builds.
+    [switch]$SkipPreBuildTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,9 +24,8 @@ $Build = Join-Path $Root "build"
 
 try {
     Write-Host "Installing application and Windows build dependencies..."
-    & py -3.11 -m pip install --upgrade pip
-    if ($LASTEXITCODE -ne 0) { throw "Could not upgrade pip." }
-    & py -3.11 -m pip install -r requirements.txt pyinstaller pillow
+    # setup-python caches pip downloads in CI; avoid upgrading pip on every runner.
+    & py -3.11 -m pip install --disable-pip-version-check -r requirements.txt pyinstaller pillow
     if ($LASTEXITCODE -ne 0) { throw "Could not install build dependencies." }
 
     $Commit = (& git rev-parse HEAD 2>$null)
@@ -37,20 +39,24 @@ try {
     Invoke-Python -c "from PIL import Image; im=Image.open(r'assets/society-logo.gif').convert('RGBA'); im.save(r'assets/society-logo.ico', format='ICO', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
     if (-not (Test-Path -LiteralPath (Join-Path $Root "assets\society-logo.ico") -PathType Leaf)) { throw "Official society icon generation failed." }
 
-    Write-Host "Running Python compilation checks..."
-    Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
+    if (-not $SkipPreBuildTests) {
+        Write-Host "Running Python compilation checks..."
+        Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
 
-    Write-Host "Running isolated integration and safety tests..."
-    Invoke-Python tests/test_passkey_recovery.py
-    Invoke-Python tests/test_updater.py
-    Invoke-Python tests/test_updater_package.py
-    Invoke-Python verify_data_flow.py
+        Write-Host "Running isolated integration and safety tests..."
+        Invoke-Python tests/test_passkey_recovery.py
+        Invoke-Python tests/test_updater.py
+        Invoke-Python tests/test_updater_package.py
+        Invoke-Python verify_data_flow.py
 
-    if (Get-Command node -ErrorAction SilentlyContinue) {
-        Write-Host "Checking dashboard JavaScript..."
-        Invoke-Python check_frontend.py
+        if (Get-Command node -ErrorAction SilentlyContinue) {
+            Write-Host "Checking dashboard JavaScript..."
+            Invoke-Python check_frontend.py
+        } else {
+            Write-Warning "Node.js was not found; dashboard JavaScript syntax check was skipped."
+        }
     } else {
-        Write-Warning "Node.js was not found; dashboard JavaScript syntax check was skipped."
+        Write-Host "Skipping Python checks already completed by the required integration job."
     }
 
     Write-Host "Validating the PowerShell updater syntax..."
@@ -76,7 +82,7 @@ try {
     New-Item -ItemType Directory -Path $Build -Force | Out-Null
 
     Write-Host "Building VBCCPAS-Soft.exe with the official society icon... "
-    Invoke-Python -m PyInstaller --noconfirm --clean --distpath $Dist --workpath (Join-Path $Build "desktop") (Join-Path $Root "desktop_app.spec")
+    Invoke-Python -m PyInstaller --noconfirm --distpath $Dist --workpath (Join-Path $Build "desktop") (Join-Path $Root "desktop_app.spec")
 
     Write-Host "Building VBCCPAS-Updater.exe with the official society icon..."
     Invoke-Python -m PyInstaller --noconfirm --clean --distpath $Dist --workpath (Join-Path $Build "updater") (Join-Path $Root "updater_app.spec")
