@@ -288,6 +288,8 @@ try {
         }
         exit 0
     }
+    New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Standalone updater started. Target: {1}" -f (Get-Date -Format o), $TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
         throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
@@ -350,8 +352,10 @@ try {
         exit 0
     }
 
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Waiting for the installed application to close normally." -f (Get-Date -Format o))
     Stop-TargetApplication $TargetExe
     Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater' 'VBCCPAS-Updater'
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Confirmed no matching application process remains." -f (Get-Date -Format o))
 
     # Parse the previous manifest before changing anything. It allows obsolete
     # application files to be removed on later updates without touching user files.
@@ -455,7 +459,12 @@ try {
     } catch {
         $rollbackErrors += ('Recovery journal: ' + $_.Exception.Message)
     }
-    if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureMessage) } catch { } }
+    if ($logPath) {
+        try {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureMessage)
+        } catch { }
+    }
     if ($RecoverOnly -and $recoveryCompleted) {
         $message = 'The previous application files were restored, but the recovered application did not pass its restart check.'
     } elseif ($RecoverOnly) {
