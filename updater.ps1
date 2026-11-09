@@ -298,6 +298,15 @@ try {
     New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
     Add-Content -LiteralPath $logPath -Value ("[{0}] Standalone updater started. Target: {1}" -f (Get-Date -Format o), $TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
+    # Only delete the dedicated temp staging folder created by updater.py.
+    # Never infer a cleanup target from an arbitrary caller-supplied package path.
+    $tempDirectory = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\\') + [IO.Path]::DirectorySeparatorChar
+    $packageParent = [IO.Path]::GetDirectoryName($PackageDirectory)
+    if ([IO.Path]::GetFileName($PackageDirectory) -eq 'payload' -and
+        [IO.Path]::GetFileName($packageParent).StartsWith('vbccpas-full-update-', [StringComparison]::OrdinalIgnoreCase) -and
+        [IO.Path]::GetFullPath($packageParent).StartsWith($tempDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+        $stageRoot = [IO.Path]::GetFullPath($packageParent)
+    }
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
         throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
     }
@@ -475,7 +484,6 @@ try {
     $journal.verified = Get-Date -Format o
     Save-RecoveryJournal $journal
     Add-Content -LiteralPath $logPath -Value ("[{0}] Update completed successfully. Responsive application window verified (PID {1}). Backup retained at {2}" -f (Get-Date -Format o), $started.Id, $backupDirectory)
-    $stageRoot = Split-Path -Parent $PackageDirectory
     if (Test-Path -LiteralPath $journalPath) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath $stageRoot) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
