@@ -60,7 +60,7 @@ jobs:
           python-version: "3.11"
       - name: Run verified local Windows build script
         shell: pwsh
-        run: .\\build_exes.ps1
+        run: .\build_exes.ps1
       - name: Verify Windows desktop shortcut creation
         shell: pwsh
         run: |
