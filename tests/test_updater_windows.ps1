@@ -11,6 +11,9 @@ $newProcess = $null
 $interruptedProcess = $null
 $recoveredProcess = $null
 $originalAcl = $null
+$testUserName = $null
+$testUserSid = $null
+$testUserCreated = $false
 
 function New-TestApplication([string]$OutputPath, [string]$ClassName, [string]$WindowTitle) {
     $source = @"
@@ -47,6 +50,25 @@ function Invoke-PermissionProbe([string]$Directory, [string]$Executable) {
         exit_code = $exitCode
         result = ($jsonLine[0] | ConvertFrom-Json)
         output = $output
+    }
+}
+
+function Invoke-StandardUserProbe([PSCredential]$Credential, [string]$PermissionScript, [string]$Executable, [string]$OutputPath) {
+    if (Test-Path -LiteralPath $OutputPath) { Remove-Item -LiteralPath $OutputPath -Force }
+    $arguments = @(
+        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', ('"' + $PermissionScript + '"'),
+        '-TargetExe', ('"' + $Executable + '"'),
+        '-CheckPermissionsOnly'
+    )
+    $process = Start-Process -FilePath 'powershell.exe' -Credential $Credential -LoadUserProfile -ArgumentList $arguments -RedirectStandardOutput $OutputPath -Wait -PassThru
+    $output = if (Test-Path -LiteralPath $OutputPath) { Get-Content -LiteralPath $OutputPath -Raw } else { '' }
+    if ([string]::IsNullOrWhiteSpace($output)) {
+        throw "Standard-user permission probe returned no result (exit $($process.ExitCode))."
+    }
+    return [pscustomobject]@{
+        exit_code = $process.ExitCode
+        result = ($output.Trim() | ConvertFrom-Json)
     }
 }
 
@@ -90,6 +112,72 @@ try {
     }
     Set-Acl -LiteralPath $permissionDirectory -AclObject $originalAcl
     $originalAcl = $null
+
+    # Exercise the permission decision under a genuine non-administrator token.
+    # The account is disposable and removed in the finally block.
+    if ($expectedAdmin -and (Get-Command New-LocalUser -ErrorAction SilentlyContinue)) {
+        $testUserName = 'vbccpas' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+        $plainPassword = [Guid]::NewGuid().ToString('N') + 'Aa!9'
+        $securePassword = ConvertTo-SecureString $plainPassword -AsPlainText -Force
+        $testUser = New-LocalUser -Name $testUserName -Password $securePassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'Temporary VBCCPAS updater permission test'
+        $testUserCreated = $true
+        $testUserSid = $testUser.SID
+        Add-LocalGroupMember -Group 'Users' -Member $testUserName -ErrorAction SilentlyContinue
+
+        $standardUserDirectory = Join-Path $tempRoot 'standard-user-install'
+        New-Item -ItemType Directory -Path $standardUserDirectory -Force | Out-Null
+        $parentAcl = Get-Acl -LiteralPath $tempRoot
+        $parentReadRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+            $testUserSid,
+            [System.Security.AccessControl.FileSystemRights]::ReadAndExecute,
+            ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+            [System.Security.AccessControl.PropagationFlags]::None,
+            [System.Security.AccessControl.AccessControlType]::Allow
+        )
+        $parentAcl.AddAccessRule($parentReadRule)
+        Set-Acl -LiteralPath $tempRoot -AclObject $parentAcl
+        $standardAcl = Get-Acl -LiteralPath $standardUserDirectory
+        $standardModifyRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+            $testUserSid,
+            [System.Security.AccessControl.FileSystemRights]::Modify,
+            ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+            [System.Security.AccessControl.PropagationFlags]::None,
+            [System.Security.AccessControl.AccessControlType]::Allow
+        )
+        $standardAcl.AddAccessRule($standardModifyRule)
+        Set-Acl -LiteralPath $standardUserDirectory -AclObject $standardAcl
+        $standardTarget = Join-Path $standardUserDirectory 'VBCCPAS-Soft.exe'
+        $standardScript = Join-Path $standardUserDirectory 'updater.ps1'
+        Set-Content -LiteralPath $standardTarget -Value 'standard-user permission probe' -Encoding ASCII
+        Copy-Item -LiteralPath $scriptPath -Destination $standardScript -Force
+        $credential = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\$testUserName", $securePassword)
+        $standardWritable = Invoke-StandardUserProbe $credential $standardScript $standardTarget (Join-Path $standardUserDirectory 'writable-result.json')
+        if ($standardWritable.exit_code -ne 0 -or $standardWritable.result.is_administrator -or
+            -not $standardWritable.result.can_write_target -or $standardWritable.result.requires_elevation) {
+            throw 'The standard-user writable-installation permission test failed.'
+        }
+
+        $standardDenyRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+            $testUserSid,
+            [System.Security.AccessControl.FileSystemRights]::Write,
+            ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
+            [System.Security.AccessControl.PropagationFlags]::None,
+            [System.Security.AccessControl.AccessControlType]::Deny
+        )
+        $standardAcl = Get-Acl -LiteralPath $standardUserDirectory
+        $standardAcl.AddAccessRule($standardDenyRule)
+        Set-Acl -LiteralPath $standardUserDirectory -AclObject $standardAcl
+        $standardDenied = Invoke-StandardUserProbe $credential $standardScript $standardTarget (Join-Path $standardUserDirectory 'denied-result.json')
+        if ($standardDenied.exit_code -ne 2 -or $standardDenied.result.is_administrator -or
+            $standardDenied.result.can_write_target -or -not $standardDenied.result.requires_elevation) {
+            throw 'The standard-user protected-installation elevation test failed.'
+        }
+        Write-Host 'Standard-user permission tests passed: writable install accepted; protected install correctly requires elevation.'
+    } elseif (-not $expectedAdmin) {
+        Write-Warning 'A true standard-user token test was skipped because this runner is not an administrator.'
+    } else {
+        throw 'New-LocalUser is unavailable; the standard-user permission test cannot run.'
+    }
 
     # Create a real Windows GUI test executable so the updater can request a
     # normal WM_CLOSE, wait for process exit, replace it, and verify a restart.
@@ -300,6 +388,14 @@ try {
 } finally {
     if ($originalAcl) {
         try { Set-Acl -LiteralPath $permissionDirectory -AclObject $originalAcl } catch { }
+    }
+    if ($testUserCreated -and $testUserName) {
+        try { Remove-LocalUser -Name $testUserName -ErrorAction SilentlyContinue } catch { }
+        if ($testUserSid) {
+            try {
+                Get-CimInstance -ClassName Win32_UserProfile | Where-Object { $_.SID -eq $testUserSid.Value -and -not $_.Loaded } | Remove-CimInstance -ErrorAction SilentlyContinue
+            } catch { }
+        }
     }
     if ($oldProcess) {
         try {
