@@ -23,7 +23,7 @@ On Windows, install **Python 3.11** with the Python launcher (`py`). Node.js is 
 
     .\build_exes.ps1
 
-The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater/package tests, data-flow safety checks, PowerShell syntax validation, and a PowerShell rollback-journal recovery test (including a check that society.db is preserved). If Node.js is installed, it also checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
+The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater download/package tests, data-flow safety checks, PowerShell syntax validation, an interrupted-update rollback test, and a Windows end-to-end updater simulation. The Windows simulation checks normal application closure, waiting for the old process, ZIP download/integrity verification, replacement, restart, permission probes, and preservation of society.db, backups, and user-data. The build also verifies every ZIP entry and writes a SHA-256 sidecar. If Node.js is installed, it checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
 
 A successful build produces:
 
@@ -66,7 +66,7 @@ The web dashboard uses a device-bound passkey and an in-memory eight-hour sessio
 - To reinstall the latest complete application package, open `VBCCPAS-Updater.exe` and select **Repair Installation**. This can restore a missing main EXE as long as the updater EXE and installation folder are still available.
 - If the updater will not open after an interrupted replacement, double-click `Recover-VBCCPAS.bat`. It uses the separate recovery bootstrap and then opens the updater (or the main app if the updater is unavailable).
 - Update diagnostics are stored in `%LOCALAPPDATA%\\VBCCPAS\\update.log`. Keep the matching rollback folder if support/recovery is needed.
-- New updates are published automatically when changes are pushed to the `main` branch and the Windows build and integration checks pass.
+- New updates are published only after the integration checks, Windows build, ZIP/manifest verification, and SHA-256 sidecar verification all pass. A push to `main` publishes the latest release. A manually dispatched Windows build also publishes a release; if it is run from a non-main branch, it is not marked as the latest release.
 
 ## Data storage
 
@@ -85,7 +85,7 @@ Install dependencies and run the checks from the repository root:
     python verify_data_flow.py
     python check_frontend.py
 
-Integration tests use disposable temporary databases. The Windows GUI, shortcut COM integration, Windows Hello ceremony, and final packaged executable still require testing on a Windows computer. The GitHub Actions workflow performs the automated Windows build and package checks on pushes to `main`.
+Integration tests use disposable temporary databases. The Windows GUI, shortcut COM integration, Windows Hello ceremony, and final packaged executable still require testing on a Windows computer. The GitHub Actions workflow performs the automated Windows build and package checks on pushes to `main`, pull requests, and manual dispatches. Release publication is a separate job that re-downloads and re-verifies the complete ZIP and checksum before it can create or update a release.
 
 ## Security boundary
 
