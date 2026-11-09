@@ -32,6 +32,21 @@ class CloudApiTests(unittest.TestCase):
     def login(self, email="admin@example.com", password="Correct-Horse-Battery-42!"):
         return self.client.post("/v1/auth/login", json={"email": email, "password": password})
 
+    def test_database_is_bound_to_one_society_identity(self):
+        from cloud_api.app import bind_single_society_deployment
+        with self.Session() as db:
+            bound = bind_single_society_deployment(db, "vbccpas-primary")
+            self.assertEqual(bound.society_id, "vbccpas-primary")
+        with self.Session() as db:
+            with self.assertRaisesRegex(RuntimeError, "different society"):
+                bind_single_society_deployment(db, "another-society")
+
+    def test_invalid_society_identity_is_rejected(self):
+        from cloud_api.app import bind_single_society_deployment
+        with self.Session() as db:
+            with self.assertRaisesRegex(RuntimeError, "valid VBCCPAS_SINGLE_SOCIETY_ID"):
+                bind_single_society_deployment(db, "../other-society")
+
     def test_health_is_public(self):
         response = self.client.get("/v1/health")
         self.assertEqual(response.status_code, 200)
