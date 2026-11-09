@@ -298,7 +298,6 @@ try {
     New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
     Add-Content -LiteralPath $logPath -Value ("[{0}] Standalone updater started. Target: {1}" -f (Get-Date -Format o), $TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
-    $stageRoot = Split-Path -Parent $PackageDirectory
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
         throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
     }
