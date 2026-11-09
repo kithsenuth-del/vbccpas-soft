@@ -252,6 +252,7 @@ try {
             target_directory = $targetDirectory
             is_administrator = $isAdministrator
             can_write_target = $canWriteTarget
+            requires_elevation = (-not $isAdministrator -and -not $canWriteTarget)
         } | ConvertTo-Json -Compress
         if (-not $canWriteTarget) { exit 2 }
         exit 0
