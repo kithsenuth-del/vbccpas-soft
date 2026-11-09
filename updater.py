@@ -177,7 +177,7 @@ def recover_interrupted_update(target_exe, recovery_script=None):
     command = [
         "powershell.exe", "-NoProfile", "-NonInteractive",
         "-ExecutionPolicy", "Bypass", "-File", str(script),
-        "-TargetExe", str(target), "-RecoverOnly", "-Quiet",
+        "-TargetExe", str(target), "-RecoverOnly", "-RestartAfterRecovery", "-Quiet",
     ]
     completed = subprocess.run(
         command, capture_output=True, text=True, timeout=180, check=False,
