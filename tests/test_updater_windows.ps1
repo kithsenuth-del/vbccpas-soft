@@ -235,5 +235,12 @@ try {
             if (-not $newProcess.HasExited) { Stop-Process -Id $newProcess.Id -Force -ErrorAction SilentlyContinue }
         } catch { }
     }
+    try {
+        if ($targetExe -and (Test-Path -LiteralPath (Split-Path -Parent $targetExe))) {
+            Get-CimInstance -ClassName Win32_Process -Filter "Name='VBCCPAS-Soft.exe'" |
+                Where-Object { $_.ExecutablePath -and [string]::Equals([IO.Path]::GetFullPath($_.ExecutablePath), $targetExe, [StringComparison]::OrdinalIgnoreCase) } |
+                ForEach-Object { Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue }
+        }
+    } catch { }
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
