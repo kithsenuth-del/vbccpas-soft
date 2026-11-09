@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $scriptPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\updater.ps1'))
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('vbccpas-updater-e2e-' + [Guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('VBCCPAS Updater E2E Test ' + [Guid]::NewGuid().ToString('N'))
 $env:LOCALAPPDATA = Join-Path $tempRoot 'local'
 $permissionDirectory = Join-Path $tempRoot 'permission-check'
 $installDirectory = Join-Path $tempRoot 'installation'
