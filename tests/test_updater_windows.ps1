@@ -82,6 +82,10 @@ try {
     if ($denied.exit_code -ne 2 -or $denied.result.can_write_target) {
         throw "Denied-folder permission test failed; updater did not detect the write restriction. Output: $($denied.output)"
     }
+    $expectedElevation = -not [bool]$denied.result.is_administrator
+    if ([bool]$denied.result.requires_elevation -ne $expectedElevation) {
+        throw 'Updater elevation decision does not match the current token and denied-folder access.'
+    }
     Set-Acl -LiteralPath $permissionDirectory -AclObject $originalAcl
     $originalAcl = $null
 
