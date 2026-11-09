@@ -96,12 +96,24 @@ class UpdaterTests(unittest.TestCase):
         from pathlib import Path
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "updater-recovery.ps1"
-            script.write_text("# recovery bootstrap", encoding="utf-8")
+            script.write_text("param([switch]$RestartAfterRecovery)", encoding="utf-8")
             completed = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
             with patch.object(updater.subprocess, "run", return_value=completed) as run:
                 updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
             self.assertIn("-RecoverOnly", run.call_args.args[0])
             self.assertIn("-RestartAfterRecovery", run.call_args.args[0])
+
+    def test_older_recovery_bootstrap_does_not_receive_new_switch(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "updater-recovery.ps1"
+            script.write_text("# older recovery bootstrap", encoding="utf-8")
+            completed = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            with patch.object(updater.subprocess, "run", return_value=completed) as run:
+                updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
+            self.assertIn("-RecoverOnly", run.call_args.args[0])
+            self.assertNotIn("-RestartAfterRecovery", run.call_args.args[0])
 
     def test_recovery_bootstrap_failure_blocks_new_update(self):
         import tempfile
