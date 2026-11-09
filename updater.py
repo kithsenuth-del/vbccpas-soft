@@ -177,8 +177,14 @@ def recover_interrupted_update(target_exe, recovery_script=None):
     command = [
         "powershell.exe", "-NoProfile", "-NonInteractive",
         "-ExecutionPolicy", "Bypass", "-File", str(script),
-        "-TargetExe", str(target), "-RecoverOnly", "-RestartAfterRecovery", "-Quiet",
+        "-TargetExe", str(target), "-RecoverOnly", "-Quiet",
     ]
+    # Older persistent recovery bootstraps may not know this optional switch.
+    try:
+        if "RestartAfterRecovery" in script.read_text(encoding="utf-8-sig"):
+            command.append("-RestartAfterRecovery")
+    except (OSError, UnicodeError):
+        pass
     completed = subprocess.run(
         command, capture_output=True, text=True, timeout=180, check=False,
         creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
