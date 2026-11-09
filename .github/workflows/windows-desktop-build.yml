@@ -187,4 +187,8 @@ jobs:
             });
             const { data: published } = await github.rest.repos.getRelease({ owner, repo, release_id: draft.id });
             if (published.draft) throw new Error("GitHub did not publish the verified release.");
+            if (makeLatest) {
+              const { data: latest } = await github.rest.repos.getLatestRelease({ owner, repo });
+              if (latest.id !== published.id) throw new Error("The verified main-branch build was published but did not become the latest release.");
+            }
             core.info(`Published verified Windows release ${published.html_url}; latest=${makeLatest}.`);
