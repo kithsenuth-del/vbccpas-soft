@@ -101,6 +101,7 @@ class UpdaterTests(unittest.TestCase):
             with patch.object(updater.subprocess, "run", return_value=completed) as run:
                 updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
             self.assertIn("-RecoverOnly", run.call_args.args[0])
+            self.assertIn("-RestartAfterRecovery", run.call_args.args[0])
 
     def test_recovery_bootstrap_failure_blocks_new_update(self):
         import tempfile
