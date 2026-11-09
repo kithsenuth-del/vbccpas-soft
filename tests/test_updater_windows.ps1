@@ -207,6 +207,7 @@ try {
         throw "Expected exactly one restarted application process; found $($newProcesses.Count)."
     }
     $newProcess = Get-Process -Id ([int]$newProcesses[0].ProcessId)
+    $newProcess.Refresh()
     if ($newProcess.MainWindowHandle -eq [IntPtr]::Zero -or $newProcess.MainWindowTitle -ne 'VBCCPAS updater simulation - new') {
         throw 'The updated application did not restart with its new GUI.'
     }
