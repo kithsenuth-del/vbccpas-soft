@@ -163,12 +163,16 @@ jobs:
           EXPECTED_PACKAGE_SIZE: ${{ steps.verify-package.outputs.package_size }}
           EXPECTED_CHECKSUM_HASH: ${{ steps.verify-package.outputs.checksum_hash }}
           EXPECTED_CHECKSUM_SIZE: ${{ steps.verify-package.outputs.checksum_size }}
+          RELEASE_ID: ${{ steps.draft-release.outputs.id }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const tag = `build-${context.sha}`;
-            const { data: draft } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            const releaseId = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error("Draft release ID was not returned by the upload step.");
+            const { data: draft } = await github.rest.repos.getRelease({ owner, repo, release_id: releaseId });
+            if (draft.tag_name !== tag) throw new Error(`Draft release tag mismatch: expected ${tag}, received ${draft.tag_name}.`);
             if (!draft.draft) throw new Error("Release is not a draft; refusing to change latest-release state.");
             const zip = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Windows.zip");
             const checksum = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Windows.zip.sha256");
@@ -182,12 +186,42 @@ jobs:
               throw new Error("Remote SHA-256 sidecar digest or size does not match the locally verified file.");
             }
             const makeLatest = context.ref === "refs/heads/main";
+            // Draft releases may not have a Git tag ref yet. Create/verify the
+            // exact commit tag before publishing so the release cannot remain
+            // attached to GitHub's temporary untagged URL.
+            let tagRef;
+            try {
+              const { data } = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              tagRef = data;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              const { data } = await github.rest.git.createRef({
+                owner, repo, ref: `refs/tags/${tag}`, sha: context.sha
+              });
+              tagRef = data;
+            }
+            if (tagRef.object.type === "commit") {
+              if (tagRef.object.sha !== context.sha) throw new Error("Release tag points to a different commit.");
+            } else if (tagRef.object.type === "tag") {
+              const { data: annotatedTag } = await github.rest.git.getTag({
+                owner, repo, tag_sha: tagRef.object.sha
+              });
+              if (annotatedTag.object.type !== "commit" || annotatedTag.object.sha !== context.sha) {
+                throw new Error("Annotated release tag does not point to the workflow commit.");
+              }
+            } else {
+              throw new Error("Release tag does not point to a commit.");
+            }
             await github.rest.repos.updateRelease({
-              owner, repo, release_id: draft.id, draft: false,
+              owner, repo, release_id: draft.id, tag_name: tag,
+              target_commitish: context.sha, draft: false,
               make_latest: makeLatest ? "true" : "false"
             });
             const { data: published } = await github.rest.repos.getRelease({ owner, repo, release_id: draft.id });
             if (published.draft) throw new Error("GitHub did not publish the verified release.");
+            if (published.tag_name !== tag) throw new Error(`Published release tag mismatch: expected ${tag}, received ${published.tag_name}.`);
+            const { data: taggedRelease } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            if (taggedRelease.id !== published.id) throw new Error("Published tag resolves to a different release.");
             if (makeLatest) {
               const { data: latest } = await github.rest.repos.getLatestRelease({ owner, repo });
               if (latest.id !== published.id) throw new Error("The verified main-branch build was published but did not become the latest release.");
