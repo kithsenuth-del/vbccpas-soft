@@ -69,7 +69,7 @@ function Get-TargetApplicationProcesses([string]$ExpectedPath) {
     } catch {
         throw ('Could not safely inspect running VBCCPAS Soft processes: ' + $_.Exception.Message)
     }
-    $matches = @()
+    $foundProcesses = @()
     foreach ($item in $items) {
         if ([string]::IsNullOrWhiteSpace([string]$item.ExecutablePath)) {
             throw ('A running VBCCPAS Soft process (PID ' + $item.ProcessId + ') could not be path-verified. Close it manually and retry.')
@@ -77,10 +77,10 @@ function Get-TargetApplicationProcesses([string]$ExpectedPath) {
         $actual = [IO.Path]::GetFullPath([string]$item.ExecutablePath)
         if ([string]::Equals($actual, $expected, [StringComparison]::OrdinalIgnoreCase)) {
             $process = Get-Process -Id ([int]$item.ProcessId) -ErrorAction SilentlyContinue
-            if ($process) { $matches += $process }
+            if ($process) { $foundProcesses += $process }
         }
     }
-    return @($matches)
+    return @($foundProcesses)
 }
 
 function Stop-TargetApplication([string]$ExpectedPath) {
@@ -116,10 +116,7 @@ function Wait-ForApplicationHealth($StartedProcess, [string]$ExpectedPath) {
             throw ('The updated application exited during startup (exit code ' + $StartedProcess.ExitCode + ').')
         }
         $window = $StartedProcess.MainWindowHandle
-        if ($window -ne [IntPtr]::Zero) {
-            if (-not $StartedProcess.Responding) {
-                throw 'The updated application opened a window but is not responding.'
-            }
+        if ($window -ne [IntPtr]::Zero -and $StartedProcess.Responding) {
             $actualPath = $null
             try {
                 $item = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId=" + $StartedProcess.Id) -ErrorAction Stop
