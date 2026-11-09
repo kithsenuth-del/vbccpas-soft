@@ -270,6 +270,7 @@ try {
                 '-TargetExe', ('"' + $TargetExe + '"'),
                 '-RecoverOnly', '-Quiet'
             )
+            if ($RestartAfterRecovery) { $arguments += '-RestartAfterRecovery' }
             $elevated = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList $arguments
             if ($elevated.ExitCode -ne 0) {
                 throw ('Elevated recovery failed with exit code ' + $elevated.ExitCode + '.')
