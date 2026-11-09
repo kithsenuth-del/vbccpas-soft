@@ -65,6 +65,9 @@ try {
     Write-Host "Testing interrupted-update recovery and database preservation..."
     & (Join-Path $Root "tests\test_updater_recovery.ps1")
     if ($LASTEXITCODE -ne 0) { throw "PowerShell recovery regression tests failed." }
+    Write-Host "Simulating a complete Windows update, running-app closure, restart and permission checks..."
+    & (Join-Path $Root "tests\test_updater_windows.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "Windows updater end-to-end simulation failed." }
 
     if (Test-Path -LiteralPath $Dist) {
         Remove-Item -LiteralPath $Dist -Recurse -Force
@@ -137,8 +140,39 @@ try {
         if ($Unexpected.Count -gt 0 -or $ArchivedFiles.Count -ne ($Entries.Count - 1)) {
             throw "Windows ZIP contents do not match the managed-file manifest."
         }
+        $ProtectedEntries = @($Entries | Where-Object {
+            $parts = $_ -split '/'
+            @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data') |
+                Where-Object { $parts -contains $_ } | Select-Object -First 1
+        })
+        if ($ProtectedEntries.Count -gt 0) {
+            throw ("Windows ZIP contains protected user data: " + ($ProtectedEntries -join ', '))
+        }
+        # Read every compressed entry so corrupt data streams fail the build,
+        # rather than only checking the central-directory names.
+        foreach ($Entry in $Archive.Entries) {
+            if ($Entry.FullName.EndsWith('/')) { continue }
+            $Stream = $Entry.Open()
+            try {
+                $Buffer = New-Object byte[] 65536
+                while ($Stream.Read($Buffer, 0, $Buffer.Length) -gt 0) { }
+            } finally {
+                $Stream.Dispose()
+            }
+        }
     } finally {
         $Archive.Dispose()
+    }
+
+    $ChecksumPath = $ZipPath + ".sha256"
+    $PackageHash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath $ChecksumPath -Value ($PackageHash + "  VBCCPAS-Soft-Windows.zip") -Encoding ASCII -NoNewline
+    $ChecksumLine = Get-Content -LiteralPath $ChecksumPath -Raw
+    if ($ChecksumLine -ne ($PackageHash + "  VBCCPAS-Soft-Windows.zip")) {
+        throw "The Windows ZIP SHA-256 checksum file could not be verified."
+    }
+    if ((Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $PackageHash) {
+        throw "The Windows ZIP changed after its checksum was generated."
     }
 } finally {
     Set-Content -LiteralPath $BuildInfoPath -Value $OriginalBuildInfo -Encoding utf8
@@ -154,4 +188,5 @@ Write-Host "Build and verification complete."
 Write-Host "Application: $Dist\VBCCPAS-Soft.exe"
 Write-Host "Standalone updater: $Dist\VBCCPAS-Updater.exe"
 Write-Host "Complete distribution: $Dist\VBCCPAS-Soft-Windows.zip"
+Write-Host "SHA-256 checksum: $Dist\VBCCPAS-Soft-Windows.zip.sha256"
 Write-Host "For another computer, extract the ZIP to a permanent folder and run Setup-VBCCPAS-Shortcut.bat."
