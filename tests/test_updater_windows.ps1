@@ -62,7 +62,12 @@ function Invoke-StandardUserProbe([PSCredential]$Credential, [string]$Permission
         '-TargetExe', ('"' + $Executable + '"'),
         '-CheckPermissionsOnly'
     )
-    $process = Start-Process -FilePath 'powershell.exe' -Credential $Credential -LoadUserProfile -ArgumentList $arguments -RedirectStandardOutput $OutputPath -Wait -PassThru
+    $process = Start-Process -FilePath 'powershell.exe' -Credential $Credential -LoadUserProfile -ArgumentList $arguments -RedirectStandardOutput $OutputPath -PassThru
+    if (-not $process.WaitForExit(30000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw 'Standard-user permission probe did not finish within 30 seconds.'
+    }
+    $process.Refresh()
     $output = if (Test-Path -LiteralPath $OutputPath) { Get-Content -LiteralPath $OutputPath -Raw } else { '' }
     if ([string]::IsNullOrWhiteSpace($output)) {
         throw "Standard-user permission probe returned no result (exit $($process.ExitCode))."
