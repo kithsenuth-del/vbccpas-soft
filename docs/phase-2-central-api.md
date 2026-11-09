@@ -17,6 +17,16 @@ The new `cloud_api` service is separate from the Windows desktop executable.
 - One-time bootstrap command for the first cloud executive administrator.
 - Dockerfile and Compose stack with a persistent PostgreSQL volume. The API port is bound to host loopback only.
 
+## Single-society deployment boundary
+
+Each production API deployment and PostgreSQL database is dedicated to exactly one society. Set a stable, non-secret identifier for that society in the deployment environment:
+
+```sh
+export VBCCPAS_SINGLE_SOCIETY_ID="vbccpas-primary"
+```
+
+The production API refuses to start without PostgreSQL and this identifier. It stores the identifier in a singleton database identity row and refuses to start if the same database is later configured for a different society. Do not point multiple societies at one database or share this deployment. Provision a separate database, secret set, HTTPS endpoint, and backup/restore process for every society. This is a deployment isolation guard, not a substitute for a future multi-tenant schema.
+
 ## Initialising the service
 
 From the repository root, install the cloud dependencies:
@@ -32,7 +42,7 @@ export VBCCPAS_DB_PASSWORD="$(openssl rand -hex 32)"
 docker compose -f cloud_api/docker-compose.yml up -d --build
 ```
 
-The Compose file binds the API to `127.0.0.1:8080`. Put a maintained reverse proxy with HTTPS in front of it. Do not expose port 8080 or PostgreSQL directly to the internet. Use a managed secret store rather than a committed environment file.
+The Compose file binds the API to `127.0.0.1:8080`. Set `VBCCPAS_SINGLE_SOCIETY_ID` to a unique stable identifier before starting it. Put a maintained reverse proxy with HTTPS in front of it. Do not expose port 8080 or PostgreSQL directly to the internet. Use a managed secret store rather than a committed environment file.
 
 Create the first executive administrator once from a one-off container command:
 
