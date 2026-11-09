@@ -123,8 +123,9 @@ try {
     $Archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
     try {
         $Entries = @($Archive.Entries | ForEach-Object { $_.FullName })
+        $FileEntries = @($Archive.Entries | Where-Object { -not $_.FullName.EndsWith('/') } | ForEach-Object { $_.FullName })
         foreach ($Name in ($Required + $ManifestName)) {
-            if ($Entries -notcontains $Name) {
+            if ($FileEntries -notcontains $Name) {
                 throw "Windows ZIP is missing required package entry: $Name"
             }
         }
@@ -136,11 +137,11 @@ try {
             $Reader.Dispose()
         }
         $ArchivedFiles = @($ArchivedManifest.files)
-        $Unexpected = @($Entries | Where-Object { $_ -ne $ManifestName } | Where-Object { $ArchivedFiles -notcontains $_ })
-        if ($Unexpected.Count -gt 0 -or $ArchivedFiles.Count -ne ($Entries.Count - 1)) {
+        $Unexpected = @($FileEntries | Where-Object { $_ -ne $ManifestName } | Where-Object { $ArchivedFiles -notcontains $_ })
+        if ($Unexpected.Count -gt 0 -or $ArchivedFiles.Count -ne ($FileEntries.Count - 1)) {
             throw "Windows ZIP contents do not match the managed-file manifest."
         }
-        $ProtectedEntries = @($Entries | Where-Object {
+        $ProtectedEntries = @($FileEntries | Where-Object {
             $parts = $_ -split '/'
             @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data') |
                 Where-Object { $parts -contains $_ } | Select-Object -First 1
