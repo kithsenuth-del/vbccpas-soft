@@ -6,7 +6,12 @@ set "RECOVERY=%LOCALAPPDATA%\VBCCPAS\Recovery\updater-recovery.ps1"
 
 if exist "%RECOVERY%" (
     echo Checking for an interrupted VBCCPAS installation...
-    powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%RECOVERY%" -TargetExe "%TARGET%" -RecoverOnly
+    findstr /I /C:"RestartAfterRecovery" "%RECOVERY%" >nul
+    if errorlevel 1 (
+        powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%RECOVERY%" -TargetExe "%TARGET%" -RecoverOnly
+    ) else (
+        powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%RECOVERY%" -TargetExe "%TARGET%" -RecoverOnly -RestartAfterRecovery
+    )
     if errorlevel 1 (
         echo Recovery could not be completed. See:
         echo %LOCALAPPDATA%\VBCCPAS\update.log

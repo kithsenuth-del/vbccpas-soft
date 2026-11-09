@@ -21,8 +21,8 @@ MAX_EXTRACTED_FILE_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_TOTAL_BYTES = 500 * 1024 * 1024
 MAX_PACKAGE_FILES = 10000
 PROTECTED_PATH_PARTS = {
-    "society.db", "backups", "exports", "logs", "user-data",
-    "user_data", ".vbccpas-data",
+    "society.db", "society.db-wal", "society.db-shm", "society.db-journal",
+    "backups", "exports", "logs", "user-data", "user_data", ".vbccpas-data",
 }
 
 
@@ -179,6 +179,12 @@ def recover_interrupted_update(target_exe, recovery_script=None):
         "-ExecutionPolicy", "Bypass", "-File", str(script),
         "-TargetExe", str(target), "-RecoverOnly", "-Quiet",
     ]
+    # Older persistent recovery bootstraps may not know this optional switch.
+    try:
+        if "RestartAfterRecovery" in script.read_text(encoding="utf-8-sig"):
+            command.append("-RestartAfterRecovery")
+    except (OSError, UnicodeError):
+        pass
     completed = subprocess.run(
         command, capture_output=True, text=True, timeout=180, check=False,
         creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)

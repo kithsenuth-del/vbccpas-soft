@@ -46,6 +46,38 @@ def release_payload(tag="build-" + "a" * 40, digest="sha256:" + "b" * 64):
     }
 
 
+class FakeBinaryResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self, _limit=-1):
+        return self.payload
+
+
+def complete_package_bytes():
+    import io
+    import zipfile
+    files = {
+        "VBCCPAS-Soft.exe": b"application",
+        "VBCCPAS-Updater.exe": b"updater",
+        "updater.ps1": b"installer",
+        "Recover-VBCCPAS.bat": b"recovery",
+    }
+    manifest = json.dumps({"schema_version": 1, "files": sorted(files)})
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+        archive.writestr(updater.MANIFEST_NAME, manifest)
+    return buffer.getvalue()
+
+
 class UpdaterTests(unittest.TestCase):
     def test_returns_none_when_latest_release_is_current_build(self):
         commit = "a" * 40
@@ -64,11 +96,24 @@ class UpdaterTests(unittest.TestCase):
         from pathlib import Path
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "updater-recovery.ps1"
-            script.write_text("# recovery bootstrap", encoding="utf-8")
+            script.write_text("param([switch]$RestartAfterRecovery)", encoding="utf-8")
             completed = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
             with patch.object(updater.subprocess, "run", return_value=completed) as run:
                 updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
             self.assertIn("-RecoverOnly", run.call_args.args[0])
+            self.assertIn("-RestartAfterRecovery", run.call_args.args[0])
+
+    def test_older_recovery_bootstrap_does_not_receive_new_switch(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "updater-recovery.ps1"
+            script.write_text("# older recovery bootstrap", encoding="utf-8")
+            completed = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+            with patch.object(updater.subprocess, "run", return_value=completed) as run:
+                updater.recover_interrupted_update(Path(folder) / "VBCCPAS-Soft.exe", script)
+            self.assertIn("-RecoverOnly", run.call_args.args[0])
+            self.assertNotIn("-RestartAfterRecovery", run.call_args.args[0])
 
     def test_recovery_bootstrap_failure_blocks_new_update(self):
         import tempfile
@@ -106,6 +151,66 @@ class UpdaterTests(unittest.TestCase):
         with patch.object(updater, "_request", return_value=FakeResponse(payload)):
             with self.assertRaisesRegex(ValueError, "download address"):
                 updater.check_for_update("c" * 40)
+
+    def test_download_rejects_incomplete_package_before_launch(self):
+        import tempfile
+        package = complete_package_bytes()
+        release = {"_update_asset": {
+            "url": "https://github.com/" + updater.REPOSITORY + "/releases/download/build-" + "a" * 40 + "/" + updater.UPDATE_ASSET,
+            "size": len(package) + 1,
+            "digest": __import__("hashlib").sha256(package).hexdigest(),
+        }}
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "VBCCPAS-Soft.exe"
+            target.write_bytes(b"old application")
+            with patch.object(updater, "_request", return_value=FakeBinaryResponse(package)), \
+                 patch.object(updater.subprocess, "Popen") as launch:
+                with self.assertRaisesRegex(ValueError, "incomplete"):
+                    updater.download_and_launch(release, target, 0)
+            launch.assert_not_called()
+            self.assertEqual(target.read_bytes(), b"old application")
+
+    def test_download_rejects_bad_sha256_before_launch(self):
+        import tempfile
+        package = complete_package_bytes()
+        release = {"_update_asset": {
+            "url": "https://github.com/" + updater.REPOSITORY + "/releases/download/build-" + "a" * 40 + "/" + updater.UPDATE_ASSET,
+            "size": len(package),
+            "digest": "0" * 64,
+        }}
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "VBCCPAS-Soft.exe"
+            target.write_bytes(b"old application")
+            with patch.object(updater, "_request", return_value=FakeBinaryResponse(package)), \
+                 patch.object(updater.subprocess, "Popen") as launch:
+                with self.assertRaisesRegex(ValueError, "checksum"):
+                    updater.download_and_launch(release, target, 0)
+            launch.assert_not_called()
+            self.assertEqual(target.read_bytes(), b"old application")
+
+    def test_download_verifies_and_launches_a_complete_package(self):
+        import hashlib
+        import shutil
+        import tempfile
+        package = complete_package_bytes()
+        release = {"_update_asset": {
+            "url": "https://github.com/" + updater.REPOSITORY + "/releases/download/build-" + "a" * 40 + "/" + updater.UPDATE_ASSET,
+            "size": len(package),
+            "digest": hashlib.sha256(package).hexdigest(),
+        }}
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "VBCCPAS-Soft.exe"
+            target.write_bytes(b"old application")
+            with patch.object(updater, "_request", return_value=FakeBinaryResponse(package)), \
+                 patch.object(updater.subprocess, "Popen") as launch:
+                updater.download_and_launch(release, target, 0)
+            launch.assert_called_once()
+            command = launch.call_args.args[0]
+            script_path = Path(command[command.index("-File") + 1])
+            self.assertEqual(script_path.name, "updater.ps1")
+            self.assertTrue((script_path.parent / updater.MANIFEST_NAME).is_file())
+            self.assertEqual(target.read_bytes(), b"old application")
+            shutil.rmtree(script_path.parent.parent, ignore_errors=True)
 
 
 if __name__ == "__main__":

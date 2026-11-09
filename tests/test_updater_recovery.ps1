@@ -39,7 +39,7 @@ try {
     # A missing backup must fail closed and retain the journal for manual recovery.
     $journal.entries = @(@{ relative = 'VBCCPAS-Soft.exe'; backup = (Join-Path $backupDirectory 'missing.exe'); existed = $true })
     $journal | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $journalPath -Encoding UTF8
-    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly -Quiet
     if ($LASTEXITCODE -eq 0) { throw 'Recovery unexpectedly succeeded without its required backup.' }
     if (-not (Test-Path -LiteralPath $journalPath)) { throw 'Failed recovery journal was not retained.' }
 

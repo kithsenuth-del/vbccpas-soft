@@ -5,6 +5,8 @@ param(
     [int]$UpdaterProcessId = 0,
     [switch]$RepairMode,
     [switch]$RecoverOnly,
+    [switch]$RestartAfterRecovery,
+    [switch]$CheckPermissionsOnly,
     [switch]$Quiet
 )
 
@@ -13,11 +15,12 @@ $changed = New-Object System.Collections.ArrayList
 $backupDirectory = $null
 $stageRoot = $null
 $started = $null
+$recoveryCompleted = $false
 $logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
 $journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
 $recoveryScriptPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\Recovery\updater-recovery.ps1"
 $manifestName = 'vbccpas-managed-files.json'
-$protectedParts = @('society.db','backups','exports','logs','user-data','user_data','.vbccpas-data')
+$protectedParts = @('society.db','society.db-wal','society.db-shm','society.db-journal','backups','exports','logs','user-data','user_data','.vbccpas-data')
 
 function Show-UpdateError([string]$Message) {
     try {
@@ -30,8 +33,14 @@ function Show-UpdateError([string]$Message) {
     } catch { }
 }
 
-function Wait-ForProcessExit([int]$Id, [string]$Description) {
+function Wait-ForProcessExit([int]$Id, [string]$Description, [string]$ExpectedProcessName = '') {
     if ($Id -le 0 -or $Id -eq $PID) { return }
+    $process = Get-Process -Id $Id -ErrorAction SilentlyContinue
+    if (-not $process) { return }
+    if ($ExpectedProcessName -and
+        -not [string]::Equals($process.ProcessName, $ExpectedProcessName, [StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
     try {
         Wait-Process -Id $Id -Timeout 180 -ErrorAction Stop
     } catch {
@@ -39,6 +48,103 @@ function Wait-ForProcessExit([int]$Id, [string]$Description) {
             throw ($Description + ' did not close in time. No application files were replaced.')
         }
     }
+}
+
+function Test-CanWriteDirectory([string]$Directory) {
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) { return $false }
+    $probe = Join-Path $Directory ('.vbccpas-write-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        $stream.Dispose()
+        Remove-Item -LiteralPath $probe -Force
+        return $true
+    } catch {
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+}
+
+function Get-TargetApplicationProcesses([string]$ExpectedPath) {
+    $expected = [IO.Path]::GetFullPath($ExpectedPath)
+    try {
+        $items = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='VBCCPAS-Soft.exe'" -ErrorAction Stop)
+    } catch {
+        throw ('Could not safely inspect running VBCCPAS Soft processes: ' + $_.Exception.Message)
+    }
+    $foundProcesses = @()
+    foreach ($item in $items) {
+        if ([string]::IsNullOrWhiteSpace([string]$item.ExecutablePath)) {
+            throw ('A running VBCCPAS Soft process (PID ' + $item.ProcessId + ') could not be path-verified. Close it manually and retry.')
+        }
+        $actual = [IO.Path]::GetFullPath([string]$item.ExecutablePath)
+        if ([string]::Equals($actual, $expected, [StringComparison]::OrdinalIgnoreCase)) {
+            $process = Get-Process -Id ([int]$item.ProcessId) -ErrorAction SilentlyContinue
+            if ($process) { $foundProcesses += $process }
+        }
+    }
+    return @($foundProcesses)
+}
+
+function Stop-TargetApplication([string]$ExpectedPath) {
+    # The updater must never overwrite a running executable. Ask every matching
+    # instance to close normally, then wait. A non-responsive app is left alone.
+    $deadline = (Get-Date).AddSeconds(90)
+    do {
+        $running = @(Get-TargetApplicationProcesses $ExpectedPath)
+        if ($running.Count -eq 0) { return }
+        foreach ($process in $running) {
+            try { [void]$process.CloseMainWindow() } catch { }
+        }
+        foreach ($process in $running) {
+            try { [void]$process.WaitForExit(5000) } catch { }
+        }
+        if ((Get-Date) -ge $deadline) {
+            $remaining = @(Get-TargetApplicationProcesses $ExpectedPath)
+            if ($remaining.Count -gt 0) {
+                throw 'VBCCPAS Soft is still running and did not close after a normal close request. Save your work, close the application manually, and run the updater again. No application files were replaced.'
+            }
+        }
+        if (@(Get-TargetApplicationProcesses $ExpectedPath).Count -gt 0) {
+            Start-Sleep -Seconds 1
+        }
+    } while ((Get-Date) -lt $deadline)
+}
+
+function Wait-ForApplicationHealth($StartedProcess, [string]$ExpectedPath) {
+    $deadline = (Get-Date).AddSeconds(45)
+    do {
+        $StartedProcess.Refresh()
+        if ($StartedProcess.HasExited) {
+            throw ('The updated application exited during startup (exit code ' + $StartedProcess.ExitCode + ').')
+        }
+        $window = $StartedProcess.MainWindowHandle
+        if ($window -ne [IntPtr]::Zero -and $StartedProcess.Responding) {
+            $actualPath = $null
+            try {
+                $item = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId=" + $StartedProcess.Id) -ErrorAction Stop
+                $actualPath = [IO.Path]::GetFullPath([string]$item.ExecutablePath)
+            } catch {
+                throw 'The updated application process could not be verified after restart.'
+            }
+            if (-not [string]::Equals($actualPath, $ExpectedPath, [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'The restarted application is not running from the selected installation folder.'
+            }
+            return
+        }
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+    throw 'The updated application did not create a responsive main window within 45 seconds.'
+}
+
+function Show-UpdateSuccess([string]$Message) {
+    try {
+        Add-Type -AssemblyName PresentationFramework
+        [System.Windows.MessageBox]::Show(
+            $Message, 'VBCCPAS Soft Updater',
+            [System.Windows.MessageBoxButton]::OK,
+            [System.Windows.MessageBoxImage]::Information
+        ) | Out-Null
+    } catch { }
 }
 
 function Assert-SafeRelativePath([string]$RelativePath) {
@@ -74,7 +180,14 @@ function Save-RecoveryJournal($Journal) {
     $json = $Journal | ConvertTo-Json -Depth 8
     [IO.File]::WriteAllText($temporaryJournal, $json, (New-Object System.Text.UTF8Encoding($false)))
     if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
-        [IO.File]::Replace($temporaryJournal, $journalPath, $null)
+        # File.Replace requires a valid same-volume backup path on Windows.
+        # Keep a unique one-step backup so a failed replacement never destroys
+        # the last readable recovery journal.
+        $previousJournal = $journalPath + '.previous-' + [Guid]::NewGuid().ToString('N')
+        [IO.File]::Replace($temporaryJournal, $journalPath, $previousJournal)
+        if (Test-Path -LiteralPath $previousJournal -PathType Leaf) {
+            Remove-Item -LiteralPath $previousJournal -Force
+        }
     } else {
         Move-Item -LiteralPath $temporaryJournal -Destination $journalPath -Force
     }
@@ -137,24 +250,27 @@ try {
     if ([IO.Path]::GetFileName($TargetExe) -ne 'VBCCPAS-Soft.exe') {
         throw 'The selected application target is not VBCCPAS-Soft.exe.'
     }
+    if ($CheckPermissionsOnly) {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        $canWriteTarget = Test-CanWriteDirectory $targetDirectory
+        [pscustomobject]@{
+            target_directory = $targetDirectory
+            is_administrator = $isAdministrator
+            can_write_target = $canWriteTarget
+            requires_elevation = (-not $isAdministrator -and -not $canWriteTarget)
+        } | ConvertTo-Json -Compress
+        if (-not $canWriteTarget) { exit 2 }
+        exit 0
+    }
     if ($RecoverOnly) {
         New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
         if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) { exit 0 }
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        $canWriteTarget = $false
-        if (-not $isAdministrator -and (Test-Path -LiteralPath $targetDirectory -PathType Container)) {
-            $probe = Join-Path $targetDirectory ('.vbccpas-recovery-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
-            try {
-                $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-                $stream.Dispose()
-                Remove-Item -LiteralPath $probe -Force
-                $canWriteTarget = $true
-            } catch {
-                Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
-            }
-        }
+        $canWriteTarget = Test-CanWriteDirectory $targetDirectory
         if (-not $isAdministrator -and -not $canWriteTarget) {
             $arguments = @(
                 '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
@@ -162,16 +278,35 @@ try {
                 '-TargetExe', ('"' + $TargetExe + '"'),
                 '-RecoverOnly', '-Quiet'
             )
+            if ($RestartAfterRecovery) { $arguments += '-RestartAfterRecovery' }
             $elevated = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList $arguments
             if ($elevated.ExitCode -ne 0) {
                 throw ('Elevated recovery failed with exit code ' + $elevated.ExitCode + '.')
             }
             exit 0
         }
+        Stop-TargetApplication $TargetExe
         [void](Restore-RecoveryJournal $TargetExe)
+        $recoveryCompleted = $true
+        if ($RestartAfterRecovery -and (Test-Path -LiteralPath $TargetExe -PathType Leaf)) {
+            $recoveredProcess = Start-Process -FilePath $TargetExe -PassThru
+            Wait-ForApplicationHealth $recoveredProcess $TargetExe
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Recovered application restarted and its responsive window verified (PID {1})." -f (Get-Date -Format o), $recoveredProcess.Id)
+        }
         exit 0
     }
+    New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Standalone updater started. Target: {1}" -f (Get-Date -Format o), $TargetExe)
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
+    # Only delete the dedicated temp staging folder created by updater.py.
+    # Never infer a cleanup target from an arbitrary caller-supplied package path.
+    $tempDirectory = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\\') + [IO.Path]::DirectorySeparatorChar
+    $packageParent = [IO.Path]::GetDirectoryName($PackageDirectory)
+    if ([IO.Path]::GetFileName($PackageDirectory) -eq 'payload' -and
+        [IO.Path]::GetFileName($packageParent).StartsWith('vbccpas-full-update-', [StringComparison]::OrdinalIgnoreCase) -and
+        [IO.Path]::GetFullPath($packageParent).StartsWith($tempDirectory, [StringComparison]::OrdinalIgnoreCase)) {
+        $stageRoot = [IO.Path]::GetFullPath($packageParent)
+    }
     if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf) -and -not $RepairMode) {
         throw 'The installed VBCCPAS application could not be found. Run VBCCPAS-Updater.exe --repair to restore it.'
     }
@@ -218,18 +353,7 @@ try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $canWriteDirectory = $false
-    if (-not $isAdministrator) {
-        $probe = Join-Path $targetDirectory ('.vbccpas-write-test-' + [Guid]::NewGuid().ToString('N') + '.tmp')
-        try {
-            $stream = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-            $stream.Dispose()
-            Remove-Item -LiteralPath $probe -Force
-            $canWriteDirectory = $true
-        } catch {
-            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
-        }
-    }
+    $canWriteDirectory = Test-CanWriteDirectory $targetDirectory
     if (-not $isAdministrator -and -not $canWriteDirectory) {
         $arguments = @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass',
@@ -244,8 +368,23 @@ try {
         exit 0
     }
 
-    Wait-ForProcessExit $ProcessId 'VBCCPAS Soft'
-    Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater'
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Waiting for the installed application to close normally." -f (Get-Date -Format o))
+    Stop-TargetApplication $TargetExe
+    Wait-ForProcessExit $UpdaterProcessId 'VBCCPAS Updater' 'VBCCPAS-Updater'
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Confirmed no matching application process remains." -f (Get-Date -Format o))
+
+    # Record the existing SQLite database and journal sidecars after the app
+    # has closed. The update is not allowed to add, remove, or alter these files.
+    $databaseNames = @('society.db','society.db-wal','society.db-shm','society.db-journal')
+    $databaseSnapshot = @{}
+    foreach ($databaseName in $databaseNames) {
+        $databasePath = Join-Path $targetDirectory $databaseName
+        if (Test-Path -LiteralPath $databasePath -PathType Leaf) {
+            $databaseSnapshot[$databaseName] = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+        } else {
+            $databaseSnapshot[$databaseName] = $null
+        }
+    }
 
     # Parse the previous manifest before changing anything. It allows obsolete
     # application files to be removed on later updates without touching user files.
@@ -320,20 +459,37 @@ try {
         }
     }
 
+    # Verify the update did not touch the society database or SQLite sidecars.
+    foreach ($databaseName in $databaseNames) {
+        $databasePath = Join-Path $targetDirectory $databaseName
+        $expectedDatabaseHash = $databaseSnapshot[$databaseName]
+        $databaseExists = Test-Path -LiteralPath $databasePath -PathType Leaf
+        if ($null -eq $expectedDatabaseHash) {
+            if ($databaseExists) { throw ('The update unexpectedly created protected database file: ' + $databaseName) }
+        } else {
+            if (-not $databaseExists) { throw ('The update removed protected database file: ' + $databaseName) }
+            $actualDatabaseHash = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+            if ($actualDatabaseHash -ne $expectedDatabaseHash) {
+                throw ('The update changed protected database file: ' + $databaseName)
+            }
+        }
+    }
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Society database and SQLite sidecar preservation checks passed." -f (Get-Date -Format o))
+
     # Verify the replacement can launch before declaring success.
     Add-Content -LiteralPath $logPath -Value ("[{0}] Files replaced; checking application startup." -f (Get-Date -Format o))
     $started = Start-Process -FilePath $TargetExe -PassThru
-    Start-Sleep -Seconds 8
-    $started.Refresh()
-    if ($started.HasExited) { throw ('The updated application exited during startup (exit code ' + $started.ExitCode + ').') }
+    Wait-ForApplicationHealth $started $TargetExe
     $journal.state = 'verified'
     $journal.verified = Get-Date -Format o
     Save-RecoveryJournal $journal
-    Add-Content -LiteralPath $logPath -Value ("[{0}] Application startup verified. Backup retained at {1}" -f (Get-Date -Format o), $backupDirectory)
-    $stageRoot = Split-Path -Parent $PackageDirectory
+    Add-Content -LiteralPath $logPath -Value ("[{0}] Update completed successfully. Responsive application window verified (PID {1}). Backup retained at {2}" -f (Get-Date -Format o), $started.Id, $backupDirectory)
     if (Test-Path -LiteralPath $journalPath) { Remove-Item -LiteralPath $journalPath -Force -ErrorAction SilentlyContinue }
-    if (Test-Path -LiteralPath $stageRoot) {
+    if ($stageRoot -and (Test-Path -LiteralPath $stageRoot -PathType Container)) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (-not $Quiet) {
+        Show-UpdateSuccess ('VBCCPAS Soft was updated successfully and restarted.' + [Environment]::NewLine + 'Your society database and personal data were preserved.' + [Environment]::NewLine + 'Rollback copy: ' + $backupDirectory)
     }
  } catch {
     $failureMessage = $_.Exception.Message
@@ -342,19 +498,40 @@ try {
     }
     $rollbackErrors = @()
     try {
-        if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
+        if (-not $RecoverOnly -and (Test-Path -LiteralPath $journalPath -PathType Leaf)) {
             [void](Restore-RecoveryJournal $TargetExe)
         }
     } catch {
         $rollbackErrors += ('Recovery journal: ' + $_.Exception.Message)
     }
-    if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureMessage) } catch { } }
-    $message = 'The complete update failed. The updater attempted to restore the previous application files.'
+    $failureLog = $failureMessage
+    if ($rollbackErrors.Count -gt 0) {
+        $failureLog += ' | Rollback needs attention: ' + ($rollbackErrors -join '; ')
+    } elseif ($backupDirectory) {
+        $failureLog += ' | Rollback completed successfully. Recovery copy: ' + $backupDirectory
+    } else {
+        $failureLog += ' | No installation files were changed.'
+    }
+    if ($logPath) {
+        try {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $logPath) -Force | Out-Null
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureLog)
+        } catch { }
+    }
+    if ($RecoverOnly -and $recoveryCompleted) {
+        $message = 'The previous application files were restored, but the recovered application did not pass its restart check.'
+    } elseif ($RecoverOnly) {
+        $message = 'Interrupted-update recovery could not be completed. The recovery journal has been retained for another attempt.'
+    } else {
+        $message = 'The complete update failed. The updater attempted to restore the previous application files.'
+    }
     if ($rollbackErrors.Count -gt 0) {
         $message += [Environment]::NewLine + 'Some rollback operations need attention:' +
                     [Environment]::NewLine + ($rollbackErrors -join [Environment]::NewLine)
     } elseif ($backupDirectory) {
-        $message += [Environment]::NewLine + 'Rollback copy: ' + $backupDirectory
+        $message += [Environment]::NewLine + 'Rollback completed successfully. Recovery copy: ' + $backupDirectory
+    } else {
+        $message += [Environment]::NewLine + 'No installation files were changed.'
     }
 
     $message += [Environment]::NewLine + 'Update log: ' + $logPath

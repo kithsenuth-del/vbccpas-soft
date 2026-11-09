@@ -308,7 +308,9 @@ class UnifiedApp(desktop.App):
                 close_fds=True,
                 creationflags=flags,
             )
-            self.close_application()
+            # Keep the main application open while the updater checks for a
+            # release and asks for confirmation. The installer requests a
+            # normal close only after the user accepts the update.
         except Exception as exc:
             messagebox.showerror(
                 "Could not start updater",
