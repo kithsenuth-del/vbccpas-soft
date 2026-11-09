@@ -21,6 +21,8 @@ services:
     environment:
       VBCCPAS_DATABASE_URL: postgresql+psycopg://vbccpas:${VBCCPAS_DB_PASSWORD}@db:5432/vbccpas
       VBCCPAS_SESSION_HOURS: "12"
+      VBCCPAS_ENV: production
+      VBCCPAS_SINGLE_SOCIETY_ID: ${VBCCPAS_SINGLE_SOCIETY_ID:?Set a unique stable society identifier for this deployment}
     depends_on:
       db:
         condition: service_healthy
