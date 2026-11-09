@@ -1,7 +1,7 @@
 """Provision the first cloud executive administrator exactly once."""
 import os
 from sqlalchemy import select
-from .app import Account, AuditEvent, Base, SessionLocal, engine, now_utc, password_hash
+from .app import Account, AuditEvent, Base, SessionLocal, engine, now_utc, password_hash, verify_production_deployment
 
 def main():
     email = os.environ.get("VBCCPAS_BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
@@ -9,6 +9,7 @@ def main():
     display_name = os.environ.get("VBCCPAS_BOOTSTRAP_ADMIN_NAME", "Executive Administrator").strip()
     if not email or not password:
         raise SystemExit("Set VBCCPAS_BOOTSTRAP_ADMIN_EMAIL and VBCCPAS_BOOTSTRAP_ADMIN_PASSWORD using deployment secrets.")
+    verify_production_deployment()
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         if db.scalar(select(Account.id).limit(1)):
