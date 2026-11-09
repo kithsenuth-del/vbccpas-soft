@@ -171,9 +171,12 @@ try {
         throw 'The old test application did not create a main window.'
     }
 
-    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -PackageDirectory $verifiedPayload -Quiet
-    if ($LASTEXITCODE -ne 0) {
-        throw "End-to-end update script failed with exit code $LASTEXITCODE."
+    $updateOutput = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -PackageDirectory $verifiedPayload -Quiet 2>&1 | Out-String
+    $updateExitCode = $LASTEXITCODE
+    if ($updateExitCode -ne 0) {
+        $updateLogPath = Join-Path $env:LOCALAPPDATA 'VBCCPAS\update.log'
+        $updateLog = if (Test-Path -LiteralPath $updateLogPath) { Get-Content -LiteralPath $updateLogPath -Raw } else { 'No updater log was created.' }
+        throw ("End-to-end update script failed with exit code " + $updateExitCode + "." + [Environment]::NewLine + $updateOutput + [Environment]::NewLine + $updateLog)
     }
 
     $oldProcess.Refresh()
