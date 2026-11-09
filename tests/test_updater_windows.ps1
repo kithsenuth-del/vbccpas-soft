@@ -133,6 +133,26 @@ try {
         ConvertTo-Json -Depth 4 |
         Set-Content -LiteralPath (Join-Path $payloadDirectory 'vbccpas-managed-files.json') -Encoding UTF8
 
+    # Package, copy (simulated download), hash-verify and extract the ZIP exactly
+    # as the standalone updater does before handing it to updater.ps1.
+    $downloadDirectory = Join-Path $tempRoot 'download'
+    $verifiedPayload = Join-Path $downloadDirectory 'verified\payload'
+    New-Item -ItemType Directory -Path $downloadDirectory, $verifiedPayload -Force | Out-Null
+    $sourceZip = Join-Path $tempRoot 'source-package.zip'
+    $downloadedZip = Join-Path $downloadDirectory 'VBCCPAS-Soft-Windows.zip'
+    Compress-Archive -Path (Join-Path $payloadDirectory '*') -DestinationPath $sourceZip -Force
+    $expectedPackageHash = (Get-FileHash -LiteralPath $sourceZip -Algorithm SHA256).Hash
+    Copy-Item -LiteralPath $sourceZip -Destination $downloadedZip -Force
+    $downloadedPackageHash = (Get-FileHash -LiteralPath $downloadedZip -Algorithm SHA256).Hash
+    if ($downloadedPackageHash -ne $expectedPackageHash) {
+        throw 'Downloaded Windows package failed SHA-256 integrity verification.'
+    }
+    Expand-Archive -LiteralPath $downloadedZip -DestinationPath $verifiedPayload -Force
+    $verifiedManifest = Get-Content -LiteralPath (Join-Path $verifiedPayload 'vbccpas-managed-files.json') -Raw | ConvertFrom-Json
+    if ($verifiedManifest.schema_version -ne 1 -or @($verifiedManifest.files).Count -ne $newFiles.Count) {
+        throw 'Downloaded ZIP did not extract to the expected complete package.'
+    }
+
     # Start the old application with no PID supplied. The updater must discover
     # it by its full executable path, request closure, and wait before replacing.
     $oldProcess = Start-Process -FilePath $targetExe -PassThru
@@ -147,7 +167,7 @@ try {
         throw 'The old test application did not create a main window.'
     }
 
-    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -PackageDirectory $payloadDirectory -Quiet
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -PackageDirectory $verifiedPayload -Quiet
     if ($LASTEXITCODE -ne 0) {
         throw "End-to-end update script failed with exit code $LASTEXITCODE."
     }
