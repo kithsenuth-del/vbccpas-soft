@@ -14,6 +14,7 @@ $originalAcl = $null
 $testUserName = $null
 $testUserSid = $null
 $testUserCreated = $false
+$standardUserRoot = $null
 
 function New-TestApplication([string]$OutputPath, [string]$ClassName, [string]$WindowTitle) {
     $source = @"
@@ -124,19 +125,11 @@ try {
         $testUserSid = $testUser.SID
         Add-LocalGroupMember -Group 'Users' -Member $testUserName -ErrorAction SilentlyContinue
 
-        $standardUserDirectory = Join-Path $tempRoot 'standard-user-install'
-        New-Item -ItemType Directory -Path $standardUserDirectory -Force | Out-Null
-        $parentAcl = Get-Acl -LiteralPath $tempRoot
-        $parentReadRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-            $testUserSid,
-            [System.Security.AccessControl.FileSystemRights]::ReadAndExecute,
-            ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit),
-            [System.Security.AccessControl.PropagationFlags]::None,
-            [System.Security.AccessControl.AccessControlType]::Allow
-        )
-        $parentAcl.AddAccessRule($parentReadRule)
-        Set-Acl -LiteralPath $tempRoot -AclObject $parentAcl
-        $standardAcl = Get-Acl -LiteralPath $standardUserDirectory
+        # ProgramData is traversable by ordinary Windows users; the runner's
+        # private profile Temp directory is intentionally not used for this test.
+        $standardUserRoot = Join-Path $env:ProgramData ('VBCCPAS-Updater-StandardUser-' + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $standardUserRoot -Force | Out-Null
+        $standardRootAcl = Get-Acl -LiteralPath $standardUserRoot
         $standardModifyRule = [System.Security.AccessControl.FileSystemAccessRule]::new(
             $testUserSid,
             [System.Security.AccessControl.FileSystemRights]::Modify,
@@ -144,8 +137,10 @@ try {
             [System.Security.AccessControl.PropagationFlags]::None,
             [System.Security.AccessControl.AccessControlType]::Allow
         )
-        $standardAcl.AddAccessRule($standardModifyRule)
-        Set-Acl -LiteralPath $standardUserDirectory -AclObject $standardAcl
+        $standardRootAcl.AddAccessRule($standardModifyRule)
+        Set-Acl -LiteralPath $standardUserRoot -AclObject $standardRootAcl
+        $standardUserDirectory = Join-Path $standardUserRoot 'installation'
+        New-Item -ItemType Directory -Path $standardUserDirectory -Force | Out-Null
         $standardTarget = Join-Path $standardUserDirectory 'VBCCPAS-Soft.exe'
         $standardScript = Join-Path $standardUserDirectory 'updater.ps1'
         Set-Content -LiteralPath $standardTarget -Value 'standard-user permission probe' -Encoding ASCII
@@ -396,6 +391,9 @@ try {
                 Get-CimInstance -ClassName Win32_UserProfile | Where-Object { $_.SID -eq $testUserSid.Value -and -not $_.Loaded } | Remove-CimInstance -ErrorAction SilentlyContinue
             } catch { }
         }
+    }
+    if ($standardUserRoot) {
+        Remove-Item -LiteralPath $standardUserRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($oldProcess) {
         try {
