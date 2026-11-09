@@ -8,6 +8,8 @@ $payloadDirectory = Join-Path $tempRoot 'stage\payload'
 $targetExe = Join-Path $installDirectory 'VBCCPAS-Soft.exe'
 $oldProcess = $null
 $newProcess = $null
+$interruptedProcess = $null
+$recoveredProcess = $null
 $originalAcl = $null
 
 function New-TestApplication([string]$OutputPath, [string]$ClassName, [string]$WindowTitle) {
@@ -221,7 +223,80 @@ try {
     $newProcess.CloseMainWindow() | Out-Null
     [void]$newProcess.WaitForExit(10000)
 
-    Write-Host 'Windows updater end-to-end simulation passed: running-app closure, verified replacement, restart, database/user-data preservation, and permission probes.'
+    # Simulate a crash after the new executable has been copied but before the
+    # install journal is marked verified. Recovery must close the partial app,
+    # restore the saved executable, remove the journal, and restart the old app.
+    $recoveryBackup = Join-Path $env:LOCALAPPDATA 'VBCCPAS\UpdateBackups\simulation-recovery'
+    New-Item -ItemType Directory -Path $recoveryBackup -Force | Out-Null
+    $recoveryBackupExe = Join-Path $recoveryBackup 'VBCCPAS-Soft.exe'
+    Copy-Item -LiteralPath $oldExe -Destination $recoveryBackupExe -Force
+    $interruptedExe = Join-Path $tempRoot 'interrupted-app.exe'
+    New-TestApplication $interruptedExe 'VBCCPASInterruptedUpdaterSimulation' 'VBCCPAS updater simulation - interrupted'
+    Copy-Item -LiteralPath $interruptedExe -Destination $targetExe -Force
+    $journalPath = Join-Path $env:LOCALAPPDATA 'VBCCPAS\update-recovery.json'
+    $simulatedJournal = [pscustomobject]@{
+        schema_version = 1
+        target = $targetExe
+        backup = $recoveryBackup
+        state = 'installing'
+        entries = @([pscustomobject]@{
+            relative = 'VBCCPAS-Soft.exe'
+            destination = $targetExe
+            backup = $recoveryBackupExe
+            existed = $true
+            temporary = $null
+        })
+    }
+    $simulatedJournal | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $journalPath -Encoding UTF8
+    $interruptedProcess = Start-Process -FilePath $targetExe -PassThru
+    $interruptedDeadline = (Get-Date).AddSeconds(20)
+    do {
+        $interruptedProcess.Refresh()
+        if ($interruptedProcess.HasExited) { throw 'The interrupted test application exited before recovery began.' }
+        if ($interruptedProcess.MainWindowHandle -ne [IntPtr]::Zero) { break }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $interruptedDeadline)
+    if ($interruptedProcess.MainWindowHandle -eq [IntPtr]::Zero) {
+        throw 'The interrupted test application did not create a main window.'
+    }
+
+    $recoveryOutput = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetExe $targetExe -RecoverOnly -RestartAfterRecovery -Quiet 2>&1 | Out-String
+    $recoveryExitCode = $LASTEXITCODE
+    if ($recoveryExitCode -ne 0) {
+        $recoveryLog = if (Test-Path -LiteralPath $logPath) { Get-Content -LiteralPath $logPath -Raw } else { 'No updater log was created.' }
+        throw ("Interrupted-update recovery failed with exit code " + $recoveryExitCode + "." + [Environment]::NewLine + $recoveryOutput + [Environment]::NewLine + $recoveryLog)
+    }
+    $interruptedProcess.Refresh()
+    if (-not $interruptedProcess.HasExited) {
+        throw 'Recovery did not close the partially installed application before restoring files.'
+    }
+    if ((Get-FileHash -LiteralPath $targetExe -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $oldExe -Algorithm SHA256).Hash) {
+        throw 'Recovery did not restore the original application executable.'
+    }
+    if (Test-Path -LiteralPath $journalPath) {
+        throw 'Recovery left an unfinished installation journal.'
+    }
+    if ((Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash -ne $databaseHash) {
+        throw 'The society database changed during interrupted-update recovery.'
+    }
+    if (-not (Select-String -LiteralPath $logPath -Pattern 'Recovered application restarted' -Quiet)) {
+        throw 'Recovery did not record a successful application restart.'
+    }
+    $recoveredProcesses = @(Get-CimInstance -ClassName Win32_Process -Filter "Name='VBCCPAS-Soft.exe'" |
+        Where-Object { $_.ExecutablePath -and [string]::Equals([IO.Path]::GetFullPath($_.ExecutablePath), $targetExe, [StringComparison]::OrdinalIgnoreCase) })
+    if ($recoveredProcesses.Count -ne 1) {
+        throw "Expected one recovered application process; found $($recoveredProcesses.Count)."
+    }
+    $recoveredProcess = Get-Process -Id ([int]$recoveredProcesses[0].ProcessId)
+    $recoveredProcess.Refresh()
+    if ($recoveredProcess.MainWindowHandle -eq [IntPtr]::Zero -or
+        $recoveredProcess.MainWindowTitle -ne 'VBCCPAS updater simulation - old') {
+        throw 'The original application did not restart after interrupted-update recovery.'
+    }
+    $recoveredProcess.CloseMainWindow() | Out-Null
+    [void]$recoveredProcess.WaitForExit(10000)
+
+    Write-Host 'Windows updater end-to-end simulation passed: package copy/download, SHA-256 verification, running-app closure, replacement, restart, interrupted-update recovery/restart, database/user-data preservation, and permission probes.'
 } finally {
     if ($originalAcl) {
         try { Set-Acl -LiteralPath $permissionDirectory -AclObject $originalAcl } catch { }
@@ -236,6 +311,18 @@ try {
         try {
             $newProcess.Refresh()
             if (-not $newProcess.HasExited) { Stop-Process -Id $newProcess.Id -Force -ErrorAction SilentlyContinue }
+        } catch { }
+    }
+    if ($interruptedProcess) {
+        try {
+            $interruptedProcess.Refresh()
+            if (-not $interruptedProcess.HasExited) { Stop-Process -Id $interruptedProcess.Id -Force -ErrorAction SilentlyContinue }
+        } catch { }
+    }
+    if ($recoveredProcess) {
+        try {
+            $recoveredProcess.Refresh()
+            if (-not $recoveredProcess.HasExited) { Stop-Process -Id $recoveredProcess.Id -Force -ErrorAction SilentlyContinue }
         } catch { }
     }
     try {
