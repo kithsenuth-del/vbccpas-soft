@@ -90,6 +90,7 @@ jobs:
           name: VBCCPAS-Soft-Windows-release
           path: release-assets
       - name: Re-verify checksum and complete ZIP before publishing
+        id: verify-package
         shell: pwsh
         run: |
           $zip = Join-Path $PWD "release-assets/VBCCPAS-Soft-Windows.zip"
@@ -132,9 +133,15 @@ jobs:
           } finally {
             $archive.Dispose()
           }
+          $checksumHash = (Get-FileHash -LiteralPath $checksum -Algorithm SHA256).Hash.ToLowerInvariant()
+          "package_hash=$actualHash" >> $env:GITHUB_OUTPUT
+          "package_size=$((Get-Item -LiteralPath $zip).Length)" >> $env:GITHUB_OUTPUT
+          "checksum_hash=$checksumHash" >> $env:GITHUB_OUTPUT
+          "checksum_size=$((Get-Item -LiteralPath $checksum).Length)" >> $env:GITHUB_OUTPUT
           Write-Host "Verified package SHA-256: $actualHash"
           Write-Host "Verified complete Windows ZIP and manifest."
-      - name: Publish verified Windows release
+      - name: Upload release assets to an unpublished draft
+        id: draft-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.sha }}
@@ -143,7 +150,41 @@ jobs:
           files: |
             release-assets/VBCCPAS-Soft-Windows.zip
             release-assets/VBCCPAS-Soft-Windows.zip.sha256
+          draft: true
           generate_release_notes: true
-          make_latest: ${{ github.ref == 'refs/heads/main' }}
+          make_latest: false
           overwrite_files: true
           fail_on_unmatched_files: true
+      - name: Verify remote release assets and publish only after verification
+        uses: actions/github-script@v7
+        env:
+          EXPECTED_PACKAGE_HASH: ${{ steps.verify-package.outputs.package_hash }}
+          EXPECTED_PACKAGE_SIZE: ${{ steps.verify-package.outputs.package_size }}
+          EXPECTED_CHECKSUM_HASH: ${{ steps.verify-package.outputs.checksum_hash }}
+          EXPECTED_CHECKSUM_SIZE: ${{ steps.verify-package.outputs.checksum_size }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = `build-${context.sha}`;
+            const { data: draft } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            if (!draft.draft) throw new Error("Release is not a draft; refusing to change latest-release state.");
+            const zip = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Windows.zip");
+            const checksum = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Windows.zip.sha256");
+            if (!zip || !checksum) throw new Error("Draft release is missing the complete Windows ZIP or checksum asset.");
+            const expectedZipDigest = `sha256:${process.env.EXPECTED_PACKAGE_HASH}`;
+            const expectedChecksumDigest = `sha256:${process.env.EXPECTED_CHECKSUM_HASH}`;
+            if (zip.digest !== expectedZipDigest || zip.size !== Number(process.env.EXPECTED_PACKAGE_SIZE)) {
+              throw new Error("Remote Windows ZIP digest or size does not match the locally verified build.");
+            }
+            if (checksum.digest !== expectedChecksumDigest || checksum.size !== Number(process.env.EXPECTED_CHECKSUM_SIZE)) {
+              throw new Error("Remote SHA-256 sidecar digest or size does not match the locally verified file.");
+            }
+            const makeLatest = context.ref === "refs/heads/main";
+            await github.rest.repos.updateRelease({
+              owner, repo, release_id: draft.id, draft: false,
+              make_latest: makeLatest ? "true" : "false"
+            });
+            const { data: published } = await github.rest.repos.getRelease({ owner, repo, release_id: draft.id });
+            if (published.draft) throw new Error("GitHub did not publish the verified release.");
+            core.info(`Published verified Windows release ${published.html_url}; latest=${makeLatest}.`);
