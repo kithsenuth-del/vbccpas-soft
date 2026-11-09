@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 import json
+import re
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, EmailStr, Field
@@ -37,6 +38,14 @@ def is_after(value, reference):
     if reference.tzinfo is None:
         reference = reference.replace(tzinfo=timezone.utc)
     return value > reference
+
+class DeploymentIdentity(Base):
+    """Binds one database to exactly one society deployment."""
+    __tablename__ = "deployment_identity"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    society_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -178,6 +187,46 @@ def password_matches(value: str, encoded: str) -> bool:
         return False
 
 app = FastAPI(title="VBCCPAS Central API", version="1.0", docs_url=None, redoc_url=None, openapi_url=None)
+
+DEPLOYMENT_ENV = os.environ.get("VBCCPAS_ENV", "development").strip().lower()
+SINGLE_SOCIETY_ID = os.environ.get("VBCCPAS_SINGLE_SOCIETY_ID", "").strip()
+
+
+def bind_single_society_deployment(db: Session, society_id: str):
+    """Persist and verify the one-society identity for this API database."""
+    value = str(society_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", value):
+        raise RuntimeError("A valid VBCCPAS_SINGLE_SOCIETY_ID is required.")
+    identity = db.get(DeploymentIdentity, 1)
+    if identity:
+        if not secrets.compare_digest(identity.society_id, value):
+            raise RuntimeError(
+                "This database is already bound to a different society. "
+                "Use a separate database and deployment for each society."
+            )
+        return identity
+    identity = DeploymentIdentity(id=1, society_id=value)
+    db.add(identity)
+    db.commit()
+    return identity
+
+
+def verify_production_deployment():
+    """Fail closed unless production uses PostgreSQL and a pinned society identity."""
+    if DEPLOYMENT_ENV != "production":
+        return
+    if not DATABASE_URL.startswith(("postgresql://", "postgresql+")):
+        raise RuntimeError("Production cloud API deployments must use PostgreSQL.")
+    if not SINGLE_SOCIETY_ID:
+        raise RuntimeError("Set VBCCPAS_SINGLE_SOCIETY_ID for this dedicated society deployment.")
+    Base.metadata.create_all(engine)
+    with SessionLocal() as db:
+        bind_single_society_deployment(db, SINGLE_SOCIETY_ID)
+
+
+@app.on_event("startup")
+def startup_deployment_guard():
+    verify_production_deployment()
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
