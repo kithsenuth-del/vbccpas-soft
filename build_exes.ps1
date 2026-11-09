@@ -66,7 +66,7 @@ try {
     & (Join-Path $Root "tests\test_updater_recovery.ps1")
     if ($LASTEXITCODE -ne 0) { throw "PowerShell recovery regression tests failed." }
     Write-Host "Simulating a complete Windows update, running-app closure, restart and permission checks..."
-    & (Join-Path $Root "tests\test_updater_windows.ps1")
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Root "tests\test_updater_windows.ps1")
     if ($LASTEXITCODE -ne 0) { throw "Windows updater end-to-end simulation failed." }
 
     if (Test-Path -LiteralPath $Dist) {
