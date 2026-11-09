@@ -5,6 +5,7 @@ param(
     [int]$UpdaterProcessId = 0,
     [switch]$RepairMode,
     [switch]$RecoverOnly,
+    [switch]$RestartAfterRecovery,
     [switch]$CheckPermissionsOnly,
     [switch]$Quiet
 )
@@ -14,6 +15,7 @@ $changed = New-Object System.Collections.ArrayList
 $backupDirectory = $null
 $stageRoot = $null
 $started = $null
+$recoveryCompleted = $false
 $logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
 $journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
 $recoveryScriptPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\Recovery\updater-recovery.ps1"
@@ -274,7 +276,14 @@ try {
             }
             exit 0
         }
+        Stop-TargetApplication $TargetExe
         [void](Restore-RecoveryJournal $TargetExe)
+        $recoveryCompleted = $true
+        if ($RestartAfterRecovery -and (Test-Path -LiteralPath $TargetExe -PathType Leaf)) {
+            $recoveredProcess = Start-Process -FilePath $TargetExe -PassThru
+            Wait-ForApplicationHealth $recoveredProcess $TargetExe
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Recovered application restarted and its responsive window verified (PID {1})." -f (Get-Date -Format o), $recoveredProcess.Id)
+        }
         exit 0
     }
     $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
@@ -438,14 +447,20 @@ try {
     }
     $rollbackErrors = @()
     try {
-        if (Test-Path -LiteralPath $journalPath -PathType Leaf) {
+        if (-not $RecoverOnly -and (Test-Path -LiteralPath $journalPath -PathType Leaf)) {
             [void](Restore-RecoveryJournal $TargetExe)
         }
     } catch {
         $rollbackErrors += ('Recovery journal: ' + $_.Exception.Message)
     }
     if ($logPath) { try { Add-Content -LiteralPath $logPath -Value ("[{0}] Update failed: {1}" -f (Get-Date -Format o), $failureMessage) } catch { } }
-    $message = 'The complete update failed. The updater attempted to restore the previous application files.'
+    if ($RecoverOnly -and $recoveryCompleted) {
+        $message = 'The previous application files were restored, but the recovered application did not pass its restart check.'
+    } elseif ($RecoverOnly) {
+        $message = 'Interrupted-update recovery could not be completed. The recovery journal has been retained for another attempt.'
+    } else {
+        $message = 'The complete update failed. The updater attempted to restore the previous application files.'
+    }
     if ($rollbackErrors.Count -gt 0) {
         $message += [Environment]::NewLine + 'Some rollback operations need attention:' +
                     [Environment]::NewLine + ($rollbackErrors -join [Environment]::NewLine)
