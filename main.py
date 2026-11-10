@@ -398,7 +398,7 @@ class App:
 	def configure_initial_admin(self):
 		password = simpledialog.askstring(
 			'Create executive administrator',
-			'First-time setup: create an administrator password (minimum 12 characters).',
+			'First-time setup: create an administrator password (minimum 8 characters).',
 			parent=self.root, show='*')
 		if password is None:
 			return False
@@ -1573,7 +1573,7 @@ class App:
 				messagebox.showwarning('Password not accepted', reason)
 				return
 		elif not selected_user_id['value']:
-			messagebox.showwarning('Password required', 'A new account must have a password of at least 12 characters.')
+			messagebox.showwarning('Password required', 'A new account must have a password of at least 8 characters.')
 			return
 		if member_id:
 			try:
@@ -1634,7 +1634,7 @@ class App:
 	def set_user_password(self, username):
 		password = simpledialog.askstring(
 			'Set password',
-			'Enter a new password for ' + username + ' (at least 12 characters):',
+			'Enter a new password for ' + username + ' (at least 8 characters):',
 			parent=self.root,
 			show='*'
 		)
