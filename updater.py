@@ -198,6 +198,17 @@ def recover_interrupted_update(target_exe, recovery_script=None):
         )
 
 
+def _log_handoff(message):
+    try:
+        import datetime
+        root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
+        root.mkdir(parents=True, exist_ok=True)
+        with (root / "updater-launch.log").open("a", encoding="utf-8") as stream:
+            stream.write("[" + datetime.datetime.now().astimezone().isoformat() + "] " + str(message) + "\\n")
+    except Exception:
+        pass
+
+
 def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False):
     """Download a verified complete package and hand installation to PowerShell."""
     asset = release.get("_update_asset")
@@ -206,6 +217,7 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
     if asset["size"] <= 0 or asset["size"] > MAX_DOWNLOAD_BYTES:
         raise ValueError("The update package size is invalid or exceeds the safety limit.")
 
+    _log_handoff("Downloading release package; target=" + str(target_exe))
     with _request(asset["url"]) as response:
         package = response.read(MAX_DOWNLOAD_BYTES + 1)
     if len(package) > MAX_DOWNLOAD_BYTES:
@@ -222,8 +234,9 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
     stage = Path(tempfile.mkdtemp(prefix="vbccpas-full-update-"))
     payload = stage / "payload"
     try:
-        extract_package(package, payload)
+        extracted = extract_package(package, payload)
         script = payload / "updater.ps1"
+        _log_handoff("Package verified; extracted files=" + str(len(extracted)) + "; script exists=" + str(script.is_file()))
         command = [
             "powershell.exe", "-NoProfile", "-NonInteractive",
             "-ExecutionPolicy", "Bypass", "-File", str(script),
@@ -236,8 +249,15 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
             command.append("-RepairMode")
         flags = (getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
                  | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
-        subprocess.Popen(command, close_fds=True, creationflags=flags)
-    except Exception:
+        log_root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
+        log_root.mkdir(parents=True, exist_ok=True)
+        output_path = log_root / "updater-powershell.log"
+        _log_handoff("Launching PowerShell; output=" + str(output_path))
+        with output_path.open("ab") as output:
+            child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, close_fds=True, creationflags=flags)
+        _log_handoff("PowerShell process created; PID=" + str(child.pid) + "; stage=" + str(stage))
+    except Exception as exc:
+        _log_handoff("PowerShell handoff failed: " + repr(exc))
         import shutil
         shutil.rmtree(stage, ignore_errors=True)
         raise
