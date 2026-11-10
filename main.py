@@ -1283,6 +1283,45 @@ class App:
 		tree = self.module_table(parent, ('AttID','Member','Event','Present','Timestamp'),
 							 {'AttID':85, 'Member':220, 'Event':240, 'Present':100, 'Timestamp':200})
 		self.populate_attendance(tree)
+		actions = ttk.Frame(parent)
+		actions.pack(fill=tk.X, padx=22, pady=(0,14))
+		def selected_attendance():
+			selection = tree.selection()
+			if not selection:
+				messagebox.showwarning('Select attendance', 'Choose an attendance record first.')
+				return None
+			return tree.item(selection[0])['values'][0]
+		def edit_selected():
+			att_id = selected_attendance()
+			if att_id is None: return
+			with sqlite3.connect(DB_PATH) as conn:
+				row = conn.execute('SELECT Present FROM Attendance WHERE AttID=?', (att_id,)).fetchone()
+			if not row: self.show_view('attendance'); return
+			d, fields, footer = self.create_form_dialog('Edit Attendance', 'Correct the attendance status for this event record.',
+				[('status','Attendance status',['Present','Absent'])], '540x260')
+			fields['status'].set('Present' if row[0] else 'Absent')
+			def save():
+				try:
+					with sqlite3.connect(DB_PATH) as conn:
+						conn.execute('UPDATE Attendance SET Present=? WHERE AttID=?',
+							(1 if fields['status'].get()=='Present' else 0,att_id))
+				except sqlite3.Error as exc:
+					messagebox.showerror('Could not update attendance',str(exc),parent=d); return
+				d.destroy(); self.show_view('attendance')
+			ttk.Button(footer,text='Cancel',command=d.destroy).pack(side=tk.RIGHT,padx=(8,0))
+			ttk.Button(footer,text='Save Changes',command=save,style='Rounded.TButton').pack(side=tk.RIGHT)
+		def delete_selected():
+			att_id = selected_attendance()
+			if att_id is None: return
+			if not messagebox.askyesno('Delete attendance record','Remove this attendance entry?'): return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('DELETE FROM Attendance WHERE AttID=?',(att_id,))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not delete attendance',str(exc)); return
+			self.show_view('attendance')
+		ttk.Button(actions,text='Edit Selected',command=edit_selected,style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(actions,text='Delete Selected',command=delete_selected).pack(side=tk.RIGHT)
 
 	def populate_attendance(self, tree):
 		for r in tree.get_children(): tree.delete(r)
