@@ -356,7 +356,7 @@ def reset_admin_password_with_recovery_code(
         raise ValueError(reason)
     if new_pin is not None and not validate_admin_pin(new_pin):
         raise ValueError("Administrator PIN must contain exactly five digits.")
-    code = re.sub(r"[-\\s]", "", str(recovery_code or "")).upper()
+    code = re.sub(r"[-\s]", "", str(recovery_code or "")).upper()
     if not re.fullmatch(r"[0-9A-F]{32}", code):
         record_login_failure(database_path)
         raise PermissionError("The recovery code was not accepted.")
