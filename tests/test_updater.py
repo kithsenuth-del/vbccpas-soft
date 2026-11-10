@@ -79,6 +79,18 @@ def complete_package_bytes():
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_handoff_log_writes_one_record_per_line(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(updater.os.environ, {"LOCALAPPDATA": folder}):
+                updater._log_handoff("first diagnostic")
+                updater._log_handoff("second diagnostic")
+            log_path = Path(folder) / "VBCCPAS" / "updater-launch.log"
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("first diagnostic", lines[0])
+            self.assertIn("second diagnostic", lines[1])
     def test_returns_none_when_latest_release_is_current_build(self):
         commit = "a" * 40
         with patch.object(updater, "_request", return_value=FakeResponse(release_payload())):
