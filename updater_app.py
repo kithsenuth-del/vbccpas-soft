@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import threading
+import traceback
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -14,6 +15,17 @@ try:
     from build_info import BUILD_COMMIT
 except ImportError:
     BUILD_COMMIT = "development"
+
+
+def _log(message):
+    try:
+        root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
+        root.mkdir(parents=True, exist_ok=True)
+        from datetime import datetime
+        with (root / "updater-launch.log").open("a", encoding="utf-8") as stream:
+            stream.write(f"[{datetime.now().astimezone().isoformat()}] {message}\\n")
+    except Exception:
+        pass
 
 
 class UpdaterWindow:
@@ -102,11 +114,14 @@ class UpdaterWindow:
         if self.busy:
             return
         self.set_busy(True, "Connecting securely to GitHub and checking the latest release…")
+        _log(f"Update check started; target={self.target_exe}; build={BUILD_COMMIT}")
 
         def worker():
             try:
                 updater.recover_interrupted_update(self.target_exe)
+                _log("Recovery preflight completed; requesting latest release metadata.")
                 release = updater.check_for_update(BUILD_COMMIT, force=self.repair_mode)
+                _log("Release available." if release else "Already up to date.")
                 self.root.after(0, lambda: self.show_release(release))
             except Exception as exc:
                 self.root.after(0, lambda error=str(exc): self.show_error(
@@ -146,11 +161,13 @@ class UpdaterWindow:
 
         def worker():
             try:
+                _log(f"Install accepted; updater PID={os.getpid()}; app PID={self.process_id}")
                 updater.download_and_launch(
                     self.release, str(self.target_exe), self.process_id,
                     updater_process_id=os.getpid(),
                     repair_mode=self.repair_mode,
                 )
+                _log("PowerShell handoff returned; closing updater for installer handover.")
                 self.root.after(0, self.root.destroy)
             except Exception as exc:
                 self.root.after(0, lambda error=str(exc): self.show_error(
@@ -168,12 +185,19 @@ def main():
     parser.add_argument("--process-id", type=int, default=0)
     parser.add_argument("--repair", action="store_true", help="Reinstall the latest release if the main application is missing or damaged.")
     args = parser.parse_args()
+    _log("Standalone updater launched; argv=" + repr(sys.argv))
     updater_exe_dir = Path(sys.executable if getattr(sys, "frozen", False)
                            else __file__).resolve().parent
     target = Path(args.target_exe).resolve() if args.target_exe else updater_exe_dir / "VBCCPAS-Soft.exe"
     root = tk.Tk()
-    UpdaterWindow(root, target, args.process_id, repair_mode=args.repair)
-    root.mainloop()
+    try:
+        UpdaterWindow(root, target, args.process_id, repair_mode=args.repair)
+        _log(f"Updater window initialized; target={target}; app_pid={args.process_id}")
+        root.mainloop()
+        _log("Updater window closed normally.")
+    except Exception:
+        _log("Fatal updater GUI error: " + traceback.format_exc())
+        raise
 
 
 if __name__ == "__main__":
