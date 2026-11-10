@@ -16,6 +16,14 @@ $testUserSid = $null
 $testUserCreated = $false
 $standardUserRoot = $null
 
+$script:CSharpCompiler = Join-Path $env:WINDIR 'Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe'
+if (-not (Test-Path -LiteralPath $script:CSharpCompiler -PathType Leaf)) {
+    $script:CSharpCompiler = Join-Path $env:WINDIR 'Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
+}
+if (-not (Test-Path -LiteralPath $script:CSharpCompiler -PathType Leaf)) {
+    throw 'The .NET Framework C# compiler is required for the Windows GUI updater simulation.'
+}
+
 function New-TestApplication([string]$OutputPath, [string]$ClassName, [string]$WindowTitle) {
     $source = @"
 using System;
@@ -34,9 +42,11 @@ public static class $ClassName {
     }
 }
 "@
-    Add-Type -TypeDefinition $source -Language CSharp -OutputAssembly $OutputPath -OutputType WindowsApplication -ReferencedAssemblies @('System.Windows.Forms.dll', 'System.Drawing.dll')
-    if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
-        throw "Test application executable was not created: $OutputPath"
+    $sourcePath = $OutputPath + '.cs'
+    [IO.File]::WriteAllText($sourcePath, $source, [Text.Encoding]::UTF8)
+    & $script:CSharpCompiler /nologo /target:winexe "/out:$OutputPath" /reference:System.Windows.Forms.dll /reference:System.Drawing.dll $sourcePath
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+        throw "C# compiler failed to create the GUI test executable: $OutputPath"
     }
 }
 
@@ -337,7 +347,12 @@ public static class VBCCPASFailingUpdaterSimulation {
 }
 "@
     $failingExe = Join-Path $failurePayload 'VBCCPAS-Soft.exe'
-    Add-Type -TypeDefinition $failingSource -Language CSharp -OutputAssembly $failingExe -OutputType ConsoleApplication
+    $failingSourcePath = Join-Path $failurePayload 'failing-app.cs'
+    [IO.File]::WriteAllText($failingSourcePath, $failingSource, [Text.Encoding]::UTF8)
+    & $script:CSharpCompiler /nologo /target:exe "/out:$failingExe" $failingSourcePath
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $failingExe -PathType Leaf)) {
+        throw 'C# compiler failed to create the failing-startup test executable.'
+    }
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $failurePayload 'updater.ps1') -Force
     Set-Content -LiteralPath (Join-Path $failurePayload 'VBCCPAS-Updater.exe') -Value 'test updater placeholder'
     Set-Content -LiteralPath (Join-Path $failurePayload 'Recover-VBCCPAS.bat') -Value 'test recovery launcher'
