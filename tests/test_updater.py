@@ -105,10 +105,13 @@ class UpdaterTests(unittest.TestCase):
                     self.assertNotEqual(generated_password, "admin123")
                     self.assertEqual(main.INITIAL_ADMIN_PASSWORD, generated_password)
 
-                    with sqlite3.connect(database_path) as connection:
+                    connection = sqlite3.connect(database_path)
+                    try:
                         stored_hash = connection.execute(
                             "SELECT Password FROM Users WHERE Username='admin'"
                         ).fetchone()[0]
+                    finally:
+                        connection.close()
                     self.assertTrue(main.verify_password(generated_password, stored_hash))
 
                     # If the first-run dialog is dismissed before sign-in,
@@ -140,10 +143,13 @@ class UpdaterTests(unittest.TestCase):
                     {"LOCALAPPDATA": str(local_app_data), "VBCCPAS_ADMIN_PASSWORD": "Managed-Secret-Only"},
                 ):
                     main.setup_database()
-                    with sqlite3.connect(database_path) as connection:
+                    connection = sqlite3.connect(database_path)
+                    try:
                         stored_hash = connection.execute(
                             "SELECT Password FROM Users WHERE Username='admin'"
                         ).fetchone()[0]
+                    finally:
+                        connection.close()
                     self.assertTrue(main.verify_password("Managed-Secret-Only", stored_hash))
                     self.assertIsNone(main.INITIAL_ADMIN_PASSWORD)
                     self.assertFalse(Path(main.get_initial_admin_password_file()).exists())
