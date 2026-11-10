@@ -1591,10 +1591,10 @@ class App:
 		try:
 			audit_action = 'user_updated' if selected_user_id['value'] else 'user_created'
 			if selected_user_id['value']:
-				current_role = cur.execute('SELECT Role FROM Users WHERE UserID=?',
+				current_role = cur.execute('SELECT Username, Role FROM Users WHERE UserID=?',
 				                           (selected_user_id['value'],)).fetchone()
-				if current_role and current_role[0] == 'admin' and role != 'admin':
-					if username == self.user.get('username'):
+				if current_role and current_role[1] == 'admin' and role != 'admin':
+					if current_role[0] == self.user.get('username'):
 						conn.close()
 						messagebox.showerror('Administrator required', 'You cannot remove administrator access from the account currently signed in.')
 						return
@@ -1613,7 +1613,7 @@ class App:
 					conn.close(); messagebox.showerror('Taken','Username already exists'); return
 				cur.execute('INSERT INTO Users (Username, Password, Role, MemberID) VALUES (?,?,?,?)', (username, hash_password(password), role, member_id_int))
 			conn.commit(); conn.close()
-			if selected_user_id['value'] and username == self.user.get('username'):
+			if selected_user_id['value'] and current_role and current_role[0] == self.user.get('username'):
 				self.user['username'] = username
 			record_security_event(DB_PATH, self.user['username'], audit_action, username,
 			                     'Account details changed; no credential values recorded')
