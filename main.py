@@ -14,7 +14,8 @@ from security_foundation import (
     validate_password, record_security_event, restore_database,
     create_admin_recovery_code, reset_admin_password_with_recovery_code,
     login_lock_remaining, record_login_failure, clear_login_failures,
-    set_admin_pin, verify_admin_pin, admin_pin_configured, validate_admin_pin,\n    admin_recovery_code_configured
+    set_admin_pin, verify_admin_pin, admin_pin_configured, validate_admin_pin,
+    admin_recovery_code_configured
 )
 
 if getattr(sys, 'frozen', False):
@@ -509,7 +510,7 @@ class App:
 			                     u, 'One-time recovery verifier created; code value not recorded')
 			messagebox.showwarning(
 				'Save your administrator recovery code',
-				'Your one-time recovery code has been copied to the clipboard. Save it securely and offline. It will not be shown again.\\n\\n' + recovery_code,
+				'Your one-time recovery code has been copied to the clipboard. Save it securely and offline. It will not be shown again.\n\n' + recovery_code,
 				parent=self.root)
 		# Upgrade legacy SHA-256 hashes after a successful login.
 		if not row[0].startswith('pbkdf2_sha256$'):
