@@ -23,7 +23,7 @@ def _log(message):
         root.mkdir(parents=True, exist_ok=True)
         from datetime import datetime
         with (root / "updater-launch.log").open("a", encoding="utf-8") as stream:
-            stream.write(f"[{datetime.now().astimezone().isoformat()}] {message}\\n")
+            stream.write(f"[{datetime.now().astimezone().isoformat()}] {message}\n")
     except Exception:
         pass
 
