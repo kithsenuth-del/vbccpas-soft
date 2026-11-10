@@ -239,12 +239,18 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         _log_handoff("Package verified; extracted files=" + str(len(extracted)) + "; script exists=" + str(script.is_file()))
         if not script.is_file() or not payload.is_dir():
             raise RuntimeError("The extracted PowerShell installer or package folder is missing.")
-        windows_root = Path(os.environ.get("SystemRoot") or r"C:\\Windows")
-        powershell = windows_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-        if not powershell.is_file():
-            raise RuntimeError("Windows PowerShell could not be found at its standard Windows installation path.")
+        if os.name == "nt":
+            windows_root = Path(os.environ.get("SystemRoot") or r"C:\Windows")
+            powershell = windows_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+            if not powershell.is_file():
+                raise RuntimeError("Windows PowerShell could not be found at its standard Windows installation path.")
+            powershell_command = str(powershell)
+        else:
+            # Non-Windows CI validates command construction with a mocked process.
+            powershell_command = "powershell.exe"
+            powershell = Path(powershell_command)
         command = [
-            str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
+            powershell_command, "-NoLogo", "-NoProfile", "-NonInteractive",
             "-ExecutionPolicy", "Bypass", "-File", str(script),
             "-ProcessId", str(int(process_id)),
             "-UpdaterProcessId", str(int(updater_process_id or 0)),
