@@ -42,7 +42,9 @@ Distribute the complete `VBCCPAS-Soft-Windows.zip` rather than only the main EXE
 
 ## First-time administrator setup
 
-On a new database, the desktop interface displays a randomly generated administrator password once. Save it securely and sign in with username admin. Change the password from the Security section.
+On a new database, first-run setup asks the executive administrator to create a password (minimum 8 characters) and a separate five-digit PIN. The PIN is an additional sign-in factor; it does not replace the password. No shared default administrator password or PIN is used.
+
+First-run setup also generates a unique one-time administrator recovery code. It is displayed once and copied to the clipboard. Save it securely offline; the database stores only a salted verifier. If the administrator forgets the password or PIN, choose **Forgot password?** on the sign-in screen and use the recovery code to set a new password and PIN. The code is consumed after successful use. After signing in, generate and save a replacement recovery code from **Security & Users**. Failed sign-in and recovery attempts are rate-limited with escalating temporary lockouts.
 
 On first successful desktop login, the integrated local web server initializes. If a browser passkey has not yet been registered, the desktop interface displays the one-time passkey setup token with a Copy button. Open Web Dashboard, paste the token into the local setup page, and register the computer's platform authenticator (for example, Windows Hello). Keep the token private.
 
