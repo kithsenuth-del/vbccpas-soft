@@ -7,7 +7,7 @@ VBCCPAS Soft is a local society-management application for Windows. The unified 
 The recommended installation is the signed-in Windows user's own account; administrator permission is not required. If you are upgrading an existing portable copy and want to keep its current society database, choose that existing application folder in the setup wizard rather than accepting a new empty folder. For example, the folder containing your current `VBCCPAS-Soft.exe` is where its `society.db` is stored.
 
 1. Download **VBCCPAS-Soft-Setup.exe** from the latest GitHub release.
-2. Double-click the setup file. If Windows displays its normal publisher/security prompt, verify that the file came from this repository before continuing.
+2. Double-click the setup file. **This build is not digitally code-signed**, so Windows may show an Unknown Publisher or SmartScreen warning. Verify that the file came from this repository and compare its SHA-256 checksum before continuing.
 3. Follow the setup wizard and keep the suggested install folder, or choose another folder where your Windows account has write permission.
 4. Optionally select **Create a desktop shortcut**.
 5. Finish setup. You can launch **VBCCPAS Soft** from the Start menu or desktop shortcut.
@@ -57,7 +57,7 @@ For normal use, distribute `VBCCPAS-Soft-Setup.exe` and its `.sha256` checksum. 
 
 ## First-time administrator setup
 
-On a new database, the desktop interface displays a randomly generated administrator password once. Save it securely and sign in with username admin. Change the password from the Security section.
+On a new database, VBCCPAS Soft generates a strong random administrator password and displays it in a one-time setup window with a **Copy password** button. Sign in with username `admin`. A temporary copy is kept at `%LOCALAPPDATA%\\VBCCPAS\\first-run-admin-password.txt` until the first successful administrator sign-in, then it is deleted. If the setup window is closed before sign-in, launch the app again to display the same password, or open that file. Existing databases and their administrator passwords are not changed. Managed deployments can set `VBCCPAS_ADMIN_PASSWORD` before first launch instead.
 
 On first successful desktop login, the integrated local web server initializes. If a browser passkey has not yet been registered, the desktop interface displays the one-time passkey setup token with a Copy button. Open Web Dashboard, paste the token into the local setup page, and register the computer's platform authenticator (for example, Windows Hello). Keep the token private.
 
