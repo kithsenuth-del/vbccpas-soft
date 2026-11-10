@@ -186,6 +186,19 @@ class SecurityFoundationTests(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(failures, 1)
 
+    def test_recovery_code_configuration_requires_unused_code(self):
+        from security_foundation import (
+            create_admin_recovery_code, admin_recovery_code_configured,
+            reset_admin_password_with_recovery_code
+        )
+        self.assertFalse(admin_recovery_code_configured(self.live, "admin"))
+        code = create_admin_recovery_code(self.live, "admin")
+        self.assertTrue(admin_recovery_code_configured(self.live, "admin"))
+        reset_admin_password_with_recovery_code(
+            self.live, code, "recovered-password", "19462"
+        )
+        self.assertFalse(admin_recovery_code_configured(self.live, "admin"))
+
 
 if __name__ == "__main__":
     unittest.main()
