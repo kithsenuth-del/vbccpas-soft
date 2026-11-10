@@ -1753,7 +1753,7 @@ class App:
 			messagebox.showerror('Could not generate recovery code', str(exc), parent=self.root)
 
 	def reset_admin_password(self):
-		self.set_user_password('admin')
+		self.set_user_password(self.user['username'])
 
 	def export_table(self, table, columns):
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute(f"SELECT {', '.join(columns)} FROM {table}");rows=cur.fetchall();conn.close()
