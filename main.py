@@ -232,6 +232,24 @@ def setup_database():
 		Notes TEXT
 	)
 	''')
+
+	# Add equipment-register fields without rebuilding or discarding existing records.
+	inventory_fields = {
+		'Category': "TEXT DEFAULT 'Other'",
+		'Brand': 'TEXT',
+		'Model': 'TEXT',
+		'SerialNumber': 'TEXT',
+		'Condition': "TEXT DEFAULT 'Good'",
+		'Location': 'TEXT',
+		'Custodian': 'TEXT',
+		'PurchaseDate': 'TEXT',
+		'Status': "TEXT DEFAULT 'Available'",
+	}
+	inventory_columns = {column.lower() for column in get_columns('Inventory')}
+	for column, definition in inventory_fields.items():
+		if column.lower() not in inventory_columns:
+			cur.execute(f'ALTER TABLE Inventory ADD COLUMN {column} {definition}')
+
 	# Borrowed
 	cur.execute('''
 	CREATE TABLE IF NOT EXISTS BorrowedItems (
@@ -269,8 +287,8 @@ class App:
 	def __init__(self, root):
 		self.root = root
 		root.title("VBCCPAS | Photographic Arts Society")
-		root.geometry("1280x820")
-		root.minsize(1000, 700)
+		root.geometry("1440x900")
+		root.minsize(1120, 740)
 		self.style = ttk.Style(root)
 		self.style.theme_use('clam')
 		self.apply_theme()
@@ -319,8 +337,15 @@ class App:
 
 		# sidebar buttons (hidden until login)
 		self.side_buttons = {}
-		self.sidebar_title = tk.Label(self.sidebar, text="Modules", bg=self.colors['sidebar'], fg='#cbd5e1', font=('Segoe UI', 11, 'bold'))
-		self.sidebar_title.pack(anchor='w', padx=18, pady=(18, 10))
+		self.sidebar_brand = tk.Frame(self.sidebar, bg=self.colors['sidebar'])
+		self.sidebar_brand.pack(fill=tk.X, padx=18, pady=(20, 18))
+		tk.Label(self.sidebar_brand, text='VBCCPAS', background=self.colors['sidebar'],
+		         foreground='#f4f2f8', font=('Segoe UI', 15, 'bold')).pack(anchor='w')
+		tk.Label(self.sidebar_brand, text='THE DARKROOM  •  WORKSPACE',
+		         background=self.colors['sidebar'], foreground='#8f96a8',
+		         font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(3, 0))
+		self.sidebar_title = tk.Label(self.sidebar, text="WORKSPACE MODULES", bg=self.colors['sidebar'], fg='#7f8799', font=('Segoe UI', 8, 'bold'))
+		self.sidebar_title.pack(anchor='w', padx=18, pady=(6, 10))
 		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
 			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
 			b.pack(fill=tk.X, padx=12, pady=6)
@@ -466,6 +491,12 @@ class App:
 		self.style.map('Sidebar.TButton',
 			background=[('pressed', '#343044'), ('active', '#292b39')],
 			foreground=[('active', '#ffffff')])
+		self.style.configure('SidebarActive.TButton', foreground='#ffffff',
+			background='#302c49', padding=(14, 12), anchor='w',
+			relief='flat', borderwidth=0, font=('Segoe UI', 10, 'bold'))
+		self.style.map('SidebarActive.TButton',
+			background=[('active', '#393451'), ('pressed', '#423b62')],
+			foreground=[('active', '#ffffff')])
 		self.style.configure('Treeview', background=self.colors['card'],
 			fieldbackground=self.colors['card'], foreground=fg,
 			rowheight=32, borderwidth=0, font=('Segoe UI', 10))
@@ -551,53 +582,87 @@ class App:
 
 	def show_view(self, key):
 		self.clear_content()
+		self.active_view = key
+		for nav_key, button in self.side_buttons.items():
+			button.configure(style='SidebarActive.TButton' if nav_key == key else 'Sidebar.TButton')
 		frame = tk.Frame(self.content, bg=self.colors['bg'])
 		frame.pack(fill=tk.BOTH, expand=True)
 		self.current_view = frame
+		page_titles = {
+			'dashboard': ('Your workspace', 'A clear overview of society activity and upcoming work.'),
+			'members': ('Members', 'Manage the society member register and contact details.'),
+			'events': ('Events & activities', 'Plan photo walks, workshops, exhibitions and meetings.'),
+			'inventory': ('Equipment', 'Keep a complete record of cameras, mixers and studio equipment.'),
+			'borrow': ('Borrowing', 'Track equipment loans, due dates and returns.'),
+			'attendance': ('Attendance', 'Record participation in society events and activities.'),
+			'reports': ('Reports & exports', 'Export clean records for society administration.'),
+			'security': ('Security & access', 'Manage administrator access and user accounts.'),
+			'web_dashboard': ('Web dashboard', 'Open the local browser workspace.'),
+			'maintenance': ('Maintenance', 'Backups, diagnostics and software updates.'),
+		}
+		title, subtitle = page_titles.get(key, ('VBCCPAS workspace', 'Society management'))
+		page_head = tk.Frame(frame, bg=self.colors['bg'])
+		page_head.pack(fill=tk.X, padx=24, pady=(20, 12))
+		tk.Label(page_head, text='VBCCPAS  /  SOCIETY WORKSPACE',
+		         foreground=self.colors['accent2'], font=('Segoe UI', 8, 'bold')).pack(anchor='w')
+		tk.Label(page_head, text=title, font=('Segoe UI', 23, 'bold'),
+		         foreground=self.colors['fg']).pack(anchor='w', pady=(4, 1))
+		tk.Label(page_head, text=subtitle, foreground='#a5a8b7',
+		         font=('Segoe UI', 10)).pack(anchor='w')
+		body = tk.Frame(frame, bg=self.colors['bg'])
+		body.pack(fill=tk.BOTH, expand=True)
 		if key == 'dashboard':
-			header = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
-			header.pack(fill=tk.X, padx=16, pady=(16, 12))
-			tk.Label(header, text=f"Welcome back, {self.user['username']}", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 18, 'bold')).pack(anchor='w', padx=20, pady=(16, 4))
-			tk.Label(header, text="A creative studio for student photographers, exhibitions and photo walks.", bg=self.colors['panel'], fg='#cbd5e1', font=('Segoe UI', 10)).pack(anchor='w', padx=20, pady=(0, 16))
-			stats = tk.Frame(frame, bg=self.colors['bg'])
+			stats = tk.Frame(body, bg=self.colors['bg'])
 			stats.pack(fill=tk.X, padx=16, pady=6)
 			mcount = self.count_members()
 			bcount = self.count_borrowed()
 			next_event = self.get_next_event()
-			for title, value, color, subtitle in [
-				('Society Members', str(mcount), self.colors['accent1'], 'Registered members'),
-				('Currently Borrowed', str(bcount), self.colors['accent2'], 'Outstanding items'),
-				('Next Event', f"{next_event[0]} ({next_event[1].strftime('%Y-%m-%d')})" if next_event else 'No upcoming events', self.colors['accent3'], 'Upcoming schedule')
+			for card_title, value, color, subtitle in [
+				('Society members', str(mcount), self.colors['accent1'], 'Registered members'),
+				('Equipment on loan', str(bcount), self.colors['accent2'], 'Outstanding items'),
+				('Next event', f"{next_event[0]} ({next_event[1].strftime('%Y-%m-%d')})" if next_event else 'No upcoming events', self.colors['accent3'], 'Upcoming schedule')
 			]:
-				card = tk.Frame(stats, bg=self.colors['card'], bd=1, highlightthickness=1, highlightbackground='#334155', width=260, height=120)
-				card.pack(side=tk.LEFT, padx=8)
+				card = tk.Frame(stats, bg=self.colors['card'], bd=0,
+				                highlightthickness=1, highlightbackground='#34394a',
+				                width=280, height=126)
+				card.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 				card.pack_propagate(False)
-				tk.Label(card, text=title, bg=self.colors['card'], fg='#cbd5e1', font=('Segoe UI', 10)).place(x=16, y=16)
-				tk.Label(card, text=value, bg=self.colors['card'], fg=color, font=('Segoe UI', 18, 'bold')).place(x=16, y=42)
-				tk.Label(card, text=subtitle, bg=self.colors['card'], fg='#64748b', font=('Segoe UI', 9)).place(x=16, y=88)
-			panel = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
-			panel.pack(fill=tk.BOTH, expand=True, padx=16, pady=(12, 16))
-			tk.Label(panel, text="Quick actions", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=18, pady=(16, 8))
-			tk.Label(panel, text="Use the sidebar to open members, events, inventory, borrowing, attendance, reports, and security modules.", bg=self.colors['panel'], fg='#cbd5e1', justify=tk.LEFT).pack(anchor='w', padx=18, pady=(0, 10))
+				tk.Label(card, text=card_title.upper(), bg=self.colors['card'],
+				         fg='#a5a8b7', font=('Segoe UI', 8, 'bold')).place(x=18, y=16)
+				tk.Label(card, text=value, bg=self.colors['card'], fg=color,
+				         font=('Segoe UI', 19, 'bold'), wraplength=245).place(x=18, y=42)
+				tk.Label(card, text=subtitle, bg=self.colors['card'], fg='#777f91',
+				         font=('Segoe UI', 9)).place(x=18, y=96)
+			panel = tk.Frame(body, bg=self.colors['panel'], highlightthickness=1,
+			                 highlightbackground='#34394a')
+			panel.pack(fill=tk.BOTH, expand=True, padx=24, pady=(12, 18))
+			tk.Label(panel, text='Quick actions', bg=self.colors['panel'],
+			         fg=self.colors['fg'], font=('Segoe UI', 14, 'bold')).pack(
+			             anchor='w', padx=20, pady=(18, 4))
+			tk.Label(panel, text='Jump straight to the tasks you use most.',
+			         bg=self.colors['panel'], fg='#a5a8b7').pack(anchor='w', padx=20, pady=(0, 14))
 			buttons = tk.Frame(panel, bg=self.colors['panel'])
-			buttons.pack(anchor='w', padx=18, pady=6)
-			ttk.Button(buttons, text='Open Members', command=lambda: self.show_view('members'), style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
-			ttk.Button(buttons, text='Open Events', command=lambda: self.show_view('events'), style='Rounded.TButton').pack(side=tk.LEFT)
+			buttons.pack(anchor='w', padx=16, pady=(0, 18))
+			for label, destination in [('Manage members','members'),('Plan an event','events'),
+			                           ('Equipment register','inventory'),('Record attendance','attendance')]:
+				ttk.Button(buttons, text=label,
+				           command=lambda selected=destination: self.show_view(selected),
+				           style='Rounded.TButton').pack(side=tk.LEFT, padx=5)
 		elif key == 'members':
-			self.view_members(frame)
+			self.view_members(body)
 		elif key == 'events':
-			self.view_events(frame)
+			self.view_events(body)
 		elif key == 'inventory':
-			self.view_inventory(frame)
+			self.view_inventory(body)
 		elif key == 'borrow':
-			self.view_borrowing(frame)
+			self.view_borrowing(body)
 		elif key == 'attendance':
-			self.view_attendance(frame)
+			self.view_attendance(body)
 		elif key == 'reports':
-			self.view_reports(frame)
+			self.view_reports(body)
 		elif key == 'security':
-			self.view_security(frame)
-
+			self.view_security(body)
+	
 	# Members
 	def view_members(self, parent):
 		top = parent
@@ -660,29 +725,196 @@ class App:
 			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title.get(),date.get(),loc.get(),notes.get()));conn.commit();conn.close();d.destroy();self.show_view('events')
 		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
 
-	# Inventory
+	# Equipment inventory
 	def view_inventory(self, parent):
-		top=parent
-		tb=ttk.Frame(top);tb.pack(fill=tk.X)
-		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
-		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
-		ttk.Button(left,text='Add Item',command=self.add_item_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
-		cols=('ItemID','Name','Quantity','Notes')
-		tree=ttk.Treeview(top,columns=cols,show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
-		tree.pack(fill=tk.BOTH,expand=True)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory');rows=cur.fetchall();conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
+		panel = tk.Frame(parent, bg=self.colors['panel'], highlightthickness=1,
+		                 highlightbackground='#303747')
+		panel.pack(fill=tk.BOTH, expand=True, padx=22, pady=(4, 20))
+		header = tk.Frame(panel, bg=self.colors['panel'])
+		header.pack(fill=tk.X, padx=20, pady=(18, 10))
+		tk.Label(header, text='Equipment register', background=self.colors['panel'],
+		         foreground=self.colors['fg'], font=('Segoe UI', 16, 'bold')).pack(side=tk.LEFT)
+		tk.Label(header, text='Track cameras, lenses, mixers and studio equipment',
+		         background=self.colors['panel'], foreground='#a5a8b7').pack(side=tk.LEFT, padx=16, pady=(4, 0))
+		toolbar = tk.Frame(panel, bg=self.colors['panel'])
+		toolbar.pack(fill=tk.X, padx=20, pady=(4, 12))
+		search_var = tk.StringVar()
+		tk.Entry(toolbar, textvariable=search_var, width=34).pack(side=tk.LEFT, padx=(0, 10))
+		ttk.Button(toolbar, text='Add equipment', command=self.add_item_dialog,
+		           style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(toolbar, text='Edit selected', command=lambda: self.edit_item_dialog(tree),
+		           style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(toolbar, text='Delete selected', command=lambda: self.delete_inventory_item(tree),
+		           style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
+		ttk.Button(toolbar, text='Export CSV',
+		           command=lambda: self.export_table('Inventory',
+		               ['ItemID','Name','Category','Brand','Model','SerialNumber','Quantity',
+		                'Condition','Location','Custodian','PurchaseDate','Status','Notes'])
+		           ).pack(side=tk.RIGHT, padx=4)
+		search_var.set('')
+		cols = ('ItemID','Name','Category','Brand','Model','Serial','Qty','Condition','Location','Custodian','Status')
+		wrap = tk.Frame(panel, bg=self.colors['panel'])
+		wrap.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 18))
+		tree = ttk.Treeview(wrap, columns=cols, show='headings')
+		widths = {'ItemID':58,'Name':170,'Category':105,'Brand':100,'Model':105,
+		          'Serial':125,'Qty':55,'Condition':100,'Location':110,'Custodian':120,'Status':100}
+		for col in cols:
+			tree.heading(col, text=col)
+			tree.column(col, width=widths.get(col, 110), minwidth=55, stretch=True)
+		ybar = ttk.Scrollbar(wrap, orient=tk.VERTICAL, command=tree.yview)
+		xbar = ttk.Scrollbar(wrap, orient=tk.HORIZONTAL, command=tree.xview)
+		tree.configure(yscrollcommand=ybar.set, xscrollcommand=xbar.set)
+		tree.grid(row=0, column=0, sticky='nsew')
+		ybar.grid(row=0, column=1, sticky='ns')
+		xbar.grid(row=1, column=0, sticky='ew')
+		wrap.grid_rowconfigure(0, weight=1)
+		wrap.grid_columnconfigure(0, weight=1)
+		def load_rows(*_):
+			for row in tree.get_children():
+				tree.delete(row)
+			term = search_var.get().strip().lower()
+			conn = sqlite3.connect(DB_PATH)
+			cur = conn.cursor()
+			cur.execute('''SELECT ItemID, Name, Category, Brand, Model, SerialNumber,
+				Quantity, Condition, Location, Custodian, Status FROM Inventory
+				ORDER BY Category, Name''')
+			rows = cur.fetchall()
+			conn.close()
+			for row in rows:
+				if not term or term in ' '.join(str(value or '') for value in row).lower():
+					tree.insert('', tk.END, values=row)
+		search_var.trace_add('write', load_rows)
+		tree.bind('<Double-1>', lambda _event: self.edit_item_dialog(tree))
+		load_rows()
+		self.inventory_tree = tree
+
 	def add_item_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Add Item')
-		f=ttk.Frame(d, padding=12);f.pack()
-		name=tk.StringVar(); qty=tk.IntVar(value=1); notes=tk.StringVar()
-		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
-		ttk.Label(f,text='Quantity').grid(row=1,column=0);ttk.Entry(f,textvariable=qty).grid(row=1,column=1)
-		ttk.Label(f,text='Notes').grid(row=2,column=0);ttk.Entry(f,textvariable=notes).grid(row=2,column=1)
+		self.inventory_form_dialog()
+
+	def edit_item_dialog(self, tree):
+		selection = tree.selection()
+		if not selection:
+			messagebox.showinfo('Select equipment', 'Choose an equipment record to edit.')
+			return
+		item_id = tree.item(selection[0])['values'][0]
+		conn = sqlite3.connect(DB_PATH)
+		conn.row_factory = sqlite3.Row
+		row = conn.execute('SELECT * FROM Inventory WHERE ItemID=?', (item_id,)).fetchone()
+		conn.close()
+		if row:
+			self.inventory_form_dialog(dict(row))
+
+	def inventory_form_dialog(self, record=None):
+		record = record or {}
+		dialog = tk.Toplevel(self.root)
+		dialog.title('Edit equipment' if record else 'Register equipment')
+		dialog.configure(bg=self.colors['bg'])
+		dialog.transient(self.root)
+		dialog.grab_set()
+		dialog.geometry('700x650')
+		dialog.minsize(620, 560)
+		outer = tk.Frame(dialog, bg=self.colors['bg'])
+		outer.pack(fill=tk.BOTH, expand=True, padx=22, pady=20)
+		tk.Label(outer, text='Equipment details', font=('Segoe UI', 18, 'bold')).pack(anchor='w')
+		tk.Label(outer, text='Record identifying details and where the item is kept.',
+		         foreground='#a5a8b7').pack(anchor='w', pady=(3, 16))
+		form = tk.Frame(outer, bg=self.colors['panel'], padx=18, pady=18)
+		form.pack(fill=tk.BOTH, expand=True)
+		fields = [
+			('Equipment name', 'Name', 'entry'),
+			('Category', 'Category', 'category'),
+			('Brand', 'Brand', 'entry'),
+			('Model', 'Model', 'entry'),
+			('Serial number', 'SerialNumber', 'entry'),
+			('Quantity', 'Quantity', 'quantity'),
+			('Condition', 'Condition', 'condition'),
+			('Location / storage', 'Location', 'entry'),
+			('Assigned custodian', 'Custodian', 'entry'),
+			('Purchase / acquired date', 'PurchaseDate', 'entry'),
+			('Availability status', 'Status', 'status'),
+			('Notes', 'Notes', 'entry'),
+		]
+		variables = {}
+		for index, (label, key, kind) in enumerate(fields):
+			row, col = divmod(index, 2)
+			cell = tk.Frame(form, bg=self.colors['panel'])
+			cell.grid(row=row, column=col, sticky='ew', padx=(0 if col == 0 else 12, 0),
+			          pady=7)
+			tk.Label(cell, text=label, background=self.colors['panel'],
+			         foreground='#d9dbe5', font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 5))
+			default = record.get(key, '')
+			if key == 'Category' and not default: default = 'Other'
+			if key == 'Quantity' and default == '': default = 1
+			if key == 'Condition' and not default: default = 'Good'
+			if key == 'Status' and not default: default = 'Available'
+			var = tk.StringVar(value=str(default))
+			variables[key] = var
+			if kind == 'category':
+				widget = ttk.Combobox(cell, textvariable=var, state='readonly',
+				                      values=['Camera','Lens','Mixer','Microphone','Lighting',
+				                              'Tripod','Computer','Storage','Accessory','Other'])
+			elif kind == 'condition':
+				widget = ttk.Combobox(cell, textvariable=var, state='readonly',
+				                      values=['New','Good','Fair','Needs service','Damaged'])
+			elif kind == 'status':
+				widget = ttk.Combobox(cell, textvariable=var, state='readonly',
+				                      values=['Available','In use','Under maintenance','Retired','Missing'])
+			else:
+				widget = ttk.Entry(cell, textvariable=var)
+			widget.pack(fill=tk.X)
+			if kind == 'quantity':
+				widget.configure(width=12)
+			form.grid_columnconfigure(0, weight=1)
+			form.grid_columnconfigure(1, weight=1)
+		buttons = tk.Frame(outer, bg=self.colors['bg'])
+		buttons.pack(fill=tk.X, pady=(14, 0))
 		def save():
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name.get(), qty.get(), notes.get()));conn.commit();conn.close();d.destroy();self.show_view('inventory')
-		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+			name = variables['Name'].get().strip()
+			try:
+				quantity = int(variables['Quantity'].get())
+			except ValueError:
+				messagebox.showerror('Invalid quantity', 'Quantity must be a whole number.', parent=dialog)
+				return
+			if not name or quantity < 0:
+				messagebox.showerror('Check details', 'Enter an equipment name and a quantity of zero or more.', parent=dialog)
+				return
+			values = [name, variables['Category'].get(), variables['Brand'].get().strip(),
+			          variables['Model'].get().strip(), variables['SerialNumber'].get().strip(),
+			          quantity, variables['Condition'].get(), variables['Location'].get().strip(),
+			          variables['Custodian'].get().strip(), variables['PurchaseDate'].get().strip(),
+			          variables['Status'].get(), variables['Notes'].get().strip()]
+			conn = sqlite3.connect(DB_PATH)
+			if record:
+				conn.execute('''UPDATE Inventory SET Name=?, Category=?, Brand=?, Model=?,
+					SerialNumber=?, Quantity=?, Condition=?, Location=?, Custodian=?,
+					PurchaseDate=?, Status=?, Notes=? WHERE ItemID=?''', values + [record['ItemID']])
+			else:
+				conn.execute('''INSERT INTO Inventory
+					(Name, Category, Brand, Model, SerialNumber, Quantity, Condition,
+					 Location, Custodian, PurchaseDate, Status, Notes)
+					VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', values)
+			conn.commit()
+			conn.close()
+			dialog.destroy()
+			self.show_view('inventory')
+		ttk.Button(buttons, text='Save equipment', command=save,
+		           style='Rounded.TButton').pack(side=tk.RIGHT)
+		ttk.Button(buttons, text='Cancel', command=dialog.destroy).pack(side=tk.RIGHT, padx=8)
+
+	def delete_inventory_item(self, tree):
+		selection = tree.selection()
+		if not selection:
+			messagebox.showinfo('Select equipment', 'Choose an equipment record to delete.')
+			return
+		item_id = tree.item(selection[0])['values'][0]
+		if not messagebox.askyesno('Delete equipment',
+				'Permanently remove this equipment record? Existing borrowing history will remain.'):
+			return
+		conn = sqlite3.connect(DB_PATH)
+		conn.execute('DELETE FROM Inventory WHERE ItemID=?', (item_id,))
+		conn.commit()
+		conn.close()
+		self.show_view('inventory')
 
 	# Borrowing
 	def view_borrowing(self, parent):
@@ -800,7 +1032,7 @@ class App:
 		btns = ttk.Frame(top)
 		btns.pack(pady=8)
 		ttk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Category','Brand','Model','SerialNumber','Quantity','Condition','Location','Custodian','PurchaseDate','Status','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 		ttk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 		ttk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 		ttk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
