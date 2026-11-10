@@ -121,6 +121,14 @@ def restore_database(
     validate_restore_candidate(source)
     safety_backup = create_verified_backup(destination, backup_directory)
 
+    # Fold any committed WAL content into the main file before replacement.
+    # Stale -wal/-shm sidecars must never be allowed to attach to the restored DB.
+    checkpoint = sqlite3.connect(str(destination), timeout=10)
+    try:
+        checkpoint.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        checkpoint.close()
+
     fd, temporary_name = tempfile.mkstemp(
         prefix=destination.stem + "-restore-",
         suffix=destination.suffix + ".tmp",
@@ -131,6 +139,10 @@ def restore_database(
     try:
         shutil.copy2(source, temporary)
         validate_restore_candidate(temporary)
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(destination) + suffix)
+            if sidecar.exists():
+                sidecar.unlink()
         os.replace(temporary, destination)
     except Exception:
         try:
