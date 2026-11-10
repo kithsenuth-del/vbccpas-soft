@@ -324,7 +324,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def list_inventory(self):
         with get_db() as conn:
-            return [dict(r) for r in conn.execute("SELECT ItemID AS id, Name AS name, Quantity AS quantity, Notes AS notes FROM Inventory ORDER BY ItemID DESC").fetchall()]
+            return [dict(r) for r in conn.execute("""
+                SELECT ItemID AS id, Name AS name, Category AS category,
+                       Brand AS brand, Model AS model, SerialNumber AS serial_number,
+                       Quantity AS quantity, Condition AS condition,
+                       Location AS location, Custodian AS custodian,
+                       PurchaseDate AS purchase_date, Status AS status, Notes AS notes
+                FROM Inventory ORDER BY ItemID DESC
+            """).fetchall()]
 
     def list_borrowed(self):
         with get_db() as conn:
@@ -359,15 +366,38 @@ class Handler(BaseHTTPRequestHandler):
     def save_inventory(self, data):
         name = str(data.get("name", "")).strip()
         if not name:
-            raise ValueError("Item name is required.")
-        quantity = int(data.get("quantity", 0) or 0)
+            raise ValueError("Equipment name is required.")
+        try:
+            quantity = int(data.get("quantity", 0) or 0)
+        except (TypeError, ValueError):
+            raise ValueError("Quantity must be a whole number.")
         if quantity < 0:
             raise ValueError("Quantity cannot be negative.")
+        fields = (
+            name, data.get("category", "Other") or "Other",
+            data.get("brand", ""), data.get("model", ""),
+            data.get("serial_number", ""), quantity,
+            data.get("condition", "Good") or "Good",
+            data.get("location", ""), data.get("custodian", ""),
+            data.get("purchase_date", ""),
+            data.get("status", "Available") or "Available",
+            data.get("notes", ""),
+        )
         with get_db() as conn:
             if data.get("id"):
-                conn.execute("UPDATE Inventory SET Name=?, Quantity=?, Notes=? WHERE ItemID=?", (name, quantity, data.get("notes", ""), int(data["id"])))
+                conn.execute("""
+                    UPDATE Inventory SET Name=?, Category=?, Brand=?, Model=?,
+                        SerialNumber=?, Quantity=?, Condition=?, Location=?,
+                        Custodian=?, PurchaseDate=?, Status=?, Notes=?
+                    WHERE ItemID=?
+                """, fields + (int(data["id"]),))
             else:
-                conn.execute("INSERT INTO Inventory (Name, Quantity, Notes) VALUES (?, ?, ?)", (name, quantity, data.get("notes", "")))
+                conn.execute("""
+                    INSERT INTO Inventory
+                        (Name, Category, Brand, Model, SerialNumber, Quantity,
+                         Condition, Location, Custodian, PurchaseDate, Status, Notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, fields)
         return {"ok": True}
 
     def save_borrowed(self, data):
