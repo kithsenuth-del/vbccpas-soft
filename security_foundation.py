@@ -342,7 +342,9 @@ def verify_admin_pin(database_path, username, pin):
     return hmac.compare_digest(supplied, row[1])
 
 
-def reset_admin_password_with_recovery_code(\n    database_path, recovery_code, new_password, new_pin=None, username='admin'\n):
+def reset_admin_password_with_recovery_code(
+    database_path, recovery_code, new_password, new_pin=None, username='admin'
+):
     """Consume the one-time recovery code and replace the admin password."""
     import hashlib
     import hmac
