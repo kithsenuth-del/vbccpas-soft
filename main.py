@@ -1434,9 +1434,12 @@ class App:
 			parent=self.root, show='*')
 		if password is None:
 			return False
-		with sqlite3.connect(DB_PATH) as conn:
+		conn = sqlite3.connect(DB_PATH)
+		try:
 			row = conn.execute('SELECT Password FROM Users WHERE Username=? AND Role=?',
 			                   (self.user.get('username'), 'admin')).fetchone()
+		finally:
+			conn.close()
 		if not row or not verify_password(password, row[0]):
 			messagebox.showerror('Verification failed', 'The administrator password was not accepted.')
 			return False
