@@ -435,6 +435,7 @@ class App:
 		         foreground='#c8cbd7', font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(0, 7))
 		self.password_var = tk.StringVar()
 		password_entry = ttk.Entry(form, textvariable=self.password_var, show='•', font=('Segoe UI', 11))
+		self.login_password_entry = password_entry
 		password_entry.pack(fill=tk.X, ipady=7)
 		password_entry.bind('<Return>', lambda _event: self.try_login())
 		btn_frame = tk.Frame(login_card, bg=self.colors['card'])
@@ -479,7 +480,9 @@ class App:
 		self.sidebar.pack_forget()
 		self.current_view = None
 		if INITIAL_ADMIN_PASSWORD:
+			global INITIAL_ADMIN_PASSWORD
 			initial_password = INITIAL_ADMIN_PASSWORD
+			INITIAL_ADMIN_PASSWORD = None
 			self.root.after(
 				500,
 				lambda password=initial_password: self.show_initial_admin_password(password),
@@ -524,8 +527,12 @@ class App:
 		copy_status.pack(anchor="w", pady=(0, 14))
 		buttons = tk.Frame(outer, bg=self.colors["card"])
 		buttons.pack(fill=tk.X)
+		def continue_to_login():
+			dialog.destroy()
+			self.login_password_entry.focus_set()
+
 		ttk.Button(buttons, text="Copy password", command=copy_password).pack(side=tk.LEFT)
-		ttk.Button(buttons, text="Continue to sign in", command=dialog.destroy).pack(side=tk.RIGHT)
+		ttk.Button(buttons, text="Continue to sign in", command=continue_to_login).pack(side=tk.RIGHT)
 		dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
 		dialog.grab_set()
 		password_entry.focus_set()
