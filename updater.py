@@ -242,7 +242,7 @@ $ErrorActionPreference = "Stop"
 $data = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadBase64)) | ConvertFrom-Json
 $service = New-Object -ComObject Schedule.Service
 $service.Connect()
-$folder = $service.GetFolder("\\")
+$folder = $service.GetFolder("\")
 $definition = $service.NewTask(0)
 $definition.RegistrationInfo.Description = "Temporary VBCCPAS update handoff"
 $definition.Settings.Enabled = $true
