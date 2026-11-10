@@ -237,8 +237,20 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         extracted = extract_package(package, payload)
         script = payload / "updater.ps1"
         _log_handoff("Package verified; extracted files=" + str(len(extracted)) + "; script exists=" + str(script.is_file()))
+        if not script.is_file() or not payload.is_dir():
+            raise RuntimeError("The extracted PowerShell installer or package folder is missing.")
+        if os.name == "nt":
+            windows_root = Path(os.environ.get("SystemRoot") or r"C:\Windows")
+            powershell = windows_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+            if not powershell.is_file():
+                raise RuntimeError("Windows PowerShell could not be found at its standard Windows installation path.")
+            powershell_command = str(powershell)
+        else:
+            # Non-Windows CI validates command construction with a mocked process.
+            powershell_command = "powershell.exe"
+            powershell = Path(powershell_command)
         command = [
-            "powershell.exe", "-NoProfile", "-NonInteractive",
+            powershell_command, "-NoLogo", "-NoProfile", "-NonInteractive",
             "-ExecutionPolicy", "Bypass", "-File", str(script),
             "-ProcessId", str(int(process_id)),
             "-UpdaterProcessId", str(int(updater_process_id or 0)),
@@ -252,10 +264,40 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         log_root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
         log_root.mkdir(parents=True, exist_ok=True)
         output_path = log_root / "updater-powershell.log"
-        _log_handoff("Launching PowerShell; output=" + str(output_path))
+        _log_handoff("Launching PowerShell; executable=" + str(powershell)
+                     + "; script=" + str(script)
+                     + "; target=" + str(target)
+                     + "; package=" + str(payload)
+                     + "; output=" + str(output_path))
         with output_path.open("ab") as output:
-            child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, close_fds=True, creationflags=flags)
-        _log_handoff("PowerShell process created; PID=" + str(child.pid) + "; stage=" + str(stage))
+            child = subprocess.Popen(
+                command, stdin=subprocess.DEVNULL, stdout=output,
+                stderr=subprocess.STDOUT, close_fds=True,
+                creationflags=flags,
+            )
+        _log_handoff("PowerShell process created; PID=" + str(child.pid)
+                     + "; command=" + subprocess.list2cmdline(command)
+                     + "; stage=" + str(stage))
+        # A created PID only proves CreateProcess succeeded. Detect immediate
+        # startup/argument failures before the GUI updater exits and record the
+        # child's exit status for diagnosis. A healthy installer continues
+        # independently after this short observation window.
+        try:
+            early_exit = child.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            _log_handoff("PowerShell remains running after startup check; PID=" + str(child.pid))
+        else:
+            if isinstance(early_exit, int):
+                _log_handoff("PowerShell exited during startup check; PID=" + str(child.pid)
+                             + "; exit_code=" + str(early_exit))
+                if early_exit != 0:
+                    raise RuntimeError(
+                        "The PowerShell installer exited immediately with code "
+                        + str(early_exit) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
+                        "and updater-powershell.log."
+                    )
+            else:
+                _log_handoff("PowerShell startup check returned no numeric exit code; PID=" + str(child.pid))
     except Exception as exc:
         _log_handoff("PowerShell handoff failed: " + repr(exc))
         import shutil
