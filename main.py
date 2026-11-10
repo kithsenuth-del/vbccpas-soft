@@ -10,7 +10,7 @@ import csv
 import sys
 from datetime import datetime
 from database_migrations import create_verified_backup
-from security_foundation import (validate_password, record_security_event, restore_database,\n\tcreate_admin_recovery_code, reset_admin_password_with_recovery_code,\n\tlogin_lock_remaining, record_login_failure, clear_login_failures)
+from security_foundation import (validate_password, record_security_event, restore_database,\n\tcreate_admin_recovery_code, reset_admin_password_with_recovery_code,\n\tlogin_lock_remaining, record_login_failure, clear_login_failures,\n\tset_admin_pin, verify_admin_pin, admin_pin_configured, validate_admin_pin)
 
 if getattr(sys, 'frozen', False):
 	BASE_DIR = os.path.dirname(sys.executable)
@@ -414,10 +414,24 @@ class App:
 		if confirmation is None or not hmac.compare_digest(password, confirmation):
 			messagebox.showerror('Password mismatch', 'The passwords did not match. First-time setup was cancelled.', parent=self.root)
 			return False
+		pin = simpledialog.askstring(
+			'Create administrator PIN',
+			'Choose a five-digit administrator PIN. It is an additional factor, not a replacement for your password.',
+			parent=self.root, show='*')
+		if pin is None or not validate_admin_pin(pin):
+			messagebox.showerror('PIN not accepted', 'The administrator PIN must contain exactly five digits.', parent=self.root)
+			return False
+		pin_confirmation = simpledialog.askstring(
+			'Confirm administrator PIN', 'Enter the five-digit PIN again:',
+			parent=self.root, show='*')
+		if pin_confirmation is None or not hmac.compare_digest(pin, pin_confirmation):
+			messagebox.showerror('PIN mismatch', 'The PINs did not match. First-time setup was cancelled.', parent=self.root)
+			return False
 		with sqlite3.connect(DB_PATH) as conn:
 			conn.execute(
 				"INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')",
 				('admin', hash_password(password)))
+		set_admin_pin(DB_PATH, 'admin', pin)
 		record_security_event(DB_PATH, 'system', 'initial_admin_created', 'admin',
 		                     'First-run administrator credential created')
 		recovery_code = create_admin_recovery_code(DB_PATH, 'admin')
@@ -451,6 +465,36 @@ class App:
 				message += f"\\nSign-in is temporarily locked for about {remaining} seconds."
 			messagebox.showerror("Login failed", message)
 			return
+		if not admin_pin_configured(DB_PATH, u):
+			pin = simpledialog.askstring(
+				'Create administrator PIN',
+				'Create a five-digit PIN to add a second sign-in factor:',
+				parent=self.root, show='*')
+			if pin is None or not validate_admin_pin(pin):
+				messagebox.showerror('PIN required', 'A five-digit administrator PIN is required before sign-in.', parent=self.root)
+				return
+			pin_confirmation = simpledialog.askstring(
+				'Confirm administrator PIN', 'Enter the PIN again:',
+				parent=self.root, show='*')
+			if pin_confirmation is None or not hmac.compare_digest(pin, pin_confirmation):
+				messagebox.showerror('PIN mismatch', 'The PINs did not match.', parent=self.root)
+				return
+			set_admin_pin(DB_PATH, u, pin)
+		else:
+			pin = simpledialog.askstring(
+				'Administrator PIN', 'Enter your five-digit administrator PIN:',
+				parent=self.root, show='*')
+			if pin is None:
+				return
+			if not verify_admin_pin(DB_PATH, u, pin):
+				remaining = record_login_failure(DB_PATH)
+				record_security_event(DB_PATH, u, 'desktop_pin_failed', 'administrator',
+				                     'Secondary PIN verification failed')
+				message = 'The administrator PIN was not accepted.'
+				if remaining:
+					message += f"\\nSign-in is temporarily locked for about {remaining} seconds."
+				messagebox.showerror('PIN verification failed', message)
+				return
 		clear_login_failures(DB_PATH)
 		# Upgrade legacy SHA-256 hashes after a successful login.
 		if not row[0].startswith('pbkdf2_sha256
@@ -1749,8 +1793,21 @@ if __name__ == '__main__':
 		if confirmation is None or not hmac.compare_digest(new_password, confirmation):
 			messagebox.showerror('Password mismatch', 'The passwords did not match.', parent=self.root)
 			return
+		new_pin = simpledialog.askstring(
+			'Create new administrator PIN',
+			'Choose a new five-digit administrator PIN:',
+			parent=self.root, show='*')
+		if new_pin is None or not validate_admin_pin(new_pin):
+			messagebox.showerror('PIN not accepted', 'The PIN must contain exactly five digits.', parent=self.root)
+			return
+		pin_confirmation = simpledialog.askstring(
+			'Confirm new PIN', 'Enter the new PIN again:',
+			parent=self.root, show='*')
+		if pin_confirmation is None or not hmac.compare_digest(new_pin, pin_confirmation):
+			messagebox.showerror('PIN mismatch', 'The PINs did not match.', parent=self.root)
+			return
 		try:
-			username = reset_admin_password_with_recovery_code(DB_PATH, code, new_password)
+			username = reset_admin_password_with_recovery_code(DB_PATH, code, new_password, new_pin)
 			record_security_event(DB_PATH, 'recovery_code', 'administrator_password_recovered',
 			                     username, 'One-time recovery code consumed; password value not recorded')
 			messagebox.showinfo('Password recovered',
