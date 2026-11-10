@@ -357,6 +357,7 @@ def calculate_window_geometry(screen_width, screen_height):
 
 class App:
 	def __init__(self, root):
+		global INITIAL_ADMIN_PASSWORD
 		self.root = root
 		root.title("VBCCPAS | Photographic Arts Society")
 		layout = calculate_window_geometry(root.winfo_screenwidth(), root.winfo_screenheight())
@@ -480,7 +481,6 @@ class App:
 		self.sidebar.pack_forget()
 		self.current_view = None
 		if INITIAL_ADMIN_PASSWORD:
-			global INITIAL_ADMIN_PASSWORD
 			initial_password = INITIAL_ADMIN_PASSWORD
 			INITIAL_ADMIN_PASSWORD = None
 			self.root.after(
