@@ -26,6 +26,9 @@ def make_package(marker_path):
         "[string]$PackageDirectory = '', [int]$UpdaterProcessId = 0, "
         "[switch]$RepairMode)\n"
         "Start-Sleep -Seconds 5\n"
+        "$logDir = Join-Path $env:LOCALAPPDATA 'VBCCPAS'\n"
+        "New-Item -ItemType Directory -Path $logDir -Force | Out-Null\n"
+        "Add-Content -LiteralPath (Join-Path $logDir 'update.log') -Value 'Update completed successfully'\n"
         "Set-Content -LiteralPath '" + escaped_marker
         + "' -Value 'HANDOFF_SURVIVED_PARENT_EXIT' -Encoding ASCII\n"
     )
