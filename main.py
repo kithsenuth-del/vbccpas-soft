@@ -558,7 +558,7 @@ class App:
 			# Polished Windows workspace dashboard matching the approved VBCCPAS prototype.
 			frame.configure(bg=self.colors['bg'])
 			frame.grid_columnconfigure(0, weight=1)
-			frame.grid_rowconfigure(3, weight=1)
+			frame.grid_rowconfigure(2, weight=1)
 			
 			def panel(parent, bg=None, **kwargs):
 				return tk.Frame(parent, bg=bg or self.colors['card'], bd=0,
