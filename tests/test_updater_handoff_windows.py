@@ -79,13 +79,13 @@ updater.download_and_launch(release, target, 0)
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix="VBCCPAS-Handoff-Test-") as folder:
+    with tempfile.TemporaryDirectory(prefix="VBCCPAS Handoff Test ") as folder:
         root = Path(folder)
         local_app_data = root / "local"
         local_app_data.mkdir()
         marker = root / "handoff-completed.txt"
         package_path = root / "test-package.zip"
-        target = root / "installation" / "VBCCPAS-Soft.exe"
+        target = root / "VBCCPAS Install With Spaces" / "VBCCPAS-Soft.exe"
         target.parent.mkdir()
         target.write_bytes(b"old application placeholder")
         package_path.write_bytes(make_package(marker))
