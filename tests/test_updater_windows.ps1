@@ -16,9 +16,9 @@ $testUserSid = $null
 $testUserCreated = $false
 $standardUserRoot = $null
 
-$script:CSharpCompiler = Join-Path $env:WINDIR 'Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe'
+$script:CSharpCompiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 if (-not (Test-Path -LiteralPath $script:CSharpCompiler -PathType Leaf)) {
-    $script:CSharpCompiler = Join-Path $env:WINDIR 'Microsoft.NET\\Framework\\v4.0.30319\\csc.exe'
+    $script:CSharpCompiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework/v4.0.30319/csc.exe'
 }
 if (-not (Test-Path -LiteralPath $script:CSharpCompiler -PathType Leaf)) {
     throw 'The .NET Framework C# compiler is required for the Windows GUI updater simulation.'
