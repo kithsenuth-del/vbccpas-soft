@@ -276,6 +276,7 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                      + "; target=" + str(target)
                      + "; package=" + str(payload)
                      + "; output=" + str(output_path))
+        breakaway_rejected = False
         with output_path.open("ab") as output:
             try:
                 child = subprocess.Popen(
@@ -288,6 +289,7 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
             except OSError as launch_error:
                 if launch_flags == flags:
                     raise
+                breakaway_rejected = True
                 _log_handoff("Windows rejected breakaway launch; retrying detached launch: "
                              + repr(launch_error))
                 child = subprocess.Popen(
@@ -298,26 +300,50 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         _log_handoff("PowerShell process created; PID=" + str(child.pid)
                      + "; command=" + subprocess.list2cmdline(command)
                      + "; stage=" + str(stage))
-        # A created PID only proves CreateProcess succeeded. Detect immediate
-        # startup/argument failures before the GUI updater exits and record the
-        # child's exit status for diagnosis. A healthy installer continues
-        # independently after this short observation window.
-        try:
-            early_exit = child.wait(timeout=2.0)
-        except subprocess.TimeoutExpired:
-            _log_handoff("PowerShell remains running after startup check; PID=" + str(child.pid))
+        if breakaway_rejected:
+            # Some Windows hosts forbid CREATE_BREAKAWAY_FROM_JOB. In that
+            # case the child may be terminated when this updater exits. Keep
+            # the updater process alive until PowerShell finishes instead of
+            # returning to the GUI and losing the installation. The caller
+            # runs this function on a worker thread, so the updater window
+            # remains responsive while the handoff completes.
+            _log_handoff("Breakaway is unavailable; keeping the updater alive until PowerShell completes.")
+            try:
+                completion_code = child.wait(timeout=600.0)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    "The PowerShell installer has not completed after 10 minutes. "
+                    "Keep the updater open and check %LOCALAPPDATA%\\VBCCPAS\\update.log."
+                ) from exc
+            if not isinstance(completion_code, int):
+                raise RuntimeError("The PowerShell installer returned no usable exit status.")
+            _log_handoff("PowerShell completed while updater remained alive; exit_code="
+                         + str(completion_code))
+            if completion_code != 0:
+                raise RuntimeError(
+                    "The PowerShell installer failed with exit code "
+                    + str(completion_code) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
+                    "and updater-powershell.log."
+                )
         else:
-            if isinstance(early_exit, int):
-                _log_handoff("PowerShell exited during startup check; PID=" + str(child.pid)
-                             + "; exit_code=" + str(early_exit))
-                if early_exit != 0:
-                    raise RuntimeError(
-                        "The PowerShell installer exited immediately with code "
-                        + str(early_exit) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
-                        "and updater-powershell.log."
-                    )
+            # A created PID only proves CreateProcess succeeded. Detect
+            # immediate startup/argument failures before the GUI updater exits.
+            try:
+                early_exit = child.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                _log_handoff("PowerShell remains running after startup check; PID=" + str(child.pid))
             else:
-                _log_handoff("PowerShell startup check returned no numeric exit code; PID=" + str(child.pid))
+                if isinstance(early_exit, int):
+                    _log_handoff("PowerShell exited during startup check; PID=" + str(child.pid)
+                                 + "; exit_code=" + str(early_exit))
+                    if early_exit != 0:
+                        raise RuntimeError(
+                            "The PowerShell installer exited immediately with code "
+                            + str(early_exit) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
+                            "and updater-powershell.log."
+                        )
+                else:
+                    _log_handoff("PowerShell startup check returned no numeric exit code; PID=" + str(child.pid))
     except Exception as exc:
         _log_handoff("PowerShell handoff failed: " + repr(exc))
         import shutil
