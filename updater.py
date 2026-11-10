@@ -399,15 +399,6 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
             # installer outside the updater's Windows Job Object; it can wait
             # for this process to exit and then safely replace the updater.
             _log_handoff("Breakaway is unavailable; scheduling the installer outside the updater job.")
-            try:
-                child.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                pass
-            else:
-                raise RuntimeError(
-                    "The temporary PowerShell process exited before the scheduled-task fallback was started. "
-                    "Check updater-powershell.log."
-                )
             task_name = _schedule_powershell_update_task(
                 powershell, script, process_id, updater_process_id,
                 target, payload, repair_mode, stage, timeout=handoff_timeout,
