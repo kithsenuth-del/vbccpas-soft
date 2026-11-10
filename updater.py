@@ -261,6 +261,13 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
             command.append("-RepairMode")
         flags = (getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
                  | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
+        # A packaged GUI updater may itself be hosted by a Windows Job Object
+        # that terminates child processes when the parent exits. Ask Windows
+        # to break the installer out of an inheritable job so it can finish
+        # after the small updater window closes. If the host job disallows
+        # breakaway, retry with the normal detached flags and log that fact.
+        breakaway_flag = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
+        launch_flags = flags | breakaway_flag if os.name == "nt" else flags
         log_root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
         log_root.mkdir(parents=True, exist_ok=True)
         output_path = log_root / "updater-powershell.log"
@@ -270,11 +277,24 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                      + "; package=" + str(payload)
                      + "; output=" + str(output_path))
         with output_path.open("ab") as output:
-            child = subprocess.Popen(
-                command, stdin=subprocess.DEVNULL, stdout=output,
-                stderr=subprocess.STDOUT, close_fds=True,
-                creationflags=flags,
-            )
+            try:
+                child = subprocess.Popen(
+                    command, stdin=subprocess.DEVNULL, stdout=output,
+                    stderr=subprocess.STDOUT, close_fds=True,
+                    creationflags=launch_flags,
+                )
+                if launch_flags != flags:
+                    _log_handoff("PowerShell launched with CREATE_BREAKAWAY_FROM_JOB.")
+            except OSError as launch_error:
+                if launch_flags == flags:
+                    raise
+                _log_handoff("Windows rejected breakaway launch; retrying detached launch: "
+                             + repr(launch_error))
+                child = subprocess.Popen(
+                    command, stdin=subprocess.DEVNULL, stdout=output,
+                    stderr=subprocess.STDOUT, close_fds=True,
+                    creationflags=flags,
+                )
         _log_handoff("PowerShell process created; PID=" + str(child.pid)
                      + "; command=" + subprocess.list2cmdline(command)
                      + "; stage=" + str(stage))
