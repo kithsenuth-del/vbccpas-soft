@@ -1177,8 +1177,8 @@ class App:
 			('＋  Borrow Item', self.borrow_dialog),
 			('↻  Refresh', lambda: self.show_view('borrow'))
 		])
-		tree = self.module_table(parent, ('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned'),
-							 {'BorrowID':85, 'Item':180, 'Member':180, 'BorrowDate':170, 'ReturnDate':170, 'Returned':100})
+		tree = self.module_table(parent, ('BorrowID','Item','Member','Borrowed','Expected return','Status','Return condition'),
+							 {'BorrowID':75, 'Item':155, 'Member':155, 'Borrowed':145, 'Expected return':125, 'Status':110, 'Return condition':130})
 		self.populate_borrowed(tree)
 		ttk.Button(parent, text='Return Selected', command=lambda: self.return_selected_borrow(tree), style='Rounded.TButton').pack(anchor='e', padx=22, pady=(0, 14))
 
