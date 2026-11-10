@@ -12,6 +12,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import updater
+import updater_app
+import main
 
 
 class FakeResponse:
@@ -79,6 +81,144 @@ def complete_package_bytes():
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_fresh_database_uses_random_recoverable_admin_password(self):
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        previous_password = main.INITIAL_ADMIN_PASSWORD
+        previous_password_file = main.INITIAL_ADMIN_PASSWORD_FILE
+        with tempfile.TemporaryDirectory() as folder:
+            local_app_data = Path(folder) / "local"
+            database_path = Path(folder) / "society.db"
+            try:
+                main.INITIAL_ADMIN_PASSWORD = None
+                main.INITIAL_ADMIN_PASSWORD_FILE = None
+                with patch.object(main, "DB_PATH", str(database_path)), patch.dict(
+                    main.os.environ,
+                    {"LOCALAPPDATA": str(local_app_data), "VBCCPAS_ADMIN_PASSWORD": ""},
+                ):
+                    main.setup_database()
+                    password_file = Path(main.get_initial_admin_password_file())
+                    generated_password = password_file.read_text(encoding="utf-8")
+                    self.assertTrue(generated_password)
+                    self.assertNotEqual(generated_password, "admin123")
+                    self.assertEqual(main.INITIAL_ADMIN_PASSWORD, generated_password)
+
+                    connection = sqlite3.connect(database_path)
+                    try:
+                        stored_hash = connection.execute(
+                            "SELECT Password FROM Users WHERE Username='admin'"
+                        ).fetchone()[0]
+                    finally:
+                        connection.close()
+                    self.assertTrue(main.verify_password(generated_password, stored_hash))
+
+                    # If the first-run dialog is dismissed before sign-in,
+                    # the same temporary credential is redisplayed next time.
+                    main.INITIAL_ADMIN_PASSWORD = None
+                    main.setup_database()
+                    self.assertEqual(main.INITIAL_ADMIN_PASSWORD, generated_password)
+                    main.clear_initial_admin_password_file()
+                    self.assertFalse(password_file.exists())
+            finally:
+                main.INITIAL_ADMIN_PASSWORD = previous_password
+                main.INITIAL_ADMIN_PASSWORD_FILE = previous_password_file
+
+    def test_managed_admin_password_override_is_not_displayed_or_saved(self):
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        previous_password = main.INITIAL_ADMIN_PASSWORD
+        previous_password_file = main.INITIAL_ADMIN_PASSWORD_FILE
+        with tempfile.TemporaryDirectory() as folder:
+            local_app_data = Path(folder) / "local"
+            database_path = Path(folder) / "society.db"
+            try:
+                main.INITIAL_ADMIN_PASSWORD = None
+                main.INITIAL_ADMIN_PASSWORD_FILE = None
+                with patch.object(main, "DB_PATH", str(database_path)), patch.dict(
+                    main.os.environ,
+                    {"LOCALAPPDATA": str(local_app_data), "VBCCPAS_ADMIN_PASSWORD": "Managed-Secret-Only"},
+                ):
+                    main.setup_database()
+                    connection = sqlite3.connect(database_path)
+                    try:
+                        stored_hash = connection.execute(
+                            "SELECT Password FROM Users WHERE Username='admin'"
+                        ).fetchone()[0]
+                    finally:
+                        connection.close()
+                    self.assertTrue(main.verify_password("Managed-Secret-Only", stored_hash))
+                    self.assertIsNone(main.INITIAL_ADMIN_PASSWORD)
+                    self.assertFalse(Path(main.get_initial_admin_password_file()).exists())
+            finally:
+                main.INITIAL_ADMIN_PASSWORD = previous_password
+                main.INITIAL_ADMIN_PASSWORD_FILE = previous_password_file
+
+    def test_main_window_geometry_fits_common_windows_workspaces(self):
+        for screen_width, screen_height in (
+            (1920, 1080),
+            (1366, 768),
+            (1280, 720),
+            (1024, 768),
+        ):
+            with self.subTest(screen=(screen_width, screen_height)):
+                layout = main.calculate_window_geometry(screen_width, screen_height)
+                self.assertLessEqual(layout["width"], screen_width)
+                self.assertLessEqual(layout["height"], screen_height)
+                self.assertLessEqual(layout["min_width"], layout["width"])
+                self.assertLessEqual(layout["min_height"], layout["height"])
+                self.assertGreaterEqual(layout["x"], 0)
+                self.assertGreaterEqual(layout["y"], 0)
+
+    def test_updater_window_cannot_close_during_update(self):
+        from unittest.mock import patch
+
+        class FakeRoot:
+            def __init__(self):
+                self.destroyed = False
+            def destroy(self):
+                self.destroyed = True
+
+        window = object.__new__(updater_app.UpdaterWindow)
+        window.root = FakeRoot()
+        window.busy = True
+        with patch.object(updater_app.messagebox, "showwarning") as warning:
+            window.close_window()
+        warning.assert_called_once()
+        self.assertFalse(window.root.destroyed)
+
+        window.busy = False
+        window.close_window()
+        self.assertTrue(window.root.destroyed)
+
+    def test_updater_window_log_writes_one_record_per_line(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(updater_app.os.environ, {"LOCALAPPDATA": folder}):
+                updater_app._log("first window diagnostic")
+                updater_app._log("second window diagnostic")
+            log_path = Path(folder) / "VBCCPAS" / "updater-launch.log"
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("first window diagnostic", lines[0])
+            self.assertIn("second window diagnostic", lines[1])
+
+    def test_handoff_log_writes_one_record_per_line(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(updater.os.environ, {"LOCALAPPDATA": folder}):
+                updater._log_handoff("first diagnostic")
+                updater._log_handoff("second diagnostic")
+            log_path = Path(folder) / "VBCCPAS" / "updater-launch.log"
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("first diagnostic", lines[0])
+            self.assertIn("second diagnostic", lines[1])
     def test_returns_none_when_latest_release_is_current_build(self):
         commit = "a" * 40
         with patch.object(updater, "_request", return_value=FakeResponse(release_payload())):

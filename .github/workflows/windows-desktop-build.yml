@@ -9,6 +9,7 @@ on:
       - feature/unified-windows-ui
       - feature/photographic-arts-theme
       - feature/one-click-windows-launcher
+      - feature/windows-installer-uninstaller
       - main
   pull_request:
     branches:
@@ -55,6 +56,9 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -84,6 +88,8 @@ jobs:
           path: |
             dist/VBCCPAS-Soft-Windows.zip
             dist/VBCCPAS-Soft-Windows.zip.sha256
+            dist/VBCCPAS-Soft-Setup.exe
+            dist/VBCCPAS-Soft-Setup.exe.sha256
           if-no-files-found: error
           retention-days: 14
 
@@ -148,8 +154,24 @@ jobs:
           "package_size=$((Get-Item -LiteralPath $zip).Length)" >> $env:GITHUB_OUTPUT
           "checksum_hash=$checksumHash" >> $env:GITHUB_OUTPUT
           "checksum_size=$((Get-Item -LiteralPath $checksum).Length)" >> $env:GITHUB_OUTPUT
+          $installer = Join-Path $PWD "release-assets/VBCCPAS-Soft-Setup.exe"
+          $installerChecksum = $installer + ".sha256"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw "Windows setup executable is missing." }
+          if (-not (Test-Path -LiteralPath $installerChecksum -PathType Leaf)) { throw "Windows setup SHA-256 sidecar is missing." }
+          $actualInstallerHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedInstallerLine = $actualInstallerHash + "  VBCCPAS-Soft-Setup.exe"
+          if ((Get-Content -LiteralPath $installerChecksum -Raw).Trim() -ne $expectedInstallerLine) {
+            throw "Windows setup executable SHA-256 sidecar does not match the installer."
+          }
+          $installerChecksumHash = (Get-FileHash -LiteralPath $installerChecksum -Algorithm SHA256).Hash.ToLowerInvariant()
+          "installer_hash=$actualInstallerHash" >> $env:GITHUB_OUTPUT
+          "installer_size=$((Get-Item -LiteralPath $installer).Length)" >> $env:GITHUB_OUTPUT
+          "installer_checksum_hash=$installerChecksumHash" >> $env:GITHUB_OUTPUT
+          "installer_checksum_size=$((Get-Item -LiteralPath $installerChecksum).Length)" >> $env:GITHUB_OUTPUT
+
           Write-Host "Verified package SHA-256: $actualHash"
           Write-Host "Verified complete Windows ZIP and manifest."
+          Write-Host "Verified setup executable SHA-256: $actualInstallerHash"
       - name: Upload release assets to an unpublished draft
         id: draft-release
         uses: softprops/action-gh-release@v2
@@ -160,6 +182,8 @@ jobs:
           files: |
             release-assets/VBCCPAS-Soft-Windows.zip
             release-assets/VBCCPAS-Soft-Windows.zip.sha256
+            release-assets/VBCCPAS-Soft-Setup.exe
+            release-assets/VBCCPAS-Soft-Setup.exe.sha256
           draft: true
           generate_release_notes: true
           make_latest: false
@@ -172,6 +196,10 @@ jobs:
           EXPECTED_PACKAGE_SIZE: ${{ steps.verify-package.outputs.package_size }}
           EXPECTED_CHECKSUM_HASH: ${{ steps.verify-package.outputs.checksum_hash }}
           EXPECTED_CHECKSUM_SIZE: ${{ steps.verify-package.outputs.checksum_size }}
+          EXPECTED_INSTALLER_HASH: ${{ steps.verify-package.outputs.installer_hash }}
+          EXPECTED_INSTALLER_SIZE: ${{ steps.verify-package.outputs.installer_size }}
+          EXPECTED_INSTALLER_CHECKSUM_HASH: ${{ steps.verify-package.outputs.installer_checksum_hash }}
+          EXPECTED_INSTALLER_CHECKSUM_SIZE: ${{ steps.verify-package.outputs.installer_checksum_size }}
           RELEASE_ID: ${{ steps.draft-release.outputs.id }}
         with:
           script: |
@@ -193,6 +221,17 @@ jobs:
             }
             if (checksum.digest !== expectedChecksumDigest || checksum.size !== Number(process.env.EXPECTED_CHECKSUM_SIZE)) {
               throw new Error("Remote SHA-256 sidecar digest or size does not match the locally verified file.");
+            }
+            const installer = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Setup.exe");
+            const installerChecksum = draft.assets.find(asset => asset.name === "VBCCPAS-Soft-Setup.exe.sha256");
+            if (!installer || !installerChecksum) throw new Error("Draft release is missing the Windows setup executable or checksum.");
+            if (installer.digest !== `sha256:${process.env.EXPECTED_INSTALLER_HASH}` ||
+                installer.size !== Number(process.env.EXPECTED_INSTALLER_SIZE)) {
+              throw new Error("Remote Windows setup digest or size does not match the locally verified installer.");
+            }
+            if (installerChecksum.digest !== `sha256:${process.env.EXPECTED_INSTALLER_CHECKSUM_HASH}` ||
+                installerChecksum.size !== Number(process.env.EXPECTED_INSTALLER_CHECKSUM_SIZE)) {
+              throw new Error("Remote setup checksum digest or size does not match the locally verified checksum.");
             }
             const makeLatest = context.ref === "refs/heads/main";
             // Draft releases may not have a Git tag ref yet. Create/verify the

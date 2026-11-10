@@ -7,7 +7,8 @@ param(
     [switch]$RecoverOnly,
     [switch]$RestartAfterRecovery,
     [switch]$CheckPermissionsOnly,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [string]$ScheduledTaskName = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,6 +18,20 @@ $stageRoot = $null
 $started = $null
 $recoveryCompleted = $false
 $logPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update.log"
+
+function Remove-ScheduledUpdateTask {
+    if ([string]::IsNullOrWhiteSpace($ScheduledTaskName)) { return }
+    try {
+        $service = New-Object -ComObject Schedule.Service
+        $service.Connect()
+        $service.GetFolder("\").DeleteTask($ScheduledTaskName, 0)
+        Add-Content -LiteralPath $logPath -Value ("[{0}] Temporary scheduled updater task removed: {1}" -f (Get-Date -Format o), $ScheduledTaskName)
+    } catch {
+        try {
+            Add-Content -LiteralPath $logPath -Value ("[{0}] Temporary scheduled updater task cleanup warning: {1}" -f (Get-Date -Format o), $_.Exception.Message)
+        } catch { }
+    }
+}
 $journalPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\update-recovery.json"
 $recoveryScriptPath = Join-Path $env:LOCALAPPDATA "VBCCPAS\Recovery\updater-recovery.ps1"
 $manifestName = 'vbccpas-managed-files.json'
@@ -491,6 +506,7 @@ try {
     if (-not $Quiet) {
         Show-UpdateSuccess ('VBCCPAS Soft was updated successfully and restarted.' + [Environment]::NewLine + 'Your society database and personal data were preserved.' + [Environment]::NewLine + 'Rollback copy: ' + $backupDirectory)
     }
+    Remove-ScheduledUpdateTask
  } catch {
     $failureMessage = $_.Exception.Message
     if ($started -and (Get-Process -Id $started.Id -ErrorAction SilentlyContinue)) {
@@ -540,5 +556,6 @@ try {
     if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
+    Remove-ScheduledUpdateTask
     exit 1
 }

@@ -23,7 +23,7 @@ def _log(message):
         root.mkdir(parents=True, exist_ok=True)
         from datetime import datetime
         with (root / "updater-launch.log").open("a", encoding="utf-8") as stream:
-            stream.write(f"[{datetime.now().astimezone().isoformat()}] {message}\\n")
+            stream.write(f"[{datetime.now().astimezone().isoformat()}] {message}\n")
     except Exception:
         pass
 
@@ -40,6 +40,7 @@ class UpdaterWindow:
         root.geometry("570x455")
         root.minsize(520, 420)
         root.configure(bg="#111214")
+        root.protocol("WM_DELETE_WINDOW", self.close_window)
         self.style = ttk.Style(root)
         self.style.theme_use("clam")
         self.style.configure(
@@ -101,6 +102,17 @@ class UpdaterWindow:
             if self.repair_mode:
                 self.status.set("Repair mode: the latest complete release will be reinstalled.")
             self.root.after(350, self.check_updates)
+
+    def close_window(self):
+        if self.busy:
+            messagebox.showwarning(
+                "Update in progress",
+                "VBCCPAS Soft is still preparing or applying the update. "
+                "Keep this window open until the operation finishes.",
+                parent=self.root,
+            )
+            return
+        self.root.destroy()
 
     def set_busy(self, busy, message):
         self.busy = busy

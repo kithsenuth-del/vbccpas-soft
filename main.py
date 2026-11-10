@@ -17,6 +17,26 @@ else:
 	BASE_DIR = os.path.dirname(__file__)
 DB_PATH = os.path.join(BASE_DIR, "society.db")
 APP_RESOURCE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+INITIAL_ADMIN_PASSWORD = None
+INITIAL_ADMIN_PASSWORD_FILE = None
+
+
+def get_initial_admin_password_file():
+	profile_root = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".vbccpas")
+	return os.path.join(profile_root, "VBCCPAS", "first-run-admin-password.txt")
+
+
+def clear_initial_admin_password_file():
+	global INITIAL_ADMIN_PASSWORD, INITIAL_ADMIN_PASSWORD_FILE
+	path = INITIAL_ADMIN_PASSWORD_FILE or get_initial_admin_password_file()
+	try:
+		os.remove(path)
+	except FileNotFoundError:
+		pass
+	except OSError:
+		pass
+	INITIAL_ADMIN_PASSWORD = None
+	INITIAL_ADMIN_PASSWORD_FILE = None
 
 
 def hash_password(pw: str) -> str:
@@ -43,6 +63,7 @@ def verify_password(pw: str, stored: str) -> bool:
 
 
 def setup_database():
+	global INITIAL_ADMIN_PASSWORD, INITIAL_ADMIN_PASSWORD_FILE
 	conn = sqlite3.connect(DB_PATH)
 	cur = conn.cursor()
 
@@ -272,23 +293,82 @@ def setup_database():
 	)
 	''')
 
-	# Bootstrap a fresh installation with the requested first-sign-in password.
-	# An environment variable can override this default for managed deployments.
+	# Bootstrap a fresh installation with a strong, random administrator password.
+	# Managed deployments may provide VBCCPAS_ADMIN_PASSWORD explicitly.
 	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
-	if not cur.fetchone():
-		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD", "admin123")
+	admin_exists = cur.fetchone() is not None
+	configured_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
+	password_file = get_initial_admin_password_file()
+	if not admin_exists:
+		if configured_password:
+			initial_password = configured_password
+			try:
+				os.remove(password_file)
+			except OSError:
+				pass
+		else:
+			initial_password = None
+			try:
+				if os.path.isfile(password_file):
+					with open(password_file, "r", encoding="utf-8") as stream:
+						initial_password = stream.read().strip()
+			except OSError:
+				initial_password = None
+			if not initial_password:
+				initial_password = secrets.token_urlsafe(18)
+				os.makedirs(os.path.dirname(password_file), exist_ok=True)
+				with open(password_file, "w", encoding="utf-8") as stream:
+					stream.write(initial_password)
+				try:
+					os.chmod(password_file, 0o600)
+				except OSError:
+					pass
+			INITIAL_ADMIN_PASSWORD = initial_password if not configured_password else None
+			INITIAL_ADMIN_PASSWORD_FILE = password_file if not configured_password else None
 		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
+	else:
+		# If first-run setup was interrupted before the first login, redisplay
+		# the same one-time credential rather than generating a new password.
+		try:
+			if os.path.isfile(password_file):
+				with open(password_file, "r", encoding="utf-8") as stream:
+					INITIAL_ADMIN_PASSWORD = stream.read().strip() or None
+				INITIAL_ADMIN_PASSWORD_FILE = password_file if INITIAL_ADMIN_PASSWORD else None
+		except OSError:
+			INITIAL_ADMIN_PASSWORD = None
+			INITIAL_ADMIN_PASSWORD_FILE = None
 
 	conn.commit()
 	conn.close()
 
 
+def calculate_window_geometry(screen_width, screen_height):
+	"""Choose a centred, resizable window that fits common Windows workspaces."""
+	screen_width = max(1, int(screen_width))
+	screen_height = max(1, int(screen_height))
+	width = min(screen_width, max(640, min(1440, screen_width - 64)))
+	height = min(screen_height, max(480, min(900, screen_height - 96)))
+	min_width = min(1120, width)
+	min_height = min(740, height)
+	x = max(0, (screen_width - width) // 2)
+	y = max(0, (screen_height - height) // 2)
+	return {
+		"width": width, "height": height,
+		"min_width": min_width, "min_height": min_height,
+		"x": x, "y": y,
+	}
+
+
 class App:
 	def __init__(self, root):
+		global INITIAL_ADMIN_PASSWORD
 		self.root = root
 		root.title("VBCCPAS | Photographic Arts Society")
-		root.geometry("1440x900")
-		root.minsize(1120, 740)
+		layout = calculate_window_geometry(root.winfo_screenwidth(), root.winfo_screenheight())
+		root.geometry(
+			f"{layout['width']}x{layout['height']}+{layout['x']}+{layout['y']}"
+		)
+		root.minsize(layout["min_width"], layout["min_height"])
 		self.style = ttk.Style(root)
 		self.style.theme_use('clam')
 		self.apply_theme()
@@ -360,6 +440,7 @@ class App:
 		         foreground='#c8cbd7', font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(0, 7))
 		self.password_var = tk.StringVar()
 		password_entry = ttk.Entry(form, textvariable=self.password_var, show='•', font=('Segoe UI', 11))
+		self.login_password_entry = password_entry
 		password_entry.pack(fill=tk.X, ipady=7)
 		password_entry.bind('<Return>', lambda _event: self.try_login())
 		btn_frame = tk.Frame(login_card, bg=self.colors['card'])
@@ -403,6 +484,62 @@ class App:
 		self.sidebar_user_label.pack(anchor='w', pady=(4, 0))
 		self.sidebar.pack_forget()
 		self.current_view = None
+		if INITIAL_ADMIN_PASSWORD:
+			initial_password = INITIAL_ADMIN_PASSWORD
+			INITIAL_ADMIN_PASSWORD = None
+			self.root.after(
+				500,
+				lambda password=initial_password: self.show_initial_admin_password(password),
+			)
+
+	def show_initial_admin_password(self, password):
+		"""Show the one-time bootstrap credential with a copy action."""
+		self.username_var.set("admin")
+		dialog = tk.Toplevel(self.root)
+		dialog.title("Initial administrator password")
+		dialog.transient(self.root)
+		dialog.resizable(False, False)
+		dialog.geometry("540x300")
+		outer = tk.Frame(dialog, bg=self.colors["card"], padx=24, pady=22)
+		outer.pack(fill=tk.BOTH, expand=True)
+		tk.Label(
+			outer, text="Your administrator account is ready.",
+			font=("Segoe UI", 15, "bold"),
+		).pack(anchor="w", pady=(0, 8))
+		tk.Label(
+			outer,
+			text="Sign in with username admin and save this randomly generated password.",
+			wraplength=480, justify="left",
+		).pack(anchor="w", pady=(0, 14))
+		password_var = tk.StringVar(value=password)
+		password_entry = ttk.Entry(outer, textvariable=password_var, state="readonly",
+		                           font=("Consolas", 12))
+		password_entry.pack(fill=tk.X, pady=(0, 12))
+		password_entry.selection_range(0, tk.END)
+
+		def copy_password():
+			try:
+				self.root.clipboard_clear()
+				self.root.clipboard_append(password)
+				self.root.update_idletasks()
+				copy_status.configure(text="Password copied to clipboard.")
+			except tk.TclError:
+				copy_status.configure(text="Could not access the clipboard; select the password above.")
+
+		copy_status = ttk.Label(outer, text="A temporary copy is kept in your Windows user profile until first sign-in.",
+		                         wraplength=480)
+		copy_status.pack(anchor="w", pady=(0, 14))
+		buttons = tk.Frame(outer, bg=self.colors["card"])
+		buttons.pack(fill=tk.X)
+		def continue_to_login():
+			dialog.destroy()
+			self.login_password_entry.focus_set()
+
+		ttk.Button(buttons, text="Copy password", command=copy_password).pack(side=tk.LEFT)
+		ttk.Button(buttons, text="Continue to sign in", command=continue_to_login).pack(side=tk.RIGHT)
+		dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+		dialog.grab_set()
+		password_entry.focus_set()
 
 	def try_login(self):
 		u = self.username_var.get().strip()
@@ -431,6 +568,8 @@ class App:
 			conn.commit()
 			conn.close()
 		self.user = {'username': u, 'role': row[1]}
+		if u == "admin":
+			clear_initial_admin_password_file()
 		self.sidebar_user_label.configure(text=u)
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)

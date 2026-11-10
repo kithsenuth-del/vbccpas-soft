@@ -41,7 +41,7 @@ try {
 
     if (-not $SkipPreBuildTests) {
         Write-Host "Running Python compilation checks..."
-        Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
+        Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py tests/test_updater_handoff_windows.py
 
         Write-Host "Running isolated integration and safety tests..."
         Invoke-Python tests/test_passkey_recovery.py
@@ -74,6 +74,8 @@ try {
     Write-Host "Simulating a complete Windows update, running-app closure, restart and permission checks..."
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Root "tests\test_updater_windows.ps1")
     if ($LASTEXITCODE -ne 0) { throw "Windows updater end-to-end simulation failed." }
+    Write-Host "Testing the real Python-to-PowerShell handoff after the launcher exits..."
+    Invoke-Python tests/test_updater_handoff_windows.py
 
     if (Test-Path -LiteralPath $Dist) {
         Remove-Item -LiteralPath $Dist -Recurse -Force
@@ -106,6 +108,10 @@ try {
             throw "Build output is missing required file: $Name"
         }
     }
+
+    Write-Host "Smoke-testing the packaged desktop executable in an isolated folder..."
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Root "tests\test_desktop_smoke_windows.ps1") -ExecutablePath (Join-Path $Dist "VBCCPAS-Soft.exe")
+    if ($LASTEXITCODE -ne 0) { throw "Packaged desktop application startup smoke test failed." }
 
     $ManifestName = "vbccpas-managed-files.json"
     $Files = @(
@@ -181,6 +187,34 @@ try {
     if ((Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $PackageHash) {
         throw "The Windows ZIP changed after its checksum was generated."
     }
+
+    Write-Host "Building the Windows installer and uninstaller..."
+    $InnoCompiler = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
+    if (-not $InnoCompiler) {
+        $ProgramFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+        $DefaultInnoCompiler = Join-Path $ProgramFilesX86 "Inno Setup 6\ISCC.exe"
+        if (Test-Path -LiteralPath $DefaultInnoCompiler -PathType Leaf) {
+            $InnoCompiler = $DefaultInnoCompiler
+        }
+    }
+    if (-not $InnoCompiler) {
+        throw "Inno Setup 6 is required to build the Windows installer. Install Inno Setup 6 and run this build again."
+    }
+    & $InnoCompiler (Join-Path $Root "installer\vbccpas-installer.iss")
+    if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed to compile the Windows installer." }
+
+    $InstallerPath = Join-Path $Dist "VBCCPAS-Soft-Setup.exe"
+    if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) {
+        throw "The Windows installer executable was not generated."
+    }
+    $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath ($InstallerPath + ".sha256") -Value ($InstallerHash + "  VBCCPAS-Soft-Setup.exe") -Encoding ASCII -NoNewline
+    if ((Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $InstallerHash) {
+        throw "The Windows installer checksum verification failed."
+    }
+    Write-Host "Testing silent install, uninstaller and preservation of society.db..."
+    & (Join-Path $Root "tests\test_installer_windows.ps1") -InstallerPath $InstallerPath
+    if ($LASTEXITCODE -ne 0) { throw "Windows installer/uninstaller preservation test failed." }
 } finally {
     Set-Content -LiteralPath $BuildInfoPath -Value $OriginalBuildInfo -Encoding utf8
 }
@@ -194,6 +228,7 @@ Write-Host ""
 Write-Host "Build and verification complete."
 Write-Host "Application: $Dist\VBCCPAS-Soft.exe"
 Write-Host "Standalone updater: $Dist\VBCCPAS-Updater.exe"
-Write-Host "Complete distribution: $Dist\VBCCPAS-Soft-Windows.zip"
+Write-Host "Windows installer: $Dist\VBCCPAS-Soft-Setup.exe"
+Write-Host "Complete portable distribution: $Dist\VBCCPAS-Soft-Windows.zip"
 Write-Host "SHA-256 checksum: $Dist\VBCCPAS-Soft-Windows.zip.sha256"
 Write-Host "For another computer, extract the ZIP to a permanent folder and run Setup-VBCCPAS-Shortcut.bat."
