@@ -309,47 +309,98 @@ class App:
 		self.container = ttk.Frame(root, style='Main.TFrame')
 		self.container.pack(fill=tk.BOTH, expand=True)
 
-		self.sidebar = tk.Frame(self.container, bg=self.colors['sidebar'], width=236)
+		self.sidebar = tk.Frame(self.container, bg=self.colors['sidebar'], width=252)
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.sidebar.pack_propagate(False)
 
 		self.content = tk.Frame(self.container, bg=self.colors['bg'])
 		self.content.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-		# Login
+		# Full-height split login workspace with the society brand and a focused sign-in panel.
 		self.login_frame = tk.Frame(self.content, bg=self.colors['bg'])
 		self.login_frame.pack(fill=tk.BOTH, expand=True)
-		login_card = tk.Frame(self.login_frame, bg=self.colors['card'], bd=1, highlightthickness=1, highlightbackground='#334155')
-		login_card.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=460, height=360)
-		tk.Label(login_card, text="VBCCPAS Photographic Arts Society", bg=self.colors['card'], fg='#f3eee6', font=('Segoe UI', 20, 'bold')).place(x=24, y=24)
-		tk.Label(login_card, text="The creative home for student photographers, photo events and camera equipment.", bg=self.colors['card'], fg='#d6cfc5', font=('Segoe UI', 10)).place(x=24, y=64)
+		login_left = tk.Frame(self.login_frame, bg='#171923', width=420)
+		login_left.pack(side=tk.LEFT, fill=tk.Y)
+		login_left.pack_propagate(False)
+		tk.Label(login_left, text='VBCCPAS', background='#171923',
+		         foreground='#f7f6fb', font=('Segoe UI', 25, 'bold')).pack(anchor='w', padx=42, pady=(82, 8))
+		tk.Label(login_left, text='PHOTOGRAPHIC ARTS SOCIETY',
+		         background='#171923', foreground='#a99cff',
+		         font=('Segoe UI', 9, 'bold')).pack(anchor='w', padx=44)
+		tk.Frame(login_left, bg='#8b7cf6', height=3, width=58).pack(anchor='w', padx=44, pady=26)
+		tk.Label(login_left, text='One workspace for\nyour society.',
+		         background='#171923', foreground='#f4f2f8',
+		         font=('Segoe UI', 23, 'bold'), justify='left').pack(anchor='w', padx=42, pady=(0, 12))
+		tk.Label(login_left, text='Manage members, events, equipment and\nclub activity from one place.',
+		         background='#171923', foreground='#a5a8b7',
+		         font=('Segoe UI', 10), justify='left').pack(anchor='w', padx=44)
+		tk.Label(login_left, text='BANDARANAYAKE CENTRAL COLLEGE  •  VEYANGODA',
+		         background='#171923', foreground='#777f91',
+		         font=('Segoe UI', 7, 'bold')).pack(side=tk.BOTTOM, anchor='w', padx=42, pady=30)
+		login_stage = tk.Frame(self.login_frame, bg=self.colors['bg'])
+		login_stage.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+		login_card = tk.Frame(login_stage, bg=self.colors['card'], bd=0,
+		                      highlightthickness=1, highlightbackground='#34394a')
+		login_card.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=480, height=470)
+		tk.Label(login_card, text='WELCOME BACK', background=self.colors['card'],
+		         foreground=self.colors['accent2'], font=('Segoe UI', 9, 'bold')).pack(anchor='w', padx=38, pady=(42, 8))
+		tk.Label(login_card, text='Sign in to VBCCPAS', background=self.colors['card'],
+		         foreground=self.colors['fg'], font=('Segoe UI', 23, 'bold')).pack(anchor='w', padx=38)
+		tk.Label(login_card, text='Use your executive administrator account to continue.',
+		         background=self.colors['card'], foreground='#a5a8b7',
+		         font=('Segoe UI', 10)).pack(anchor='w', padx=38, pady=(8, 30))
 		form = tk.Frame(login_card, bg=self.colors['card'])
-		form.place(x=24, y=110, width=410)
-		tk.Label(form, text="Username", bg=self.colors['card'], fg=self.colors['fg'], font=('Segoe UI', 10, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=(0, 6))
+		form.pack(fill=tk.X, padx=38)
+		tk.Label(form, text='USERNAME', background=self.colors['card'],
+		         foreground='#c8cbd7', font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(0, 7))
 		self.username_var = tk.StringVar()
-		tk.Entry(form, textvariable=self.username_var, bg='#171719', fg='#f8fafc', insertbackground='white', width=34).grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
-		tk.Label(form, text="Password", bg=self.colors['card'], fg=self.colors['fg'], font=('Segoe UI', 10, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=(0, 6))
+		username_entry = ttk.Entry(form, textvariable=self.username_var, font=('Segoe UI', 11))
+		username_entry.pack(fill=tk.X, ipady=7, pady=(0, 20))
+		tk.Label(form, text='PASSWORD', background=self.colors['card'],
+		         foreground='#c8cbd7', font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(0, 7))
 		self.password_var = tk.StringVar()
-		tk.Entry(form, textvariable=self.password_var, show='*', bg='#0f172a', fg='#f8fafc', insertbackground='white', width=34).grid(row=3, column=0, sticky=tk.W, pady=(0, 12))
+		password_entry = ttk.Entry(form, textvariable=self.password_var, show='•', font=('Segoe UI', 11))
+		password_entry.pack(fill=tk.X, ipady=7)
+		password_entry.bind('<Return>', lambda _event: self.try_login())
 		btn_frame = tk.Frame(login_card, bg=self.colors['card'])
-		btn_frame.place(x=24, y=290)
-		ttk.Button(btn_frame, text="Sign in", command=self.try_login, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+		btn_frame.pack(fill=tk.X, padx=38, pady=(28, 0))
+		ttk.Button(btn_frame, text='Sign in  →', command=self.try_login,
+		           style='Rounded.TButton').pack(fill=tk.X, ipady=5)
+		tk.Label(login_card, text='Your records stay on this computer unless you configure sync.',
+		         background=self.colors['card'], foreground='#777f91',
+		         font=('Segoe UI', 8)).pack(anchor='w', padx=38, pady=(22, 0))
+		username_entry.focus_set()
 
 		# sidebar buttons (hidden until login)
 		self.side_buttons = {}
 		self.sidebar_brand = tk.Frame(self.sidebar, bg=self.colors['sidebar'])
-		self.sidebar_brand.pack(fill=tk.X, padx=18, pady=(20, 18))
+		self.sidebar_brand.pack(fill=tk.X, padx=18, pady=(24, 24))
 		tk.Label(self.sidebar_brand, text='VBCCPAS', background=self.colors['sidebar'],
-		         foreground='#f4f2f8', font=('Segoe UI', 15, 'bold')).pack(anchor='w')
-		tk.Label(self.sidebar_brand, text='THE DARKROOM  •  WORKSPACE',
-		         background=self.colors['sidebar'], foreground='#8f96a8',
-		         font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(3, 0))
+		         foreground='#f4f2f8', font=('Segoe UI', 18, 'bold')).pack(anchor='w')
+		tk.Label(self.sidebar_brand, text='SOCIETY WORKSPACE',
+		         background=self.colors['sidebar'], foreground='#a99cff',
+		         font=('Segoe UI', 8, 'bold')).pack(anchor='w', pady=(5, 0))
+		tk.Frame(self.sidebar, bg='#343846', height=1).pack(fill=tk.X, padx=18, pady=(0, 18))
 		self.sidebar_title = tk.Label(self.sidebar, text="WORKSPACE MODULES", bg=self.colors['sidebar'], fg='#7f8799', font=('Segoe UI', 8, 'bold'))
 		self.sidebar_title.pack(anchor='w', padx=18, pady=(6, 10))
-		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
-			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
-			b.pack(fill=tk.X, padx=12, pady=6)
+		for key, label in [
+			('dashboard', '⌂   Overview'), ('members', '♙   Members'),
+			('events', '▦   Events & activities'), ('inventory', '▣   Equipment'),
+			('borrow', '↔   Borrowing'), ('attendance', '✓   Attendance'),
+			('reports', '▤   Reports & exports'), ('security', '⚙   Security & access')
+		]:
+			b = ttk.Button(self.sidebar, text=label, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
+			b.pack(fill=tk.X, padx=12, pady=4, ipady=2)
 			self.side_buttons[key] = b
+		tk.Frame(self.sidebar, bg='#343846', height=1).pack(fill=tk.X, padx=18, pady=(22, 14))
+		self.sidebar_account = tk.Frame(self.sidebar, bg=self.colors['sidebar'])
+		self.sidebar_account.pack(side=tk.BOTTOM, fill=tk.X, padx=18, pady=20)
+		tk.Label(self.sidebar_account, text='SIGNED IN AS', background=self.colors['sidebar'],
+		         foreground='#777f91', font=('Segoe UI', 7, 'bold')).pack(anchor='w')
+		self.sidebar_user_label = ttk.Label(self.sidebar_account, text='Administrator',
+		         background=self.colors['sidebar'], foreground='#f4f2f8',
+		         font=('Segoe UI', 10, 'bold'))
+		self.sidebar_user_label.pack(anchor='w', pady=(4, 0))
 		self.sidebar.pack_forget()
 		self.current_view = None
 
@@ -380,6 +431,7 @@ class App:
 			conn.commit()
 			conn.close()
 		self.user = {'username': u, 'role': row[1]}
+		self.sidebar_user_label.configure(text=u)
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.show_view('dashboard')
@@ -443,14 +495,14 @@ class App:
 	def apply_theme(self):
 		# Unified dark workspace palette shared with the browser dashboard.
 		self.colors = {
-			'bg': '#111319',
-			'card': '#1c202a',
+			'bg': '#0f1117',
+			'card': '#191d27',
 			'fg': '#f4f2f8',
-			'accent1': '#8b7cf6',
-			'accent2': '#c87548',
-			'accent3': '#a99cff',
-			'sidebar': '#171a22',
-			'panel': '#242936'
+			'accent1': '#7967e8',
+			'accent2': '#a99cff',
+			'accent3': '#c87548',
+			'sidebar': '#151821',
+			'panel': '#202532'
 		}
 		bg = self.colors['bg']
 		fg = self.colors['fg']
@@ -603,10 +655,14 @@ class App:
 		title, subtitle = page_titles.get(key, ('VBCCPAS workspace', 'Society management'))
 		page_head = tk.Frame(frame, bg=self.colors['bg'])
 		page_head.pack(fill=tk.X, padx=24, pady=(20, 12))
-		tk.Label(page_head, text='VBCCPAS  /  SOCIETY WORKSPACE',
-		         foreground=self.colors['accent2'], font=('Segoe UI', 8, 'bold')).pack(anchor='w')
-		tk.Label(page_head, text=title, font=('Segoe UI', 23, 'bold'),
-		         foreground=self.colors['fg']).pack(anchor='w', pady=(4, 1))
+		heading_row = tk.Frame(page_head, bg=self.colors['bg'])
+		heading_row.pack(fill=tk.X)
+		tk.Label(heading_row, text='VBCCPAS  /  SOCIETY WORKSPACE',
+		         foreground=self.colors['accent2'], font=('Segoe UI', 8, 'bold')).pack(side=tk.LEFT, anchor='w')
+		tk.Label(heading_row, text=datetime.now().strftime('%A, %d %B %Y'),
+		         foreground='#777f91', font=('Segoe UI', 8)).pack(side=tk.RIGHT, anchor='e')
+		tk.Label(page_head, text=title, font=('Segoe UI', 25, 'bold'),
+		         foreground=self.colors['fg']).pack(anchor='w', pady=(7, 2))
 		tk.Label(page_head, text=subtitle, foreground='#a5a8b7',
 		         font=('Segoe UI', 10)).pack(anchor='w')
 		body = tk.Frame(frame, bg=self.colors['bg'])
