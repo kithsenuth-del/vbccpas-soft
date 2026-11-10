@@ -205,6 +205,21 @@ def create_admin_recovery_code(database_path, username="admin"):
     return code
 
 
+def admin_recovery_code_configured(database_path, username="admin"):
+    """Return whether an unused recovery code exists for this administrator."""
+    path = Path(database_path).expanduser().resolve()
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='AdminRecovery'"
+        ).fetchone()
+        if not exists:
+            return False
+        return conn.execute(
+            "SELECT 1 FROM AdminRecovery WHERE Username=? AND UsedAt IS NULL",
+            (username,),
+        ).fetchone() is not None
+
+
 def login_lock_remaining(database_path):
     """Return remaining global desktop-login lockout seconds, or zero."""
     path = Path(database_path).expanduser().resolve()
