@@ -1484,9 +1484,6 @@ class App:
 			                     'Pre-restore safety backup: ' + safety_backup.name)
 			messagebox.showinfo('Restore completed',
 				'Backup restored and validated. Previous database preserved at:\n' + str(safety_backup) +
-				'\n\nThe application will now refresh its dashboard.')
-			messagebox.showinfo('Restore completed',
-				'Backup restored and validated. Previous database preserved at:\n' + str(safety_backup) +
 				'\n\nPlease restart VBCCPAS Soft and sign in again.')
 			self.root.destroy()
 		except Exception as exc:
@@ -1575,6 +1572,9 @@ class App:
 			if not valid:
 				messagebox.showwarning('Password not accepted', reason)
 				return
+		elif not selected_user_id['value']:
+			messagebox.showwarning('Password required', 'A new account must have a password of at least 12 characters.')
+			return
 		if member_id:
 			try:
 				member_id_int = int(member_id)
