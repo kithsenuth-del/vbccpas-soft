@@ -184,7 +184,8 @@ def create_admin_recovery_code(database_path, username="admin"):
             raise PermissionError("An administrator account is required to create a recovery code.")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS AdminRecovery (
-                Username TEXT PRIMARY KEY,\n                Salt BLOB NOT NULL,
+                Username TEXT PRIMARY KEY,
+                Salt BLOB NOT NULL,
                 Digest BLOB NOT NULL,
                 Iterations INTEGER NOT NULL,
                 CreatedAt TEXT NOT NULL,
@@ -302,7 +303,8 @@ def set_admin_pin(database_path, username, pin):
             raise PermissionError("An administrator account is required to set a PIN.")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS AdminPin (
-                Username TEXT PRIMARY KEY,\n                Salt BLOB NOT NULL,
+                Username TEXT PRIMARY KEY,
+                Salt BLOB NOT NULL,
                 Digest BLOB NOT NULL,
                 Iterations INTEGER NOT NULL,
                 UpdatedAt TEXT NOT NULL
@@ -370,7 +372,8 @@ def reset_admin_password_with_recovery_code(\n    database_path, recovery_code, 
             raise PermissionError("Too many failed attempts. Wait before trying again.")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS AdminRecovery (
-                Username TEXT PRIMARY KEY,\n                Salt BLOB NOT NULL, Digest BLOB NOT NULL,
+                Username TEXT PRIMARY KEY,
+                Salt BLOB NOT NULL, Digest BLOB NOT NULL,
                 Iterations INTEGER NOT NULL, CreatedAt TEXT NOT NULL, UsedAt TEXT
             )
         """)
@@ -406,7 +409,8 @@ def reset_admin_password_with_recovery_code(\n    database_path, recovery_code, 
             digest = hashlib.pbkdf2_hmac("sha256", new_pin.encode("ascii"), salt, iterations)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS AdminPin (
-                    Username TEXT PRIMARY KEY,\n                Salt BLOB NOT NULL, Digest BLOB NOT NULL,
+                    Username TEXT PRIMARY KEY,
+                Salt BLOB NOT NULL, Digest BLOB NOT NULL,
                     Iterations INTEGER NOT NULL, UpdatedAt TEXT NOT NULL
                 )
             """)
