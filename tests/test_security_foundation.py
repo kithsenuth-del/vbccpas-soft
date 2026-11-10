@@ -135,7 +135,7 @@ class SecurityFoundationTests(unittest.TestCase):
         code = create_admin_recovery_code(self.live, "admin")
         with sqlite3.connect(self.live) as conn:
             salt, digest = conn.execute(
-                "SELECT Salt, Digest FROM AdminRecovery WHERE RecoveryID=1"
+                "SELECT Salt, Digest FROM AdminRecovery WHERE Username='admin'"
             ).fetchone()
         self.assertNotEqual(salt, code.encode("ascii"))
         self.assertNotEqual(digest, code.encode("ascii"))
