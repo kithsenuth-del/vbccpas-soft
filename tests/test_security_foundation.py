@@ -95,10 +95,6 @@ class SecurityFoundationTests(unittest.TestCase):
             validate_restore_candidate(candidate)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
     def test_recovery_code_resets_password_once_and_is_not_reusable(self):
         from security_foundation import (
             create_admin_recovery_code, reset_admin_password_with_recovery_code
@@ -173,3 +169,7 @@ if __name__ == "__main__":
         )
         self.assertTrue(verify_admin_pin(self.live, "admin", "19462"))
         self.assertFalse(verify_admin_pin(self.live, "admin", "58319"))
+
+
+if __name__ == "__main__":
+    unittest.main()
