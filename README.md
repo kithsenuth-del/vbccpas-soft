@@ -4,7 +4,7 @@ VBCCPAS Soft is a local society-management application for Windows. The unified 
 
 ## Install VBCCPAS Soft on Windows
 
-The recommended installation is the signed-in Windows user's own account; administrator permission is not required.
+The recommended installation is the signed-in Windows user's own account; administrator permission is not required. If you are upgrading an existing portable copy and want to keep its current society database, choose that existing application folder in the setup wizard rather than accepting a new empty folder. For example, the folder containing your current `VBCCPAS-Soft.exe` is where its `society.db` is stored.
 
 1. Download **VBCCPAS-Soft-Setup.exe** from the latest GitHub release.
 2. Double-click the setup file. If Windows displays its normal publisher/security prompt, verify that the file came from this repository before continuing.
@@ -40,6 +40,8 @@ The build script installs the Python dependencies, requires Inno Setup 6 to comp
 
 A successful build produces:
 
+- `dist\VBCCPAS-Soft-Setup.exe` — Windows setup wizard with a generated uninstaller
+- `dist\VBCCPAS-Soft-Setup.exe.sha256` — setup executable checksum
 - `dist\VBCCPAS-Soft.exe` — the main desktop application
 - `dist\VBCCPAS-Updater.exe` — the independent graphical updater
 - `dist\updater.ps1` — the safe package installation/rollback script
