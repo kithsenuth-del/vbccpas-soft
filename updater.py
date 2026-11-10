@@ -387,20 +387,8 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                 if launch_flags == flags:
                     raise
                 breakaway_rejected = True
-                _log_handoff("Windows rejected breakaway launch; retrying detached launch: "
+                _log_handoff("Windows rejected breakaway launch; delegating through Task Scheduler: "
                              + repr(launch_error))
-                # This fallback stays attached to the updater's lifetime.
-                # CREATE_NO_WINDOW avoids a console flash while the worker
-                # thread waits for PowerShell to finish.
-                fallback_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-                child = subprocess.Popen(
-                    command, stdin=subprocess.DEVNULL, stdout=output,
-                    stderr=subprocess.STDOUT, close_fds=True,
-                    creationflags=fallback_flags,
-                )
-        _log_handoff("PowerShell process created; PID=" + str(child.pid)
-                     + "; command=" + subprocess.list2cmdline(command)
-                     + "; stage=" + str(stage))
         if breakaway_rejected:
             # The PowerShell script waits for the GUI updater to exit before
             # replacing VBCCPAS-Updater.exe. It therefore cannot be kept as a
@@ -423,6 +411,9 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
             )
             _log_handoff("Update delegated to scheduled task; updater may now close; task=" + task_name)
         else:
+            _log_handoff("PowerShell process created; PID=" + str(child.pid)
+                         + "; command=" + subprocess.list2cmdline(command)
+                         + "; stage=" + str(stage))
             # A created PID only proves CreateProcess succeeded. Detect
             # immediate startup/argument failures before the GUI updater exits.
             try:
