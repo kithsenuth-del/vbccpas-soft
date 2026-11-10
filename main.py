@@ -979,42 +979,52 @@ class App:
 			tk.Label(card, text=description, foreground='#aeb4c7').pack(anchor='w', padx=16, pady=(0, 10))
 			ttk.Button(card, text='Export CSV', command=command, style='Rounded.TButton').pack(anchor='w', padx=16, pady=(0, 10))
 	def view_security(self, parent):
-		top=parent
-		self.module_heading(top, 'Security & Users', 'Manage application accounts and administrator access.')
+		self.module_heading(parent, 'Security & Users', 'Manage application accounts and administrator access.')
 		if self.user.get('role') != 'admin':
-			ttk.Label(top, text='Admin access required to manage users.', style='Warning.TLabel').pack(pady=12)
+			ttk.Label(parent, text='Administrator access is required to manage users.', style='Warning.TLabel').pack(pady=18)
 			return
-		toolbar=ttk.Frame(top); toolbar.pack(fill=tk.X, pady=(0,8))
-		ttk.Button(toolbar, text='Reset admin password', command=self.reset_admin_password, style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(toolbar, text='Refresh', command=lambda: self.populate_users(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		form = ttk.Frame(top, padding=10)
-		form.pack(fill=tk.X, pady=(0,8))
+
+		# Account editor card
+		card = tk.Frame(parent, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
+		card.pack(fill=tk.X, padx=18, pady=(0, 12))
+		tk.Label(card, text='Account details', font=('Segoe UI', 13, 'bold')).pack(anchor='w', padx=16, pady=(14, 4))
+		ttk.Label(card, text='Select an existing account to edit it, or enter details to create a new account.',
+			foreground='#aeb4c7').pack(anchor='w', padx=16, pady=(0, 8))
+		form = ttk.Frame(card, padding=(16, 4, 16, 12))
+		form.pack(fill=tk.X)
 		selected_user_id = {'value': None}
 		username_var = tk.StringVar()
 		password_var = tk.StringVar()
 		role_var = tk.StringVar(value='member')
 		member_id_var = tk.StringVar()
-		ttk.Label(form, text='Username').grid(row=0, column=0, sticky=tk.W, padx=(0,8), pady=4)
-		ttk.Entry(form, textvariable=username_var, width=24).grid(row=0, column=1, pady=4)
-		ttk.Label(form, text='Password').grid(row=0, column=2, sticky=tk.W, padx=(12,8), pady=4)
-		ttk.Entry(form, textvariable=password_var, show='*', width=24).grid(row=0, column=3, pady=4)
-		ttk.Label(form, text='Role').grid(row=1, column=0, sticky=tk.W, padx=(0,8), pady=4)
-		role_cb = ttk.Combobox(form, textvariable=role_var, values=['admin','member'], state='readonly', width=20)
-		role_cb.grid(row=1, column=1, pady=4)
-		ttk.Label(form, text='Member ID').grid(row=1, column=2, sticky=tk.W, padx=(12,8), pady=4)
-		ttk.Entry(form, textvariable=member_id_var, width=18).grid(row=1, column=3, pady=4)
-		btns = ttk.Frame(form)
-		btns.grid(row=2, column=0, columnspan=4, sticky=tk.W, pady=(8,0))
-		ttk.Button(btns, text='Save / Update', command=lambda: self.save_security_user(username_var, password_var, role_var, member_id_var, selected_user_id, tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Clear', command=lambda: self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Reset selected password', command=lambda: self.reset_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		ttk.Button(btns, text='Delete selected', command=lambda: self.delete_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=4)
-		cols=('UserID','Username','Role','MemberID')
-		tree=ttk.Treeview(top,columns=cols,show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
-		tree.pack(fill=tk.BOTH,expand=True, pady=8)
-		tree.bind('<<TreeviewSelect>>', lambda event: self.load_security_selection(tree, username_var, role_var, member_id_var, selected_user_id))
+		for col in (1, 3): form.grid_columnconfigure(col, weight=1)
+		ttk.Label(form, text='Username').grid(row=0, column=0, sticky=tk.W, padx=(0,8), pady=5)
+		ttk.Entry(form, textvariable=username_var).grid(row=0, column=1, sticky='ew', pady=5)
+		ttk.Label(form, text='New password').grid(row=0, column=2, sticky=tk.W, padx=(16,8), pady=5)
+		ttk.Entry(form, textvariable=password_var, show='*').grid(row=0, column=3, sticky='ew', pady=5)
+		ttk.Label(form, text='Role').grid(row=1, column=0, sticky=tk.W, padx=(0,8), pady=5)
+		tk.Combobox(form, textvariable=role_var, values=['admin','member'], state='readonly', width=18).grid(row=1, column=1, sticky='ew', pady=5)
+		tk.Label(form, text='Linked member ID').grid(row=1, column=2, sticky=tk.W, padx=(16,8), pady=5)
+		ttk.Entry(form, textvariable=member_id_var).grid(row=1, column=3, sticky='ew', pady=5)
+
+		tree = self.module_table(parent, ('UserID','Username','Role','MemberID'),
+							 {'UserID':100, 'Username':240, 'Role':140, 'MemberID':140})
+		tree.bind('<<TreeviewSelect>>', lambda _event: self.load_security_selection(tree, username_var, role_var, member_id_var, selected_user_id))
 		self.populate_users(tree)
+
+		buttons = ttk.Frame(form)
+		buttons.grid(row=2, column=0, columnspan=4, sticky=tk.W, pady=(10, 0))
+		ttk.Button(buttons, text='Save / Update', command=lambda: self.save_security_user(username_var, password_var, role_var, member_id_var, selected_user_id, tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=(0,6))
+		ttk.Button(buttons, text='Clear', command=lambda: self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(buttons, text='Reset selected password', command=lambda: self.reset_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(buttons, text='Delete selected', command=lambda: self.delete_selected_user(tree), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+
+		toolbar = ttk.Frame(parent)
+		toolbar.pack(fill=tk.X, padx=18, pady=(0, 10))
+		ttk.Button(toolbar, text='Reset administrator password', command=self.reset_admin_password, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0,8))
+		ttk.Button(toolbar, text='Refresh accounts', command=lambda: self.populate_users(tree), style='Rounded.TButton').pack(side=tk.LEFT)
+
+
 	def populate_users(self, tree):
 		for r in tree.get_children(): tree.delete(r)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT UserID, Username, Role, MemberID FROM Users ORDER BY UserID');rows=cur.fetchall();conn.close()
