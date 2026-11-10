@@ -181,6 +181,33 @@ try {
     if ((Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $PackageHash) {
         throw "The Windows ZIP changed after its checksum was generated."
     }
+
+    Write-Host "Building the Windows installer and uninstaller..."
+    $InnoCompiler = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
+    if (-not $InnoCompiler) {
+        $DefaultInnoCompiler = Join-Path '$env:ProgramFiles (x86)' "Inno Setup\ISCC.exe"
+        if (Test-Path -LiteralPath $DefaultInnoCompiler -PathType Leaf) {
+            $InnoCompiler = $DefaultInnoCompiler
+        }
+    }
+    if (-not $InnoCompiler) {
+        throw "Inno Setup 6 is required to build the Windows installer. Install Inno Setup 6 and run this build again."
+    }
+    & $InnoCompiler (Join-Path $Root "installer\vbccpas-installer.iss")
+    if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed to compile the Windows installer." }
+
+    $InstallerPath = Join-Path $Dist "VBCCPAS-Soft-Setup.exe"
+    if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) {
+        throw "The Windows installer executable was not generated."
+    }
+    $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath ($InstallerPath + ".sha256") -Value ($InstallerHash + "  VBCCPAS-Soft-Setup.exe") -Encoding ASCII -NoNewline
+    if ((Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $InstallerHash) {
+        throw "The Windows installer checksum verification failed."
+    }
+    Write-Host "Testing silent install, uninstaller and preservation of society.db..."
+    & (Join-Path $Root "tests\test_installer_windows.ps1") -InstallerPath $InstallerPath
+    if ($LASTEXITCODE -ne 0) { throw "Windows installer/uninstaller preservation test failed." }
 } finally {
     Set-Content -LiteralPath $BuildInfoPath -Value $OriginalBuildInfo -Encoding utf8
 }
