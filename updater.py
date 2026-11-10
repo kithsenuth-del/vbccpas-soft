@@ -292,10 +292,14 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                 breakaway_rejected = True
                 _log_handoff("Windows rejected breakaway launch; retrying detached launch: "
                              + repr(launch_error))
+                # This fallback stays attached to the updater's lifetime.
+                # CREATE_NO_WINDOW avoids a console flash while the worker
+                # thread waits for PowerShell to finish.
+                fallback_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
                 child = subprocess.Popen(
                     command, stdin=subprocess.DEVNULL, stdout=output,
                     stderr=subprocess.STDOUT, close_fds=True,
-                    creationflags=flags,
+                    creationflags=fallback_flags,
                 )
         _log_handoff("PowerShell process created; PID=" + str(child.pid)
                      + "; command=" + subprocess.list2cmdline(command)
