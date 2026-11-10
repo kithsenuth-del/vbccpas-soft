@@ -80,6 +80,27 @@ def complete_package_bytes():
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_updater_window_cannot_close_during_update(self):
+        from unittest.mock import patch
+
+        class FakeRoot:
+            def __init__(self):
+                self.destroyed = False
+            def destroy(self):
+                self.destroyed = True
+
+        window = object.__new__(updater_app.UpdaterWindow)
+        window.root = FakeRoot()
+        window.busy = True
+        with patch.object(updater_app.messagebox, "showwarning") as warning:
+            window.close_window()
+        warning.assert_called_once()
+        self.assertFalse(window.root.destroyed)
+
+        window.busy = False
+        window.close_window()
+        self.assertTrue(window.root.destroyed)
+
     def test_updater_window_log_writes_one_record_per_line(self):
         import tempfile
         from unittest.mock import patch
