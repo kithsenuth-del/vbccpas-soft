@@ -10,7 +10,12 @@ import csv
 import sys
 from datetime import datetime
 from database_migrations import create_verified_backup
-from security_foundation import (validate_password, record_security_event, restore_database,\n\tcreate_admin_recovery_code, reset_admin_password_with_recovery_code,\n\tlogin_lock_remaining, record_login_failure, clear_login_failures,\n\tset_admin_pin, verify_admin_pin, admin_pin_configured, validate_admin_pin)
+from security_foundation import (
+    validate_password, record_security_event, restore_database,
+    create_admin_recovery_code, reset_admin_password_with_recovery_code,
+    login_lock_remaining, record_login_failure, clear_login_failures,
+    set_admin_pin, verify_admin_pin, admin_pin_configured, validate_admin_pin
+)
 
 if getattr(sys, 'frozen', False):
 	BASE_DIR = os.path.dirname(sys.executable)
@@ -497,7 +502,13 @@ class App:
 				return
 		clear_login_failures(DB_PATH)
 		# Upgrade legacy SHA-256 hashes after a successful login.
-		if not row[0].startswith('pbkdf2_sha256
+		if not row[0].startswith('pbkdf2_sha256$'):
+			with sqlite3.connect(DB_PATH) as conn:
+				conn.execute("UPDATE Users SET Password=? WHERE Username=?", (hash_password(p), u))
+		self.user = {'username': u, 'role': row[1]}
+		self.login_frame.destroy()
+		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+		self.show_view('dashboard')
 
 	def open_signup(self):
 		d = tk.Toplevel(self.root)
