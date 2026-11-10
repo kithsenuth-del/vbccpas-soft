@@ -97,3 +97,49 @@ class SecurityFoundationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_recovery_code_resets_password_once_and_is_not_reusable(self):
+        from security_foundation import (
+            create_admin_recovery_code, reset_admin_password_with_recovery_code
+        )
+        code = create_admin_recovery_code(self.live, "admin")
+        username = reset_admin_password_with_recovery_code(
+            self.live, code, "new-secure-password"
+        )
+        self.assertEqual(username, "admin")
+        with sqlite3.connect(self.live) as conn:
+            self.assertTrue(conn.execute(
+                "SELECT UsedAt FROM AdminRecovery WHERE RecoveryID=1"
+            ).fetchone()[0])
+            self.assertTrue(conn.execute(
+                "SELECT Password FROM Users WHERE Username='admin'"
+            ).fetchone()[0].startswith("pbkdf2_sha256$"))
+        with self.assertRaises(PermissionError):
+            reset_admin_password_with_recovery_code(
+                self.live, code, "another-secure-password"
+            )
+
+    def test_wrong_recovery_code_is_rejected_and_rate_limited(self):
+        from security_foundation import (
+            create_admin_recovery_code, reset_admin_password_with_recovery_code,
+            record_login_failure, login_lock_remaining
+        )
+        create_admin_recovery_code(self.live, "admin")
+        for _ in range(5):
+            record_login_failure(self.live)
+        self.assertGreater(login_lock_remaining(self.live), 0)
+        with self.assertRaises(PermissionError):
+            reset_admin_password_with_recovery_code(
+                self.live, "0" * 32, "new-secure-password"
+            )
+
+    def test_recovery_code_is_stored_as_verifier_not_plaintext(self):
+        from security_foundation import create_admin_recovery_code
+        code = create_admin_recovery_code(self.live, "admin")
+        with sqlite3.connect(self.live) as conn:
+            salt, digest = conn.execute(
+                "SELECT Salt, Digest FROM AdminRecovery WHERE RecoveryID=1"
+            ).fetchone()
+        self.assertNotEqual(salt, code.encode("ascii"))
+        self.assertNotEqual(digest, code.encode("ascii"))
