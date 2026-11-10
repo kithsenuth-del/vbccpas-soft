@@ -425,9 +425,9 @@ def reset_admin_password_with_recovery_code(
                 )
             """)
             conn.execute("""
-                INSERT INTO AdminPin (PinID, Username, Salt, Digest, Iterations, UpdatedAt)
-                VALUES (1, ?, ?, ?, ?, ?)
-                ON CONFLICT(PinID) DO UPDATE SET Username=excluded.Username,
+                INSERT INTO AdminPin (Username, Salt, Digest, Iterations, UpdatedAt)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(Username) DO UPDATE SET
                     Salt=excluded.Salt, Digest=excluded.Digest,
                     Iterations=excluded.Iterations, UpdatedAt=excluded.UpdatedAt
             """, (username, salt, digest, iterations, datetime.now(timezone.utc).isoformat()))
