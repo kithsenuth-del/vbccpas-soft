@@ -203,35 +203,6 @@ def setup_database():
 		FirstLogin BOOLEAN DEFAULT 1
 	)
 	''')
-	def module_heading(self, parent, title, subtitle, actions=None):
-		"""Consistent page heading and toolbar for the Windows workspace."""
-		header = tk.Frame(parent, bg=self.colors['bg'])
-		header.pack(fill=tk.X, padx=18, pady=(18, 12))
-		tk.Label(header, text=title, font=('Segoe UI', 22, 'bold')).pack(anchor='w')
-		tk.Label(header, text=subtitle, foreground='#aeb4c7').pack(anchor='w', pady=(3, 10))
-		if actions:
-			bar = tk.Frame(header, bg=self.colors['bg'])
-			bar.pack(fill=tk.X, pady=(5, 0))
-			for caption, command in actions:
-				ttk.Button(bar, text=caption, command=command, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
-		return header
-
-	def module_table(self, parent, columns, widths=None):
-		"""Create a consistent inset table surface for all record modules."""
-		surface = tk.Frame(parent, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
-		surface.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 18))
-		inner = ttk.Frame(surface)
-		inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-		tree = ttk.Treeview(inner, columns=columns, show='headings')
-		for col in columns:
-			tree.heading(col, text=col.replace('ID', ' ID').replace('Date', ' Date'))
-			tree.column(col, width=(widths or {}).get(col, 145), minwidth=90, stretch=True, anchor='w')
-		scroll = ttk.Scrollbar(inner, orient='vertical', command=tree.yview)
-		tree.configure(yscrollcommand=scroll.set)
-		tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-		scroll.pack(side=tk.RIGHT, fill=tk.Y)
-		return tree
-
 	# Members
 	cur.execute('''
 	CREATE TABLE IF NOT EXISTS Members (
@@ -295,6 +266,35 @@ def setup_database():
 
 
 class App:
+	def module_heading(self, parent, title, subtitle, actions=None):
+		"""Consistent page heading and toolbar for the Windows workspace."""
+		header = tk.Frame(parent, bg=self.colors['bg'])
+		header.pack(fill=tk.X, padx=18, pady=(18, 12))
+		tk.Label(header, text=title, font=('Segoe UI', 22, 'bold')).pack(anchor='w')
+		tk.Label(header, text=subtitle, foreground='#aeb4c7').pack(anchor='w', pady=(3, 10))
+		if actions:
+			bar = tk.Frame(header, bg=self.colors['bg'])
+			bar.pack(fill=tk.X, pady=(5, 0))
+			for caption, command in actions:
+				ttk.Button(bar, text=caption, command=command, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+		return header
+
+	def module_table(self, parent, columns, widths=None):
+		"""Create a consistent inset table surface for all record modules."""
+		surface = tk.Frame(parent, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
+		surface.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 18))
+		inner = ttk.Frame(surface)
+		inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+		tree = ttk.Treeview(inner, columns=columns, show='headings')
+		for col in columns:
+			tree.heading(col, text=col.replace('ID', ' ID').replace('Date', ' Date'))
+			tree.column(col, width=(widths or {}).get(col, 145), minwidth=90, stretch=True, anchor='w')
+		scroll = ttk.Scrollbar(inner, orient='vertical', command=tree.yview)
+		tree.configure(yscrollcommand=scroll.set)
+		tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+		scroll.pack(side=tk.RIGHT, fill=tk.Y)
+		return tree
+
 	def __init__(self, root):
 		self.root = root
 		root.title("VBCCPAS | Photographic Arts Society")
