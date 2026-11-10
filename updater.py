@@ -287,14 +287,17 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         except subprocess.TimeoutExpired:
             _log_handoff("PowerShell remains running after startup check; PID=" + str(child.pid))
         else:
-            _log_handoff("PowerShell exited during startup check; PID=" + str(child.pid)
-                         + "; exit_code=" + str(early_exit))
-            if early_exit != 0:
-                raise RuntimeError(
-                    "The PowerShell installer exited immediately with code "
-                    + str(early_exit) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
-                    "and updater-powershell.log."
-                )
+            if isinstance(early_exit, int):
+                _log_handoff("PowerShell exited during startup check; PID=" + str(child.pid)
+                             + "; exit_code=" + str(early_exit))
+                if early_exit != 0:
+                    raise RuntimeError(
+                        "The PowerShell installer exited immediately with code "
+                        + str(early_exit) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
+                        "and updater-powershell.log."
+                    )
+            else:
+                _log_handoff("PowerShell startup check returned no numeric exit code; PID=" + str(child.pid))
     except Exception as exc:
         _log_handoff("PowerShell handoff failed: " + repr(exc))
         import shutil
