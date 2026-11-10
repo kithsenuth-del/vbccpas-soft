@@ -143,3 +143,33 @@ if __name__ == "__main__":
             ).fetchone()
         self.assertNotEqual(salt, code.encode("ascii"))
         self.assertNotEqual(digest, code.encode("ascii"))
+
+
+    def test_five_digit_pin_is_salted_and_verified(self):
+        from security_foundation import (
+            set_admin_pin, verify_admin_pin, validate_admin_pin
+        )
+        self.assertFalse(validate_admin_pin("2847"))
+        self.assertFalse(validate_admin_pin("28472x"))
+        set_admin_pin(self.live, "admin", "58319")
+        self.assertTrue(verify_admin_pin(self.live, "admin", "58319"))
+        self.assertFalse(verify_admin_pin(self.live, "admin", "58318"))
+        with sqlite3.connect(self.live) as conn:
+            salt, digest = conn.execute(
+                "SELECT Salt, Digest FROM AdminPin WHERE PinID=1"
+            ).fetchone()
+        self.assertNotEqual(digest, b"58319")
+        self.assertNotEqual(salt, b"58319")
+
+    def test_recovery_replaces_both_password_and_pin(self):
+        from security_foundation import (
+            create_admin_recovery_code, set_admin_pin,
+            reset_admin_password_with_recovery_code, verify_admin_pin
+        )
+        set_admin_pin(self.live, "admin", "58319")
+        code = create_admin_recovery_code(self.live, "admin")
+        reset_admin_password_with_recovery_code(
+            self.live, code, "recovered-password", "19462"
+        )
+        self.assertTrue(verify_admin_pin(self.live, "admin", "19462"))
+        self.assertFalse(verify_admin_pin(self.live, "admin", "58319"))
