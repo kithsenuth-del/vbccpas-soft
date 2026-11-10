@@ -364,6 +364,14 @@ def reset_admin_password_with_recovery_code(
     conn = sqlite3.connect(str(path), timeout=10)
     try:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS LoginGuard (
+                GuardID INTEGER PRIMARY KEY CHECK(GuardID=1),
+                Failures INTEGER NOT NULL DEFAULT 0,
+                LockedUntil REAL NOT NULL DEFAULT 0,
+                UpdatedAt TEXT NOT NULL
+            )
+        """)
         now = time.time()
         guard = conn.execute(
             "SELECT LockedUntil FROM LoginGuard WHERE GuardID=1"
