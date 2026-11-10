@@ -106,7 +106,7 @@ class SecurityFoundationTests(unittest.TestCase):
         self.assertEqual(username, "admin")
         with sqlite3.connect(self.live) as conn:
             self.assertTrue(conn.execute(
-                "SELECT UsedAt FROM AdminRecovery WHERE RecoveryID=1"
+                "SELECT UsedAt FROM AdminRecovery WHERE Username='admin'"
             ).fetchone()[0])
             self.assertTrue(conn.execute(
                 "SELECT Password FROM Users WHERE Username='admin'"
@@ -152,7 +152,7 @@ class SecurityFoundationTests(unittest.TestCase):
         self.assertFalse(verify_admin_pin(self.live, "admin", "58318"))
         with sqlite3.connect(self.live) as conn:
             salt, digest = conn.execute(
-                "SELECT Salt, Digest FROM AdminPin WHERE PinID=1"
+                "SELECT Salt, Digest FROM AdminPin WHERE Username='admin'"
             ).fetchone()
         self.assertNotEqual(digest, b"58319")
         self.assertNotEqual(salt, b"58319")
