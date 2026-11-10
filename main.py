@@ -1485,7 +1485,10 @@ class App:
 			messagebox.showinfo('Restore completed',
 				'Backup restored and validated. Previous database preserved at:\n' + str(safety_backup) +
 				'\n\nThe application will now refresh its dashboard.')
-			self.show_view('dashboard')
+			messagebox.showinfo('Restore completed',
+				'Backup restored and validated. Previous database preserved at:\n' + str(safety_backup) +
+				'\n\nPlease restart VBCCPAS Soft and sign in again.')
+			self.root.destroy()
 		except Exception as exc:
 			messagebox.showerror('Restore failed', str(exc))
 
@@ -1587,6 +1590,14 @@ class App:
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor()
 		try:
 			if selected_user_id['value']:
+				current_role = cur.execute('SELECT Role FROM Users WHERE UserID=?',
+				                           (selected_user_id['value'],)).fetchone()
+				if current_role and current_role[0] == 'admin' and role != 'admin':
+					admin_count = cur.execute("SELECT COUNT(*) FROM Users WHERE Role='admin'").fetchone()[0]
+					if admin_count <= 1:
+						conn.close()
+						messagebox.showerror('Administrator required', 'The final administrator account cannot be demoted.')
+						return
 				if password:
 					cur.execute('UPDATE Users SET Username=?, Password=?, Role=?, MemberID=? WHERE UserID=?', (username, hash_password(password), role, member_id_int, selected_user_id['value']))
 				else:
@@ -1636,12 +1647,25 @@ class App:
 			messagebox.showwarning('Select','Select a user to delete')
 			return
 		username = tree.item(sel[0])['values'][1]
-		if username == 'admin':
-			messagebox.showerror('Forbidden','Cannot delete admin user')
+		conn = sqlite3.connect(DB_PATH)
+		try:
+			row = conn.execute('SELECT Role FROM Users WHERE Username=?', (username,)).fetchone()
+			admin_count = conn.execute("SELECT COUNT(*) FROM Users WHERE Role='admin'").fetchone()[0]
+		finally:
+			conn.close()
+		if row and row[0] == 'admin' and admin_count <= 1:
+			messagebox.showerror('Forbidden', 'The final administrator account cannot be deleted.')
 			return
 		if not messagebox.askyesno('Confirm', f"Delete user {username}?"):
 			return
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Users WHERE Username=?', (username,));conn.commit();conn.close();self.populate_users(tree)
+		conn = sqlite3.connect(DB_PATH)
+		try:
+			conn.execute('DELETE FROM Users WHERE Username=?', (username,))
+			conn.commit()
+		finally:
+			conn.close()
+		record_security_event(DB_PATH, self.user['username'], 'user_deleted', username, 'Account removed by administrator')
+		self.populate_users(tree)
 
 	def reset_admin_password(self):
 		self.set_user_password('admin')
