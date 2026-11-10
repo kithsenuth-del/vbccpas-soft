@@ -24,13 +24,15 @@ def make_package(marker_path):
         "param([int]$ProcessId = 0, "
         "[Parameter(Mandatory=$true)][string]$TargetExe, "
         "[string]$PackageDirectory = '', [int]$UpdaterProcessId = 0, "
-        "[switch]$RepairMode)\n"
+        "[switch]$RepairMode, [string]$ScheduledTaskName = '')\n"
+        "if ($UpdaterProcessId -gt 0) { try { Wait-Process -Id $UpdaterProcessId -Timeout 60 -ErrorAction Stop } catch { if (Get-Process -Id $UpdaterProcessId -ErrorAction SilentlyContinue) { throw } } }\n"
         "Start-Sleep -Seconds 5\n"
         "$logDir = Join-Path $env:LOCALAPPDATA 'VBCCPAS'\n"
         "New-Item -ItemType Directory -Path $logDir -Force | Out-Null\n"
         "Add-Content -LiteralPath (Join-Path $logDir 'update.log') -Value 'Update completed successfully'\n"
         "Set-Content -LiteralPath '" + escaped_marker
         + "' -Value 'HANDOFF_SURVIVED_PARENT_EXIT' -Encoding ASCII\n"
+        "if ($ScheduledTaskName) { try { $svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $svc.GetFolder('\\\\').DeleteTask($ScheduledTaskName, 0) } catch { } }\n"
     )
     files = {
         "VBCCPAS-Soft.exe": b"placeholder target application",
@@ -76,7 +78,7 @@ release = {"_update_asset": {
     "size": len(package),
     "digest": hashlib.sha256(package).hexdigest(),
 }}
-updater.download_and_launch(release, target, 0, handoff_timeout=20)
+updater.download_and_launch(release, target, 0, updater_process_id=os.getpid(), handoff_timeout=20)
 """
     path.write_text(source, encoding="utf-8")
 
@@ -162,11 +164,11 @@ def main():
         if marker.read_text(encoding="ascii").strip() != "HANDOFF_SURVIVED_PARENT_EXIT":
             raise AssertionError("PowerShell handoff marker contents were incorrect.")
         if "Windows rejected breakaway launch" in launch_text:
-            if "Breakaway is unavailable; keeping the updater alive until PowerShell completes." not in launch_text:
-                raise AssertionError("The launcher did not keep itself alive after Windows rejected breakaway.")
-            if "PowerShell completed while updater remained alive; exit_code=0" not in launch_text:
-                raise AssertionError("The fallback did not wait for successful PowerShell completion.")
-            outcome = "safe wait fallback"
+            if "Scheduled Task started PowerShell outside the updater job" not in launch_text:
+                raise AssertionError("The launcher did not start the scheduled-task fallback after breakaway was denied.")
+            if "Update delegated to scheduled task; updater may now close" not in launch_text:
+                raise AssertionError("The launcher did not confirm the scheduled installer handoff.")
+            outcome = "Task Scheduler fallback"
         else:
             if "PowerShell launched with CREATE_BREAKAWAY_FROM_JOB." not in launch_text:
                 raise AssertionError("The launcher neither broke away from the Windows job nor logged a rejection.")
