@@ -283,12 +283,32 @@ def setup_database():
 	conn.close()
 
 
+def calculate_window_geometry(screen_width, screen_height):
+	"""Choose a centred, resizable window that fits common Windows workspaces."""
+	screen_width = max(1, int(screen_width))
+	screen_height = max(1, int(screen_height))
+	width = min(screen_width, max(640, min(1440, screen_width - 64)))
+	height = min(screen_height, max(480, min(900, screen_height - 96)))
+	min_width = min(1120, width)
+	min_height = min(740, height)
+	x = max(0, (screen_width - width) // 2)
+	y = max(0, (screen_height - height) // 2)
+	return {
+		"width": width, "height": height,
+		"min_width": min_width, "min_height": min_height,
+		"x": x, "y": y,
+	}
+
+
 class App:
 	def __init__(self, root):
 		self.root = root
 		root.title("VBCCPAS | Photographic Arts Society")
-		root.geometry("1440x900")
-		root.minsize(1120, 740)
+		layout = calculate_window_geometry(root.winfo_screenwidth(), root.winfo_screenheight())
+		root.geometry(
+			f"{layout['width']}x{layout['height']}+{layout['x']}+{layout['y']}"
+		)
+		root.minsize(layout["min_width"], layout["min_height"])
 		self.style = ttk.Style(root)
 		self.style.theme_use('clam')
 		self.apply_theme()
