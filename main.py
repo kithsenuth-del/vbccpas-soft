@@ -712,17 +712,63 @@ class App:
 					conn.execute('DELETE FROM Members WHERE MemberID=?', (member_id,))
 				self.populate_members(tree)
 		ttk.Button(parent, text='Delete Selected', command=delete_selected).pack(anchor='e', padx=22, pady=(0, 14))
+	def create_form_dialog(self, title, subtitle, fields, size='560x420'):
+		"""Build a consistent, modal form window for data-entry workflows."""
+		dialog = tk.Toplevel(self.root)
+		dialog.title(title)
+		dialog.configure(bg=self.colors['bg'])
+		dialog.transient(self.root)
+		dialog.resizable(False, False)
+		dialog.geometry(size)
+		outer = tk.Frame(dialog, bg=self.colors['bg'])
+		outer.pack(fill=tk.BOTH, expand=True, padx=18, pady=18)
+		card = tk.Frame(outer, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
+		card.pack(fill=tk.BOTH, expand=True)
+		tk.Label(card, text=title, font=('Segoe UI', 18, 'bold')).pack(anchor='w', padx=20, pady=(18, 2))
+		tk.Label(card, text=subtitle, foreground='#aeb4c7').pack(anchor='w', padx=20, pady=(0, 14))
+		form = ttk.Frame(card, padding=(20, 4, 20, 10))
+		form.pack(fill=tk.BOTH, expand=True)
+		variables = {}
+		for row, field in enumerate(fields):
+			key, caption = field[0], field[1]
+			values = field[2] if len(field) > 2 else None
+			variables[key] = tk.StringVar()
+			ttk.Label(form, text=caption).grid(row=row, column=0, sticky=tk.W, padx=(0, 14), pady=7)
+			if values is not None:
+				widget = ttk.Combobox(form, textvariable=variables[key], values=values, state='readonly', width=34)
+			else:
+				widget = ttk.Entry(form, textvariable=variables[key], width=37)
+			widget.grid(row=row, column=1, sticky='ew', pady=7)
+		form.grid_columnconfigure(1, weight=1)
+		footer = ttk.Frame(card, padding=(20, 8, 20, 18))
+		footer.pack(fill=tk.X)
+		dialog.bind('<Escape>', lambda _event: dialog.destroy())
+		dialog.update_idletasks()
+		x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - dialog.winfo_width()) // 2)
+		y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - dialog.winfo_height()) // 2)
+		dialog.geometry(f'+{x}+{y}')
+		dialog.grab_set()
+		return dialog, variables, footer
+
 	def add_member_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Add Member')
-		f=ttk.Frame(d, padding=12);f.pack()
-		name=tk.StringVar();cls=tk.StringVar();roll=tk.StringVar();email=tk.StringVar()
-		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
-		ttk.Label(f,text='Class').grid(row=1,column=0);ttk.Entry(f,textvariable=cls).grid(row=1,column=1)
-		ttk.Label(f,text='Roll').grid(row=2,column=0);ttk.Entry(f,textvariable=roll).grid(row=2,column=1)
-		ttk.Label(f,text='Email').grid(row=3,column=0);ttk.Entry(f,textvariable=email).grid(row=3,column=1)
+		d, fields, footer = self.create_form_dialog('Add Member', 'Enter the member details below.',
+			[('name','Full name'),('class','Class / Grade'),('roll','Roll / Index'),('email','Email address')], '580x390')
 		def save():
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)', (name.get(),cls.get(),roll.get(),email.get()));conn.commit();conn.close();d.destroy(); self.show_view('members')
-		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
+			name = fields['name'].get().strip()
+			email = fields['email'].get().strip()
+			if not name:
+				messagebox.showwarning('Required field', 'Enter the member name.', parent=d); return
+			if email and ('@' not in email or '.' not in email.rsplit('@', 1)[-1]):
+				messagebox.showwarning('Invalid email', 'Enter a valid email address or leave it blank.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('INSERT INTO Members (Name,Class,Roll,Email) VALUES (?,?,?,?)',
+						(name, fields['class'].get().strip(), fields['roll'].get().strip(), email))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not save member', str(exc), parent=d); return
+			d.destroy(); self.show_view('members')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Member', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	# Events
 	def view_events(self, parent):
@@ -730,22 +776,33 @@ class App:
 			('＋  Add Event', self.add_event_dialog)
 		])
 		tree = self.module_table(parent, ('EventID','Title','Date','Location'),
-		                         {'EventID':95, 'Title':260, 'Date':180, 'Location':220})
+							 {'EventID':95, 'Title':260, 'Date':180, 'Location':220})
 		with sqlite3.connect(DB_PATH) as conn:
 			rows = conn.execute('SELECT EventID,Title,Date,Location FROM Events ORDER BY Date DESC').fetchall()
 		for row in rows:
 			tree.insert('', tk.END, values=row)
+
 	def add_event_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Add Event')
-		f=ttk.Frame(d, padding=12);f.pack()
-		title=tk.StringVar(); date=tk.StringVar(); loc=tk.StringVar(); notes=tk.StringVar()
-		ttk.Label(f,text='Title').grid(row=0,column=0);ttk.Entry(f,textvariable=title).grid(row=0,column=1)
-		ttk.Label(f,text='Date').grid(row=1,column=0);ttk.Entry(f,textvariable=date).grid(row=1,column=1)
-		ttk.Label(f,text='Location').grid(row=2,column=0);ttk.Entry(f,textvariable=loc).grid(row=2,column=1)
-		ttk.Label(f,text='Notes').grid(row=3,column=0);ttk.Entry(f,textvariable=notes).grid(row=3,column=1)
+		d, fields, footer = self.create_form_dialog('Create Event', 'Add an event to the society calendar. Use YYYY-MM-DD for the date.',
+			[('title','Event title'),('date','Event date (YYYY-MM-DD)'),('location','Location'),('notes','Notes')], '600x430')
 		def save():
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)', (title.get(),date.get(),loc.get(),notes.get()));conn.commit();conn.close();d.destroy();self.show_view('events')
-		ttk.Button(f,text='Save',command=save).grid(row=4,column=0,columnspan=2,pady=8)
+			title = fields['title'].get().strip()
+			date_text = fields['date'].get().strip()
+			if not title:
+				messagebox.showwarning('Required field', 'Enter an event title.', parent=d); return
+			if date_text:
+				try: datetime.strptime(date_text, '%Y-%m-%d')
+				except ValueError:
+					messagebox.showwarning('Invalid date', 'Enter the date in YYYY-MM-DD format.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('INSERT INTO Events (Title,Date,Location,Notes) VALUES (?,?,?,?)',
+						(title, date_text or None, fields['location'].get().strip(), fields['notes'].get().strip()))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not save event', str(exc), parent=d); return
+			d.destroy(); self.show_view('events')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Event', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	# Inventory
 	def view_inventory(self, parent):
@@ -753,89 +810,108 @@ class App:
 			('＋  Add Item', self.add_item_dialog)
 		])
 		tree = self.module_table(parent, ('ItemID','Name','Quantity','Notes'),
-		                         {'ItemID':95, 'Name':240, 'Quantity':120, 'Notes':300})
+							 {'ItemID':95, 'Name':240, 'Quantity':120, 'Notes':300})
 		with sqlite3.connect(DB_PATH) as conn:
 			rows = conn.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory ORDER BY Name').fetchall()
 		for row in rows:
 			tree.insert('', tk.END, values=row)
+
 	def add_item_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Add Item')
-		f=ttk.Frame(d, padding=12);f.pack()
-		name=tk.StringVar(); qty=tk.IntVar(value=1); notes=tk.StringVar()
-		ttk.Label(f,text='Name').grid(row=0,column=0);ttk.Entry(f,textvariable=name).grid(row=0,column=1)
-		ttk.Label(f,text='Quantity').grid(row=1,column=0);ttk.Entry(f,textvariable=qty).grid(row=1,column=1)
-		ttk.Label(f,text='Notes').grid(row=2,column=0);ttk.Entry(f,textvariable=notes).grid(row=2,column=1)
+		d, fields, footer = self.create_form_dialog('Add Equipment', 'Register an item and its available quantity.',
+			[('name','Item name'),('quantity','Quantity'),('notes','Notes')], '580x370')
+		fields['quantity'].set('1')
 		def save():
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)', (name.get(), qty.get(), notes.get()));conn.commit();conn.close();d.destroy();self.show_view('inventory')
-		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+			name = fields['name'].get().strip()
+			try: quantity = int(fields['quantity'].get().strip())
+			except ValueError:
+				messagebox.showwarning('Invalid quantity', 'Enter a whole number of zero or greater.', parent=d); return
+			if not name or quantity < 0:
+				messagebox.showwarning('Check details', 'Enter an item name and a non-negative quantity.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)',
+						(name, quantity, fields['notes'].get().strip()))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not save item', str(exc), parent=d); return
+			d.destroy(); self.show_view('inventory')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Item', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	# Borrowing
 	def view_borrowing(self, parent):
 		self.module_heading(parent, 'Borrowing', 'Issue equipment to members and record returns.', [
-			('＋  Borrow Item', self.borrow_dialog),
-			('↻  Refresh', lambda: self.populate_borrowed(tree))
+			('＋  Borrow Item', self.borrow_dialog)
 		])
 		tree = self.module_table(parent, ('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned'),
-		                         {'BorrowID':85, 'Item':180, 'Member':180, 'BorrowDate':170, 'ReturnDate':170, 'Returned':100})
+							 {'BorrowID':85, 'Item':180, 'Member':180, 'BorrowDate':170, 'ReturnDate':170, 'Returned':100})
 		self.populate_borrowed(tree)
-		ttk.Button(parent, text='Return Selected', command=lambda: self.return_selected_borrow(tree)).pack(anchor='e', padx=22, pady=(0, 14))
+		ttk.Button(parent, text='Return Selected', command=lambda: self.return_selected_borrow(tree), style='Rounded.TButton').pack(anchor='e', padx=22, pady=(0, 14))
+
 	def populate_borrowed(self, tree):
 		for r in tree.get_children(): tree.delete(r)
-		conn=sqlite3.connect(DB_PATH); cur=conn.cursor()
-		cur.execute('''
-			SELECT b.BorrowID,
-			       i.Name,
-			       m.Name,
-			       b.BorrowDate,
-			       b.ReturnDate,
-			       CASE WHEN b.Returned = 1 THEN 'Yes' ELSE 'No' END
-			FROM BorrowedItems b
-			LEFT JOIN Inventory i ON b.ItemID = i.ItemID
-			LEFT JOIN Members m ON b.MemberID = m.MemberID
-			ORDER BY b.BorrowID DESC
-		''')
-		rows=cur.fetchall(); conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
+		with sqlite3.connect(DB_PATH) as conn:
+			rows = conn.execute('''
+				SELECT b.BorrowID, i.Name, m.Name, b.BorrowDate, b.ReturnDate,
+				       CASE WHEN b.Returned = 1 THEN 'Yes' ELSE 'No' END
+				FROM BorrowedItems b
+				LEFT JOIN Inventory i ON b.ItemID = i.ItemID
+				LEFT JOIN Members m ON b.MemberID = m.MemberID
+				ORDER BY b.BorrowID DESC
+			''').fetchall()
+		for row in rows: tree.insert('', tk.END, values=row)
 
 	def return_selected_borrow(self, tree):
-		sel = tree.selection()
-		if not sel:
-			messagebox.showwarning('Select','Select a borrowed item to return')
-			return
-		borrow_id = tree.item(sel[0])['values'][0]
-		conn=sqlite3.connect(DB_PATH); cur=conn.cursor()
-		cur.execute('SELECT ItemID, Returned FROM BorrowedItems WHERE BorrowID=?', (borrow_id,))
-		row = cur.fetchone()
-		if row and row[1] == 1:
-			conn.close()
-			messagebox.showinfo('Already returned', 'This item was already marked as returned.')
-			return
-		if row:
-			cur.execute('UPDATE BorrowedItems SET Returned=1, ReturnDate=? WHERE BorrowID=?', (datetime.now().isoformat(), borrow_id))
-			cur.execute('UPDATE Inventory SET Quantity=Quantity+1 WHERE ItemID=? AND Quantity >= 0', (row[0],))
-		conn.commit(); conn.close(); self.populate_borrowed(tree)
+		selection = tree.selection()
+		if not selection:
+			messagebox.showwarning('Select item', 'Select a borrowed item to return.'); return
+		borrow_id = tree.item(selection[0])['values'][0]
+		try:
+			with sqlite3.connect(DB_PATH) as conn:
+				row = conn.execute('SELECT ItemID, Returned FROM BorrowedItems WHERE BorrowID=?', (borrow_id,)).fetchone()
+				if not row or row[1] == 1:
+					messagebox.showinfo('Already returned', 'This item is already marked as returned.'); return
+				conn.execute('UPDATE BorrowedItems SET Returned=1, ReturnDate=? WHERE BorrowID=?',
+					(datetime.now().isoformat(timespec='seconds'), borrow_id))
+				conn.execute('UPDATE Inventory SET Quantity=Quantity+1 WHERE ItemID=?', (row[0],))
+		except sqlite3.Error as exc:
+			messagebox.showerror('Could not record return', str(exc)); return
+		self.populate_borrowed(tree)
 
 	def borrow_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Borrow Item')
-		f=ttk.Frame(d, padding=12);f.pack()
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name FROM Inventory WHERE Quantity>0');items=cur.fetchall();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();conn.close()
-		item_var=tk.IntVar(); member_var=tk.IntVar(); return_on=tk.StringVar()
-		ttk.Label(f,text='Item').grid(row=0,column=0);
-		item_cb=ttk.Combobox(f, values=[f"{i[0]}: {i[1]}" for i in items])
-		item_cb.grid(row=0,column=1)
-		ttk.Label(f,text='Member').grid(row=1,column=0);
-		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members])
-		mem_cb.grid(row=1,column=1)
-		ttk.Label(f,text='Return Date').grid(row=2,column=0);ttk.Entry(f,textvariable=return_on).grid(row=2,column=1)
+		with sqlite3.connect(DB_PATH) as conn:
+			items = conn.execute('SELECT ItemID,Name FROM Inventory WHERE Quantity>0 ORDER BY Name').fetchall()
+			members = conn.execute('SELECT MemberID,Name FROM Members ORDER BY Name').fetchall()
+		if not items:
+			messagebox.showinfo('No equipment available', 'Add equipment with available quantity before recording a loan.'); return
+		if not members:
+			messagebox.showinfo('No members available', 'Register a member before recording a loan.'); return
+		item_options = [f'{item_id}: {name}' for item_id, name in items]
+		member_options = [f'{member_id}: {name}' for member_id, name in members]
+		d, fields, footer = self.create_form_dialog('Borrow Equipment', 'Choose an available item and the member borrowing it.',
+			[('item','Equipment',item_options),('member','Member',member_options),('return_date','Expected return (YYYY-MM-DD)')], '600x390')
 		def save():
 			try:
-				iid=int(item_cb.get().split(':')[0]); mid=int(mem_cb.get().split(':')[0])
-			except Exception:
-				messagebox.showerror('Error','Select item and member')
-				return
-			rd=return_on.get() or None
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)', (iid,mid,datetime.now().isoformat(), rd));cur.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=?',(iid,));conn.commit();conn.close();d.destroy();self.show_view('borrow')
-		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+				item_id = int(fields['item'].get().split(':',1)[0])
+				member_id = int(fields['member'].get().split(':',1)[0])
+			except (ValueError, IndexError):
+				messagebox.showwarning('Select details', 'Choose both an item and a member.', parent=d); return
+			return_text = fields['return_date'].get().strip()
+			if return_text:
+				try: datetime.strptime(return_text, '%Y-%m-%d')
+				except ValueError:
+					messagebox.showwarning('Invalid date', 'Use YYYY-MM-DD for the expected return date.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					updated = conn.execute('UPDATE Inventory SET Quantity=Quantity-1 WHERE ItemID=? AND Quantity>0', (item_id,))
+					if updated.rowcount != 1:
+						messagebox.showwarning('Unavailable', 'This item is no longer available. Refresh and try again.', parent=d); return
+					conn.execute('INSERT INTO BorrowedItems (ItemID,MemberID,BorrowDate,ReturnDate,Returned) VALUES (?,?,?,?,0)',
+						(item_id, member_id, datetime.now().isoformat(timespec='seconds'), return_text or None))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not record loan', str(exc), parent=d); return
+			d.destroy(); self.show_view('borrow')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Confirm Loan', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	# Attendance
 	def view_attendance(self, parent):
@@ -844,30 +920,44 @@ class App:
 			('↓  Export CSV', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
 		])
 		tree = self.module_table(parent, ('AttID','Member','Event','Present','Timestamp'),
-		                         {'AttID':85, 'Member':220, 'Event':240, 'Present':100, 'Timestamp':200})
+							 {'AttID':85, 'Member':220, 'Event':240, 'Present':100, 'Timestamp':200})
 		self.populate_attendance(tree)
+
 	def populate_attendance(self, tree):
 		for r in tree.get_children(): tree.delete(r)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("SELECT a.AttID,m.Name,e.Title,a.Present,a.Timestamp FROM Attendance a LEFT JOIN Members m ON a.MemberID=m.MemberID LEFT JOIN Events e ON a.EventID=e.EventID");rows=cur.fetchall();conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
+		with sqlite3.connect(DB_PATH) as conn:
+			rows = conn.execute("SELECT a.AttID,m.Name,e.Title,a.Present,a.Timestamp FROM Attendance a LEFT JOIN Members m ON a.MemberID=m.MemberID LEFT JOIN Events e ON a.EventID=e.EventID ORDER BY a.AttID DESC").fetchall()
+		for row in rows: tree.insert('',tk.END,values=row)
 
 	def mark_attendance_dialog(self):
-		d=tk.Toplevel(self.root);d.title('Mark Attendance')
-		f=ttk.Frame(d, padding=12);f.pack()
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT MemberID,Name FROM Members');members=cur.fetchall();cur.execute('SELECT EventID,Title FROM Events');events=cur.fetchall();conn.close()
-		mem_cb=ttk.Combobox(f, values=[f"{m[0]}: {m[1]}" for m in members])
-		mem_cb.grid(row=0,column=1); ttk.Label(f,text='Member').grid(row=0,column=0)
-		evt_cb=ttk.Combobox(f, values=[f"{e[0]}: {e[1]}" for e in events])
-		evt_cb.grid(row=1,column=1); ttk.Label(f,text='Event').grid(row=1,column=0)
-		present_var = tk.IntVar(value=1)
-		ttk.Checkbutton(f, text='Present', variable=present_var).grid(row=2,column=0,columnspan=2)
+		with sqlite3.connect(DB_PATH) as conn:
+			members = conn.execute('SELECT MemberID,Name FROM Members ORDER BY Name').fetchall()
+			events = conn.execute('SELECT EventID,Title FROM Events ORDER BY Date DESC').fetchall()
+		if not members or not events:
+			messagebox.showinfo('Records required', 'Add at least one member and one event before marking attendance.'); return
+		d, fields, footer = self.create_form_dialog('Mark Attendance', 'Record a member’s participation in a society event.',
+			[('member','Member',[f'{mid}: {name}' for mid,name in members]),('event','Event',[f'{eid}: {title}' for eid,title in events])], '600x340')
+		present = tk.BooleanVar(value=True)
+		ttk.Checkbutton(d, text='Present', variable=present).pack(anchor='w', padx=28, pady=(0,8))
 		def save():
 			try:
-				mid=int(mem_cb.get().split(':')[0]); eid=int(evt_cb.get().split(':')[0])
-			except Exception:
-				messagebox.showerror('Error','Select member and event');return
-			conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('INSERT INTO Attendance (MemberID,EventID,Present,Timestamp) VALUES (?,?,?,?)',(mid,eid,present_var.get(),datetime.now().isoformat()));conn.commit();conn.close();d.destroy();self.show_view('attendance')
-		ttk.Button(f,text='Save',command=save).grid(row=3,column=0,columnspan=2,pady=8)
+				member_id = int(fields['member'].get().split(':',1)[0])
+				event_id = int(fields['event'].get().split(':',1)[0])
+			except (ValueError, IndexError):
+				messagebox.showwarning('Select details', 'Choose a member and an event.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					exists = conn.execute('SELECT 1 FROM Attendance WHERE MemberID=? AND EventID=?', (member_id,event_id)).fetchone()
+					if exists:
+						messagebox.showwarning('Already recorded', 'Attendance has already been recorded for this member and event.', parent=d); return
+					conn.execute('INSERT INTO Attendance (MemberID,EventID,Present,Timestamp) VALUES (?,?,?,?)',
+						(member_id,event_id,int(present.get()),datetime.now().isoformat(timespec='seconds')))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not save attendance', str(exc), parent=d); return
+			d.destroy(); self.show_view('attendance')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Attendance', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
+
 
 	# Reports & Security
 	def view_reports(self, parent):
