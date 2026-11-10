@@ -32,7 +32,7 @@ You can still use the portable ZIP if you prefer not to run a setup wizard:
 
 ## Build from source
 
-On Windows, install **Python 3.11** with the Python launcher (`py`). Node.js is recommended for the dashboard JavaScript syntax check. From PowerShell, run:
+On Windows, install **Python 3.11** with the Python launcher (`py`) and **Inno Setup 6**. Node.js is recommended for the dashboard JavaScript syntax check. From PowerShell, run:
 
     .\build_exes.ps1
 
