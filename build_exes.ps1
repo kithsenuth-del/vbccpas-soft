@@ -185,7 +185,8 @@ try {
     Write-Host "Building the Windows installer and uninstaller..."
     $InnoCompiler = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
     if (-not $InnoCompiler) {
-        $DefaultInnoCompiler = Join-Path '$env:ProgramFiles (x86)' "Inno Setup\ISCC.exe"
+        $ProgramFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+        $DefaultInnoCompiler = Join-Path $ProgramFilesX86 "Inno Setup\ISCC.exe"
         if (Test-Path -LiteralPath $DefaultInnoCompiler -PathType Leaf) {
             $InnoCompiler = $DefaultInnoCompiler
         }
@@ -221,6 +222,7 @@ Write-Host ""
 Write-Host "Build and verification complete."
 Write-Host "Application: $Dist\VBCCPAS-Soft.exe"
 Write-Host "Standalone updater: $Dist\VBCCPAS-Updater.exe"
-Write-Host "Complete distribution: $Dist\VBCCPAS-Soft-Windows.zip"
+Write-Host "Windows installer: $Dist\VBCCPAS-Soft-Setup.exe"
+Write-Host "Complete portable distribution: $Dist\VBCCPAS-Soft-Windows.zip"
 Write-Host "SHA-256 checksum: $Dist\VBCCPAS-Soft-Windows.zip.sha256"
 Write-Host "For another computer, extract the ZIP to a permanent folder and run Setup-VBCCPAS-Shortcut.bat."
