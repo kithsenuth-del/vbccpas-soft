@@ -234,19 +234,41 @@ class UnifiedApp(desktop.App):
         if not self.backup_database():
             return
         try:
+            # Stop the old handler before resetting registration state. This
+            # ensures no browser request can race the reset or retain an old
+            # in-memory WebAuthn transaction/session.
+            self.stop_local_server()
             passkey_auth.reset_registration_state(desktop.DB_PATH)
+            if passkey_auth.configured(desktop.DB_PATH):
+                raise RuntimeError(
+                    "The saved passkey record is still present after recovery. "
+                    "No setup token was issued."
+                )
+
+            # Start a fresh local server after the reset. Its status endpoint
+            # will now report configured=false, which makes the browser show
+            # the registration form instead of the passkey sign-in button.
+            if not self.start_local_server(show_errors=True):
+                raise RuntimeError("The local web server could not be restarted.")
+            if passkey_auth.configured(desktop.DB_PATH):
+                raise RuntimeError("Passkey setup is still marked as configured.")
+
             self.passkey_setup_token = passkey_auth.BOOTSTRAP_TOKEN
             messagebox.showinfo(
                 "Passkey setup is ready",
-                "The passkey registration state has been reset safely. "
-                "Your society data was preserved and a backup was saved.\n\n"
-                "Copy the new one-time token from the next window, then refresh "
-                "the local web dashboard to display the registration form.",
+                "The previous passkey registration was safely cleared. "
+                "Your society records were preserved and a database backup was saved.\n\n"
+                "Copy the new one-time token, then use the newly opened local "
+                "dashboard. It should display 'Set up your administrator passkey'.",
                 parent=self.root,
             )
             self.show_passkey_setup()
             import server
-            webbrowser.open(server.EXPECTED_ORIGIN, new=1)
+            # A unique query string avoids reopening a cached login page.
+            webbrowser.open(
+                server.EXPECTED_ORIGIN + "/?passkey-setup=" + str(datetime.now().timestamp()),
+                new=1,
+            )
         except Exception as exc:
             messagebox.showerror(
                 "Passkey recovery failed",
