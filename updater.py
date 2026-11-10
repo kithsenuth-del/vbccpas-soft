@@ -332,7 +332,7 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                 try:
                     with update_log_path.open("rb") as update_log:
                         update_log.seek(previous_update_log_size)
-                        new_update_log = update_log.read().decode("utf-8", errors="replace")
+                        new_update_log = update_log.read().decode("utf-8", errors="replace").replace("\x00", "")
                 except OSError:
                     new_update_log = ""
                 if "Update completed successfully" not in new_update_log:
