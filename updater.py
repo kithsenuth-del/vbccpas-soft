@@ -204,7 +204,7 @@ def _log_handoff(message):
         root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
         root.mkdir(parents=True, exist_ok=True)
         with (root / "updater-launch.log").open("a", encoding="utf-8") as stream:
-            stream.write("[" + datetime.datetime.now().astimezone().isoformat() + "] " + str(message) + "\\n")
+            stream.write("[" + datetime.datetime.now().astimezone().isoformat() + "] " + str(message) + "\n")
     except Exception:
         pass
 
