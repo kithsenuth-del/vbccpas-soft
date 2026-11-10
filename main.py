@@ -293,18 +293,13 @@ class App:
 		self.style.theme_use('clam')
 		self.apply_theme()
 
-		# Official society branding is bundled for offline use in the desktop build.
+		# Keep the application icon; the horizontal society header banner is removed.
 		assets_dir = os.path.join(APP_RESOURCE_DIR, "assets")
 		try:
 			self.brand_logo = tk.PhotoImage(file=os.path.join(assets_dir, "society-logo.gif"))
 			self.root.iconphoto(True, self.brand_logo)
-			self.brand_banner = tk.PhotoImage(file=os.path.join(assets_dir, "society-header.gif"))
-			brand_bar = tk.Frame(root, bg="#000000", height=106)
-			brand_bar.pack(side=tk.TOP, fill=tk.X)
-			brand_bar.pack_propagate(False)
-			ttk.Label(brand_bar, image=self.brand_banner, background="#000000").pack(expand=True)
 		except (tk.TclError, OSError) as exc:
-			print(f"VBCCPAS branding assets could not be loaded: {exc}")
+			print(f"VBCCPAS application icon could not be loaded: {exc}")
 
 		self.container = ttk.Frame(root, style='Main.TFrame')
 		self.container.pack(fill=tk.BOTH, expand=True)
