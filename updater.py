@@ -277,10 +277,10 @@ $state = 0
 do {
     $registered = $folder.GetTask($data.TaskName, 0)
     $state = $registered.State
-    if ($state -eq 4 -or $state -eq 2) { break }
+    if ($state -eq 4) { break }
     Start-Sleep -Milliseconds 200
 } while ((Get-Date) -lt $deadline)
-if ($state -ne 4 -and $state -ne 2) {
+if ($state -ne 4) {
     try { $folder.DeleteTask($data.TaskName, 0) } catch { }
     throw "Scheduled updater task did not start. Task state: $state"
 }
