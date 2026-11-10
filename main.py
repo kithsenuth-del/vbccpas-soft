@@ -367,9 +367,9 @@ class App:
 		self.side_buttons = {}
 		self.sidebar_title = tk.Label(self.sidebar, text="Modules", bg=self.colors['sidebar'], fg='#cbd5e1', font=('Segoe UI', 11, 'bold'))
 		self.sidebar_title.pack(anchor='w', padx=18, pady=(18, 10))
-		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
+		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Equipment & Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports & Exports'), ('security','Security & Users')]:
 			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
-			b.pack(fill=tk.X, padx=12, pady=6)
+			b.pack(fill=tk.X, padx=12, pady=5)
 			self.side_buttons[key] = b
 		self.sidebar.pack_forget()
 		self.current_view = None
@@ -512,6 +512,12 @@ class App:
 		self.style.map('Sidebar.TButton',
 			background=[('pressed', '#343044'), ('active', '#292b39')],
 			foreground=[('active', '#ffffff')])
+		self.style.configure('ActiveSidebar.TButton', foreground='#ffffff',
+			background='#343044', padding=(14, 12), anchor='w',
+			relief='flat', borderwidth=0, font=('Segoe UI', 10, 'bold'))
+		self.style.map('ActiveSidebar.TButton',
+			background=[('pressed', '#403b5a'), ('active', '#403b5a')],
+			foreground=[('active', '#ffffff')])
 		self.style.configure('Treeview', background=self.colors['card'],
 			fieldbackground=self.colors['card'], foreground=fg,
 			rowheight=32, borderwidth=0, font=('Segoe UI', 10))
@@ -600,6 +606,9 @@ class App:
 		frame = tk.Frame(self.content, bg=self.colors['bg'])
 		frame.pack(fill=tk.BOTH, expand=True)
 		self.current_view = frame
+		# Keep the selected module visually clear as users move through the workspace.
+		for button_key, button in self.side_buttons.items():
+			button.configure(style='ActiveSidebar.TButton' if button_key == key else 'Sidebar.TButton')
 		if key == 'dashboard':
 			# Polished Windows workspace dashboard matching the approved VBCCPAS prototype.
 			frame.configure(bg=self.colors['bg'])
@@ -620,7 +629,9 @@ class App:
 			hero.grid_columnconfigure(0, weight=1)
 			label(hero, 'VBCCPAS Soft', 25, '#ffffff', True).grid(row=0, column=0, sticky='w', padx=22, pady=(17, 2))
 			label(hero, 'Together for Our Alma Mater', 12, '#d5d1ff').grid(row=1, column=0, sticky='w', padx=23, pady=(0, 16))
-			label(hero, datetime.now().strftime('%A, %d %B %Y'), 9, '#aeb4ca').grid(row=0, column=1, rowspan=2, sticky='e', padx=22)
+			label(hero, datetime.now().strftime('%A, %d %B %Y'), 9, '#aeb4ca').grid(row=0, column=1, sticky='e', padx=22, pady=(16, 2))
+			ttk.Button(hero, text='↻  Refresh dashboard', command=lambda: self.show_view('dashboard'),
+			           style='Rounded.TButton').grid(row=1, column=1, sticky='e', padx=22, pady=(2, 14))
 			
 			# Live summary figures from the existing local database.
 			conn = sqlite3.connect(DB_PATH)
@@ -713,6 +724,7 @@ class App:
 	def view_members(self, parent):
 		self.module_heading(parent, 'Members', 'Manage registered society members and their details.', [
 			('＋  Add Member', self.add_member_dialog),
+			('↻  Refresh', lambda: self.show_view('members')),
 			('↓  Export CSV', lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']))
 		])
 		tree = self.module_table(parent, ('MemberID','Name','Class','Roll','Email'),
@@ -790,7 +802,8 @@ class App:
 	# Events
 	def view_events(self, parent):
 		self.module_heading(parent, 'Events', 'Plan society activities, exhibitions and photo walks.', [
-			('＋  Add Event', self.add_event_dialog)
+			('＋  Add Event', self.add_event_dialog),
+			('↻  Refresh', lambda: self.show_view('events'))
 		])
 		tree = self.module_table(parent, ('EventID','Title','Date','Location'),
 							 {'EventID':95, 'Title':260, 'Date':180, 'Location':220})
@@ -830,7 +843,11 @@ class App:
 		with sqlite3.connect(DB_PATH) as conn:
 			stats = conn.execute("""
 				SELECT COUNT(*), COALESCE(SUM(Quantity),0),
-				       SUM(CASE WHEN lower(Category) IN ('camera','lens','audio','lighting','video','media') THEN 1 ELSE 0 END)
+				       SUM(CASE WHEN lower(Category) LIKE '%camera%' OR lower(Category) LIKE '%lens%'
+			                    OR lower(Category) LIKE '%audio%' OR lower(Category) LIKE '%mixer%'
+			                    OR lower(Category) LIKE '%microphone%' OR lower(Category) LIKE '%lighting%'
+			                    OR lower(Category) LIKE '%video%' OR lower(Category) LIKE '%media%'
+			                    OR lower(Category) LIKE '%tripod%' THEN 1 ELSE 0 END)
 				FROM Inventory
 			""").fetchone()
 		stats = stats or (0, 0, 0)
@@ -926,7 +943,8 @@ class App:
 	# Borrowing
 	def view_borrowing(self, parent):
 		self.module_heading(parent, 'Borrowing', 'Issue equipment to members and record returns.', [
-			('＋  Borrow Item', self.borrow_dialog)
+			('＋  Borrow Item', self.borrow_dialog),
+			('↻  Refresh', lambda: self.show_view('borrow'))
 		])
 		tree = self.module_table(parent, ('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned'),
 							 {'BorrowID':85, 'Item':180, 'Member':180, 'BorrowDate':170, 'ReturnDate':170, 'Returned':100})
@@ -1003,6 +1021,7 @@ class App:
 	def view_attendance(self, parent):
 		self.module_heading(parent, 'Attendance', 'Record and review member participation in society events.', [
 			('＋  Mark Attendance', self.mark_attendance_dialog),
+			('↻  Refresh', lambda: self.show_view('attendance')),
 			('↓  Export CSV', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
 		])
 		tree = self.module_table(parent, ('AttID','Member','Event','Present','Timestamp'),
@@ -1051,7 +1070,7 @@ class App:
 		items = [
 			('Members', 'Registered member directory', lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])),
 			('Events', 'Society events and schedules', lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes'])),
-			('Inventory', 'Equipment and stock quantities', lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes'])),
+			('Inventory', 'Complete photographic and media asset register', lambda: self.export_table('Inventory', ['ItemID','Category','Name','AssetTag','Brand','Model','SerialNumber','ItemCondition','Quantity','PurchaseDate','PurchaseCost','StorageLocation','Notes'])),
 			('Borrowing', 'Equipment loans and returns', lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned'])),
 			('Attendance', 'Member attendance records', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
 		]
