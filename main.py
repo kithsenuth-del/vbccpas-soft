@@ -1589,10 +1589,15 @@ class App:
 			member_id_int = None
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor()
 		try:
+			audit_action = 'user_updated' if selected_user_id['value'] else 'user_created'
 			if selected_user_id['value']:
 				current_role = cur.execute('SELECT Role FROM Users WHERE UserID=?',
 				                           (selected_user_id['value'],)).fetchone()
 				if current_role and current_role[0] == 'admin' and role != 'admin':
+					if username == self.user.get('username'):
+						conn.close()
+						messagebox.showerror('Administrator required', 'You cannot remove administrator access from the account currently signed in.')
+						return
 					admin_count = cur.execute("SELECT COUNT(*) FROM Users WHERE Role='admin'").fetchone()[0]
 					if admin_count <= 1:
 						conn.close()
@@ -1607,7 +1612,11 @@ class App:
 				if cur.fetchone():
 					conn.close(); messagebox.showerror('Taken','Username already exists'); return
 				cur.execute('INSERT INTO Users (Username, Password, Role, MemberID) VALUES (?,?,?,?)', (username, hash_password(password), role, member_id_int))
-			conn.commit(); conn.close();
+			conn.commit(); conn.close()
+			if selected_user_id['value'] and username == self.user.get('username'):
+				self.user['username'] = username
+			record_security_event(DB_PATH, self.user['username'], audit_action, username,
+			                     'Account details changed; no credential values recorded')
 			self.populate_users(tree)
 			self.clear_security_form(username_var, password_var, role_var, member_id_var, selected_user_id)
 			messagebox.showinfo('Saved', 'User account saved successfully')
@@ -1639,6 +1648,8 @@ class App:
 		conn.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password(password), username))
 		conn.commit()
 		conn.close()
+		record_security_event(DB_PATH, self.user['username'], 'user_password_reset', username,
+		                     'Password changed; credential value not recorded')
 		messagebox.showinfo('Reset', 'Password updated for ' + username)
 
 	def delete_selected_user(self, tree):
