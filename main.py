@@ -1186,8 +1186,11 @@ class App:
 		for r in tree.get_children(): tree.delete(r)
 		with sqlite3.connect(DB_PATH) as conn:
 			rows = conn.execute('''
-				SELECT b.BorrowID, i.Name, m.Name, b.BorrowDate, b.ReturnDate,
-				       CASE WHEN b.Returned = 1 THEN 'Yes' ELSE 'No' END
+				SELECT b.BorrowID, i.Name, m.Name, b.BorrowDate, b.ExpectedReturnDate,
+				       CASE WHEN b.Returned=1 THEN 'Returned'
+				            WHEN b.ExpectedReturnDate IS NOT NULL AND date(b.ExpectedReturnDate)<date('now') THEN 'Overdue'
+				            ELSE 'On loan' END,
+				       COALESCE(b.ReturnCondition,'—')
 				FROM BorrowedItems b
 				LEFT JOIN Inventory i ON b.ItemID = i.ItemID
 				LEFT JOIN Members m ON b.MemberID = m.MemberID
