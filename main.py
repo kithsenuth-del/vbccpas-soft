@@ -302,6 +302,10 @@ def setup_database():
 	if not admin_exists:
 		if configured_password:
 			initial_password = configured_password
+			try:
+				os.remove(password_file)
+			except OSError:
+				pass
 		else:
 			initial_password = None
 			try:
@@ -322,7 +326,7 @@ def setup_database():
 			INITIAL_ADMIN_PASSWORD = initial_password if not configured_password else None
 			INITIAL_ADMIN_PASSWORD_FILE = password_file if not configured_password else None
 		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
-	elif not configured_password:
+	else:
 		# If first-run setup was interrupted before the first login, redisplay
 		# the same one-time credential rather than generating a new password.
 		try:
