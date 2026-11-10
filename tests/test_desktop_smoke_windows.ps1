@@ -37,7 +37,7 @@ try {
     if ([string]::IsNullOrWhiteSpace($Process.MainWindowTitle)) {
         throw "The packaged executable did not expose a titled desktop window."
     }
-    $PasswordFile = Join-Path $env:LOCALAPPDATA "VBCCPAS\\first-run-admin-password.txt"
+    $PasswordFile = Join-Path (Join-Path $env:LOCALAPPDATA "VBCCPAS") "first-run-admin-password.txt"
     if (-not (Test-Path -LiteralPath $PasswordFile -PathType Leaf)) {
         throw "The fresh desktop database did not create its one-time administrator credential."
     }
