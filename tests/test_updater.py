@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import updater
 import updater_app
+import main
 
 
 class FakeResponse:
@@ -80,6 +81,23 @@ def complete_package_bytes():
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_main_window_geometry_fits_common_windows_workspaces(self):
+        for screen_width, screen_height in (
+            (1920, 1080),
+            (1366, 768),
+            (1280, 720),
+            (1024, 768),
+            (800, 600),
+        ):
+            with self.subTest(screen=(screen_width, screen_height)):
+                layout = main.calculate_window_geometry(screen_width, screen_height)
+                self.assertLessEqual(layout["width"], screen_width)
+                self.assertLessEqual(layout["height"], screen_height)
+                self.assertLessEqual(layout["min_width"], layout["width"])
+                self.assertLessEqual(layout["min_height"], layout["height"])
+                self.assertGreaterEqual(layout["x"], 0)
+                self.assertGreaterEqual(layout["y"], 0)
+
     def test_updater_window_cannot_close_during_update(self):
         from unittest.mock import patch
 
