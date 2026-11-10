@@ -383,10 +383,24 @@ class App:
 		tk.Frame(self.sidebar, bg='#343846', height=1).pack(fill=tk.X, padx=18, pady=(0, 18))
 		self.sidebar_title = tk.Label(self.sidebar, text="WORKSPACE MODULES", bg=self.colors['sidebar'], fg='#7f8799', font=('Segoe UI', 8, 'bold'))
 		self.sidebar_title.pack(anchor='w', padx=18, pady=(6, 10))
-		for key, text in [('dashboard','Dashboard'), ('members','Members'), ('events','Events'), ('inventory','Inventory'), ('borrow','Borrowing'), ('attendance','Attendance'), ('reports','Reports'), ('security','Security')]:
-			b = ttk.Button(self.sidebar, text=text, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
-			b.pack(fill=tk.X, padx=12, pady=6)
+		for key, label in [
+			('dashboard', '⌂   Overview'), ('members', '♙   Members'),
+			('events', '▦   Events & activities'), ('inventory', '▣   Equipment'),
+			('borrow', '↔   Borrowing'), ('attendance', '✓   Attendance'),
+			('reports', '▤   Reports & exports'), ('security', '⚙   Security & access')
+		]:
+			b = ttk.Button(self.sidebar, text=label, command=lambda k=key: self.show_view(k), style='Sidebar.TButton')
+			b.pack(fill=tk.X, padx=12, pady=4, ipady=2)
 			self.side_buttons[key] = b
+		tk.Frame(self.sidebar, bg='#343846', height=1).pack(fill=tk.X, padx=18, pady=(22, 14))
+		self.sidebar_account = tk.Frame(self.sidebar, bg=self.colors['sidebar'])
+		self.sidebar_account.pack(side=tk.BOTTOM, fill=tk.X, padx=18, pady=20)
+		tk.Label(self.sidebar_account, text='SIGNED IN AS', background=self.colors['sidebar'],
+		         foreground='#777f91', font=('Segoe UI', 7, 'bold')).pack(anchor='w')
+		self.sidebar_user_label = ttk.Label(self.sidebar_account, text='Administrator',
+		         background=self.colors['sidebar'], foreground='#f4f2f8',
+		         font=('Segoe UI', 10, 'bold'))
+		self.sidebar_user_label.pack(anchor='w', pady=(4, 0))
 		self.sidebar.pack_forget()
 		self.current_view = None
 
@@ -417,6 +431,7 @@ class App:
 			conn.commit()
 			conn.close()
 		self.user = {'username': u, 'role': row[1]}
+		self.sidebar_user_label.configure(text=u)
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
 		self.show_view('dashboard')
@@ -640,10 +655,14 @@ class App:
 		title, subtitle = page_titles.get(key, ('VBCCPAS workspace', 'Society management'))
 		page_head = tk.Frame(frame, bg=self.colors['bg'])
 		page_head.pack(fill=tk.X, padx=24, pady=(20, 12))
-		tk.Label(page_head, text='VBCCPAS  /  SOCIETY WORKSPACE',
-		         foreground=self.colors['accent2'], font=('Segoe UI', 8, 'bold')).pack(anchor='w')
-		tk.Label(page_head, text=title, font=('Segoe UI', 23, 'bold'),
-		         foreground=self.colors['fg']).pack(anchor='w', pady=(4, 1))
+		heading_row = tk.Frame(page_head, bg=self.colors['bg'])
+		heading_row.pack(fill=tk.X)
+		tk.Label(heading_row, text='VBCCPAS  /  SOCIETY WORKSPACE',
+		         foreground=self.colors['accent2'], font=('Segoe UI', 8, 'bold')).pack(side=tk.LEFT, anchor='w')
+		tk.Label(heading_row, text=datetime.now().strftime('%A, %d %B %Y'),
+		         foreground='#777f91', font=('Segoe UI', 8)).pack(side=tk.RIGHT, anchor='e')
+		tk.Label(page_head, text=title, font=('Segoe UI', 25, 'bold'),
+		         foreground=self.colors['fg']).pack(anchor='w', pady=(7, 2))
 		tk.Label(page_head, text=subtitle, foreground='#a5a8b7',
 		         font=('Segoe UI', 10)).pack(anchor='w')
 		body = tk.Frame(frame, bg=self.colors['bg'])
