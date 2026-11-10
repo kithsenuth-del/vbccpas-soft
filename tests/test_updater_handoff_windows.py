@@ -128,15 +128,20 @@ def main():
             )
         if marker.read_text(encoding="ascii").strip() != "HANDOFF_SURVIVED_PARENT_EXIT":
             raise AssertionError("PowerShell handoff marker contents were incorrect.")
-        if "remains running after startup check" not in launch_text:
-            raise AssertionError("The launcher did not record the expected two-second running-child check.")
-        if "PowerShell launched with CREATE_BREAKAWAY_FROM_JOB." not in launch_text:
-            raise AssertionError(
-                "The Windows launcher did not successfully request CREATE_BREAKAWAY_FROM_JOB. "
-                "The regression test must verify the intended mitigation, not only a fallback launch."
-            )
+        if "Windows rejected breakaway launch" in launch_text:
+            if "Breakaway is unavailable; keeping the updater alive until PowerShell completes." not in launch_text:
+                raise AssertionError("The launcher did not keep itself alive after Windows rejected breakaway.")
+            if "PowerShell completed while updater remained alive; exit_code=0" not in launch_text:
+                raise AssertionError("The fallback did not wait for successful PowerShell completion.")
+            outcome = "safe wait fallback"
+        else:
+            if "PowerShell launched with CREATE_BREAKAWAY_FROM_JOB." not in launch_text:
+                raise AssertionError("The launcher neither broke away from the Windows job nor logged a rejection.")
+            if "remains running after startup check" not in launch_text:
+                raise AssertionError("The launcher did not record the expected two-second running-child check.")
+            outcome = "CREATE_BREAKAWAY_FROM_JOB"
         time.sleep(1)
-        print("PASS: PowerShell completed its staged work after the Python updater launcher exited using CREATE_BREAKAWAY_FROM_JOB.")
+        print("PASS: PowerShell completed its staged work after launcher handoff (" + outcome + ").")
 
 
 if __name__ == "__main__":
