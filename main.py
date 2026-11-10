@@ -292,13 +292,6 @@ def setup_database():
 	)
 	''')
 
-	# Bootstrap a fresh installation with the requested first-sign-in password.
-	# An environment variable can override this default for managed deployments.
-	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
-	if not cur.fetchone():
-		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD", "admin123")
-		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
-
 	conn.commit()
 	conn.close()
 
@@ -394,6 +387,39 @@ class App:
 			self.side_buttons[key] = b
 		self.sidebar.pack_forget()
 		self.current_view = None
+		# Fresh installs require an administrator-created credential; no shared
+		# default password is written to the database or installer.
+		with sqlite3.connect(DB_PATH) as conn:
+			admin_exists = conn.execute("SELECT 1 FROM Users WHERE Role='admin' LIMIT 1").fetchone()
+		if not admin_exists and not self.configure_initial_admin():
+			self.root.destroy()
+			return
+
+	def configure_initial_admin(self):
+		password = simpledialog.askstring(
+			'Create executive administrator',
+			'First-time setup: create an administrator password (minimum 12 characters).',
+			parent=self.root, show='*')
+		if password is None:
+			return False
+		valid, reason = validate_password(password)
+		if not valid:
+			messagebox.showerror('Password not accepted', reason, parent=self.root)
+			return False
+		confirmation = simpledialog.askstring(
+			'Confirm administrator password',
+			'Enter the new administrator password again:',
+			parent=self.root, show='*')
+		if confirmation is None or not hmac.compare_digest(password, confirmation):
+			messagebox.showerror('Password mismatch', 'The passwords did not match. First-time setup was cancelled.', parent=self.root)
+			return False
+		with sqlite3.connect(DB_PATH) as conn:
+			conn.execute(
+				"INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')",
+				('admin', hash_password(password)))
+		record_security_event(DB_PATH, 'system', 'initial_admin_created', 'admin',
+		                     'First-run administrator credential created')
+		return True
 
 	def try_login(self):
 		u = self.username_var.get().strip()
@@ -1532,12 +1558,17 @@ class App:
 
 	def save_security_user(self, username_var, password_var, role_var, member_id_var, selected_user_id, tree):
 		username = username_var.get().strip()
-		password = password_var.get().strip()
+		password = password_var.get()
 		role = role_var.get().strip() or 'member'
 		member_id = member_id_var.get().strip()
 		if not username:
 			messagebox.showwarning('Missing', 'Username is required')
 			return
+		if password:
+			valid, reason = validate_password(password)
+			if not valid:
+				messagebox.showwarning('Password not accepted', reason)
+				return
 		if member_id:
 			try:
 				member_id_int = int(member_id)
@@ -1558,8 +1589,6 @@ class App:
 				else:
 					cur.execute('UPDATE Users SET Username=?, Role=?, MemberID=? WHERE UserID=?', (username, role, member_id_int, selected_user_id['value']))
 			else:
-				if len(password) < 6:
-					conn.close(); messagebox.showwarning('Weak password', 'Use at least 6 characters'); return
 				cur.execute('SELECT 1 FROM Users WHERE Username=?', (username,))
 				if cur.fetchone():
 					conn.close(); messagebox.showerror('Taken','Username already exists'); return
@@ -1582,14 +1611,15 @@ class App:
 	def set_user_password(self, username):
 		password = simpledialog.askstring(
 			'Set password',
-			'Enter a new password for ' + username + ' (at least 6 characters):',
+			'Enter a new password for ' + username + ' (at least 12 characters):',
 			parent=self.root,
 			show='*'
 		)
 		if password is None:
 			return
-		if len(password) < 6:
-			messagebox.showwarning('Weak password', 'Use at least 6 characters.')
+		valid, reason = validate_password(password)
+		if not valid:
+			messagebox.showwarning('Password not accepted', reason)
 			return
 		conn = sqlite3.connect(DB_PATH)
 		conn.execute('UPDATE Users SET Password=? WHERE Username=?', (hash_password(password), username))
