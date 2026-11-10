@@ -17,6 +17,26 @@ else:
 	BASE_DIR = os.path.dirname(__file__)
 DB_PATH = os.path.join(BASE_DIR, "society.db")
 APP_RESOURCE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+INITIAL_ADMIN_PASSWORD = None
+INITIAL_ADMIN_PASSWORD_FILE = None
+
+
+def get_initial_admin_password_file():
+	profile_root = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".vbccpas")
+	return os.path.join(profile_root, "VBCCPAS", "first-run-admin-password.txt")
+
+
+def clear_initial_admin_password_file():
+	global INITIAL_ADMIN_PASSWORD, INITIAL_ADMIN_PASSWORD_FILE
+	path = INITIAL_ADMIN_PASSWORD_FILE or get_initial_admin_password_file()
+	try:
+		os.remove(path)
+	except FileNotFoundError:
+		pass
+	except OSError:
+		pass
+	INITIAL_ADMIN_PASSWORD = None
+	INITIAL_ADMIN_PASSWORD_FILE = None
 
 
 def hash_password(pw: str) -> str:
@@ -43,6 +63,7 @@ def verify_password(pw: str, stored: str) -> bool:
 
 
 def setup_database():
+	global INITIAL_ADMIN_PASSWORD, INITIAL_ADMIN_PASSWORD_FILE
 	conn = sqlite3.connect(DB_PATH)
 	cur = conn.cursor()
 
@@ -272,12 +293,46 @@ def setup_database():
 	)
 	''')
 
-	# Bootstrap a fresh installation with the requested first-sign-in password.
-	# An environment variable can override this default for managed deployments.
+	# Bootstrap a fresh installation with a strong, random administrator password.
+	# Managed deployments may provide VBCCPAS_ADMIN_PASSWORD explicitly.
 	cur.execute("SELECT 1 FROM Users WHERE Username=?", ("admin",))
-	if not cur.fetchone():
-		initial_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD", "admin123")
+	admin_exists = cur.fetchone() is not None
+	configured_password = os.environ.get("VBCCPAS_ADMIN_PASSWORD")
+	password_file = get_initial_admin_password_file()
+	if not admin_exists:
+		if configured_password:
+			initial_password = configured_password
+		else:
+			initial_password = None
+			try:
+				if os.path.isfile(password_file):
+					with open(password_file, "r", encoding="utf-8") as stream:
+						initial_password = stream.read().strip()
+			except OSError:
+				initial_password = None
+			if not initial_password:
+				initial_password = secrets.token_urlsafe(18)
+				os.makedirs(os.path.dirname(password_file), exist_ok=True)
+				with open(password_file, "w", encoding="utf-8") as stream:
+					stream.write(initial_password)
+				try:
+					os.chmod(password_file, 0o600)
+				except OSError:
+					pass
+			INITIAL_ADMIN_PASSWORD = initial_password if not configured_password else None
+			INITIAL_ADMIN_PASSWORD_FILE = password_file if not configured_password else None
 		cur.execute("INSERT INTO Users (Username, Password, Role) VALUES (?, ?, 'admin')", ("admin", hash_password(initial_password)))
+	elif not configured_password:
+		# If first-run setup was interrupted before the first login, redisplay
+		# the same one-time credential rather than generating a new password.
+		try:
+			if os.path.isfile(password_file):
+				with open(password_file, "r", encoding="utf-8") as stream:
+					INITIAL_ADMIN_PASSWORD = stream.read().strip() or None
+				INITIAL_ADMIN_PASSWORD_FILE = password_file if INITIAL_ADMIN_PASSWORD else None
+		except OSError:
+			INITIAL_ADMIN_PASSWORD = None
+			INITIAL_ADMIN_PASSWORD_FILE = None
 
 	conn.commit()
 	conn.close()
