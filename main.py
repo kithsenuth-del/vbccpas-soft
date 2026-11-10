@@ -232,6 +232,23 @@ def setup_database():
 		Notes TEXT
 	)
 	''')
+
+	# Additive equipment-register fields. Existing inventory rows and IDs remain intact.
+	inventory_columns = {
+		'Category': "TEXT DEFAULT 'General'",
+		'AssetTag': 'TEXT',
+		'Brand': 'TEXT',
+		'Model': 'TEXT',
+		'SerialNumber': 'TEXT',
+		'ItemCondition': "TEXT DEFAULT 'Good'",
+		'PurchaseDate': 'TEXT',
+		'PurchaseCost': 'REAL',
+		'StorageLocation': 'TEXT'
+	}
+	current_inventory_columns = {name.lower() for name in get_columns('Inventory')}
+	for column_name, column_type in inventory_columns.items():
+		if column_name.lower() not in current_inventory_columns:
+			cur.execute(f'ALTER TABLE Inventory ADD COLUMN {column_name} {column_type}')
 	# Borrowed
 	cur.execute('''
 	CREATE TABLE IF NOT EXISTS BorrowedItems (
@@ -806,36 +823,105 @@ class App:
 
 	# Inventory
 	def view_inventory(self, parent):
-		self.module_heading(parent, 'Equipment & Inventory', 'Track society equipment, available quantities and item notes.', [
-			('＋  Add Item', self.add_item_dialog)
+		self.module_heading(parent, 'Equipment & Inventory', 'Photographic, media-production and general society asset register.', [
+			('＋  Register Equipment', self.add_item_dialog),
+			('↓  Export Register', lambda: self.export_table('Inventory', ['ItemID','Category','Name','AssetTag','Brand','Model','SerialNumber','ItemCondition','Quantity','PurchaseDate','PurchaseCost','StorageLocation','Notes']))
 		])
-		tree = self.module_table(parent, ('ItemID','Name','Quantity','Notes'),
-							 {'ItemID':95, 'Name':240, 'Quantity':120, 'Notes':300})
 		with sqlite3.connect(DB_PATH) as conn:
-			rows = conn.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory ORDER BY Name').fetchall()
-		for row in rows:
-			tree.insert('', tk.END, values=row)
+			stats = conn.execute("""
+				SELECT COUNT(*), COALESCE(SUM(Quantity),0),
+				       SUM(CASE WHEN lower(Category) IN ('camera','lens','audio','lighting','video','media') THEN 1 ELSE 0 END)
+				FROM Inventory
+			""").fetchone()
+		stats = stats or (0, 0, 0)
+		cards = tk.Frame(parent, bg=self.colors['bg'])
+		cards.pack(fill=tk.X, padx=18, pady=(0, 12))
+		for title, value in [('Registered asset types', stats[0]), ('Total units in stock', stats[1]), ('Photo / media assets', stats[2] or 0)]:
+			card = tk.Frame(cards, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
+			card.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10), ipady=9)
+			tk.Label(card, text=str(value), font=('Segoe UI', 19, 'bold')).pack(anchor='w', padx=14, pady=(7, 0))
+			tk.Label(card, text=title, foreground='#aeb4c7').pack(anchor='w', padx=14)
+		filters = ttk.Frame(parent, padding=(18, 0, 18, 10))
+		filters.pack(fill=tk.X)
+		search_var = tk.StringVar()
+		ttk.Label(filters, text='Search assets').pack(side=tk.LEFT, padx=(0, 8))
+		ttk.Entry(filters, textvariable=search_var, width=34).pack(side=tk.LEFT)
+		tree = self.module_table(parent, ('ItemID','Category','Name','AssetTag','Brand / Model','SerialNumber','Condition','Quantity','Location'),
+							 {'ItemID':65, 'Category':105, 'Name':170, 'AssetTag':110, 'Brand / Model':150, 'SerialNumber':145, 'Condition':100, 'Quantity':75, 'Location':130})
+		def refresh(*_):
+			for item in tree.get_children(): tree.delete(item)
+			term = '%' + search_var.get().strip() + '%'
+			with sqlite3.connect(DB_PATH) as conn:
+				rows = conn.execute("""
+					SELECT ItemID,Category,Name,AssetTag,
+					       trim(COALESCE(Brand,'') || ' ' || COALESCE(Model,'')),
+					       SerialNumber,ItemCondition,Quantity,StorageLocation
+					FROM Inventory
+					WHERE Category LIKE ? OR Name LIKE ? OR AssetTag LIKE ? OR Brand LIKE ?
+					   OR Model LIKE ? OR SerialNumber LIKE ? OR StorageLocation LIKE ?
+					ORDER BY Category,Name
+				""", (term,term,term,term,term,term,term)).fetchall()
+			for row in rows: tree.insert('', tk.END, values=row)
+		search_var.trace_add('write', refresh)
+		refresh()
+		ttk.Button(parent, text='Refresh Register', command=refresh, style='Rounded.TButton').pack(anchor='e', padx=22, pady=(0, 14))
 
 	def add_item_dialog(self):
-		d, fields, footer = self.create_form_dialog('Add Equipment', 'Register an item and its available quantity.',
-			[('name','Item name'),('quantity','Quantity'),('notes','Notes')], '580x370')
+		fields_spec = [
+			('category','Equipment category',['Camera','Lens','Audio / Mixer','Microphone','Lighting','Video / Media','Tripod / Support','Computer / Storage','Accessories','Furniture','General']),
+			('name','Item name / description'),
+			('asset_tag','Society asset tag / ID'),
+			('brand','Brand / manufacturer'),
+			('model','Model'),
+			('serial','Serial number'),
+			('condition','Physical condition',['New','Excellent','Good','Fair','Needs repair','Unserviceable']),
+			('quantity','Quantity / units'),
+			('purchase_date','Purchase date (YYYY-MM-DD)'),
+			('purchase_cost','Purchase cost (optional)'),
+			('location','Storage / usual location'),
+			('notes','Accessories, specifications or notes')
+		]
+		d, fields, footer = self.create_form_dialog('Register Society Equipment', 'Record cameras, lenses, mixers, microphones, lighting, media gear and other physical assets.', fields_spec, '700x690')
+		fields['category'].set('Camera')
+		fields['condition'].set('Good')
 		fields['quantity'].set('1')
 		def save():
 			name = fields['name'].get().strip()
-			try: quantity = int(fields['quantity'].get().strip())
+			quantity_text = fields['quantity'].get().strip()
+			purchase_date = fields['purchase_date'].get().strip()
+			cost_text = fields['purchase_cost'].get().strip().replace(',', '')
+			if not name:
+				messagebox.showwarning('Required field', 'Enter an item name or description.', parent=d); return
+			try: quantity = int(quantity_text)
 			except ValueError:
-				messagebox.showwarning('Invalid quantity', 'Enter a whole number of zero or greater.', parent=d); return
-			if not name or quantity < 0:
-				messagebox.showwarning('Check details', 'Enter an item name and a non-negative quantity.', parent=d); return
+				messagebox.showwarning('Invalid quantity', 'Quantity must be a whole number of zero or greater.', parent=d); return
+			if quantity < 0:
+				messagebox.showwarning('Invalid quantity', 'Quantity cannot be negative.', parent=d); return
+			if purchase_date:
+				try: datetime.strptime(purchase_date, '%Y-%m-%d')
+				except ValueError:
+					messagebox.showwarning('Invalid date', 'Use YYYY-MM-DD for the purchase date.', parent=d); return
+			try: purchase_cost = float(cost_text) if cost_text else None
+			except ValueError:
+				messagebox.showwarning('Invalid cost', 'Enter a valid purchase cost or leave it blank.', parent=d); return
+			if purchase_cost is not None and purchase_cost < 0:
+				messagebox.showwarning('Invalid cost', 'Purchase cost cannot be negative.', parent=d); return
 			try:
 				with sqlite3.connect(DB_PATH) as conn:
-					conn.execute('INSERT INTO Inventory (Name,Quantity,Notes) VALUES (?,?,?)',
-						(name, quantity, fields['notes'].get().strip()))
+					conn.execute("""
+						INSERT INTO Inventory
+						(Name,Quantity,Notes,Category,AssetTag,Brand,Model,SerialNumber,ItemCondition,PurchaseDate,PurchaseCost,StorageLocation)
+						VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+					""", (name,quantity,fields['notes'].get().strip(),fields['category'].get().strip(),
+						fields['asset_tag'].get().strip(),fields['brand'].get().strip(),fields['model'].get().strip(),
+						fields['serial'].get().strip(),fields['condition'].get().strip(),purchase_date or None,
+						purchase_cost,fields['location'].get().strip()))
 			except sqlite3.Error as exc:
-				messagebox.showerror('Could not save item', str(exc), parent=d); return
-			d.destroy(); self.show_view('inventory')
+				messagebox.showerror('Could not save equipment', str(exc), parent=d); return
+			d.destroy()
+			self.show_view('inventory')
 		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
-		ttk.Button(footer, text='Save Item', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
+		ttk.Button(footer, text='Save to Register', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	# Borrowing
 	def view_borrowing(self, parent):
