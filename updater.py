@@ -301,7 +301,7 @@ Write-Output ("TASK_STARTED:" + $data.TaskName)
     return task_name
 
 
-def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False, handoff_timeout=600):
+def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False, handoff_timeout=30):
     """Download a verified complete package and hand installation to PowerShell."""
     asset = release.get("_update_asset")
     if not asset:
