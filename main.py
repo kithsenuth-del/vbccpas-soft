@@ -478,6 +478,57 @@ class App:
 		self.sidebar_user_label.pack(anchor='w', pady=(4, 0))
 		self.sidebar.pack_forget()
 		self.current_view = None
+		if INITIAL_ADMIN_PASSWORD:
+			initial_password = INITIAL_ADMIN_PASSWORD
+			self.root.after(
+				500,
+				lambda password=initial_password: self.show_initial_admin_password(password),
+			)
+
+	def show_initial_admin_password(self, password):
+		"""Show the one-time bootstrap credential with a copy action."""
+		self.username_var.set("admin")
+		dialog = tk.Toplevel(self.root)
+		dialog.title("Initial administrator password")
+		dialog.transient(self.root)
+		dialog.resizable(False, False)
+		dialog.geometry("540x300")
+		outer = tk.Frame(dialog, bg=self.colors["card"], padx=24, pady=22)
+		outer.pack(fill=tk.BOTH, expand=True)
+		tk.Label(
+			outer, text="Your administrator account is ready.",
+			font=("Segoe UI", 15, "bold"),
+		).pack(anchor="w", pady=(0, 8))
+		tk.Label(
+			outer,
+			text="Sign in with username admin and save this randomly generated password.",
+			wraplength=480, justify="left",
+		).pack(anchor="w", pady=(0, 14))
+		password_var = tk.StringVar(value=password)
+		password_entry = ttk.Entry(outer, textvariable=password_var, state="readonly",
+		                           font=("Consolas", 12))
+		password_entry.pack(fill=tk.X, pady=(0, 12))
+		password_entry.selection_range(0, tk.END)
+
+		def copy_password():
+			try:
+				self.root.clipboard_clear()
+				self.root.clipboard_append(password)
+				self.root.update_idletasks()
+				copy_status.configure(text="Password copied to clipboard.")
+			except tk.TclError:
+				copy_status.configure(text="Could not access the clipboard; select the password above.")
+
+		copy_status = ttk.Label(outer, text="A temporary copy is kept in your Windows user profile until first sign-in.",
+		                         wraplength=480)
+		copy_status.pack(anchor="w", pady=(0, 14))
+		buttons = tk.Frame(outer, bg=self.colors["card"])
+		buttons.pack(fill=tk.X)
+		ttk.Button(buttons, text="Copy password", command=copy_password).pack(side=tk.LEFT)
+		ttk.Button(buttons, text="Continue to sign in", command=dialog.destroy).pack(side=tk.RIGHT)
+		dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+		dialog.grab_set()
+		password_entry.focus_set()
 
 	def try_login(self):
 		u = self.username_var.get().strip()
@@ -506,6 +557,8 @@ class App:
 			conn.commit()
 			conn.close()
 		self.user = {'username': u, 'role': row[1]}
+		if u == "admin":
+			clear_initial_admin_password_file()
 		self.sidebar_user_label.configure(text=u)
 		self.login_frame.destroy()
 		self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
