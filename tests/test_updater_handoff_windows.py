@@ -55,6 +55,7 @@ def make_package(marker_path):
 def write_parent_harness(path):
     source = r"""
 import hashlib
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
