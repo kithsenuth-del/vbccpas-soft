@@ -109,6 +109,10 @@ try {
         }
     }
 
+    Write-Host "Smoke-testing the packaged desktop executable in an isolated folder..."
+    & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Root "tests\\test_desktop_smoke_windows.ps1") -ExecutablePath (Join-Path $Dist "VBCCPAS-Soft.exe")
+    if ($LASTEXITCODE -ne 0) { throw "Packaged desktop application startup smoke test failed." }
+
     $ManifestName = "vbccpas-managed-files.json"
     $Files = @(
         Get-ChildItem -LiteralPath $Dist -File -Recurse |
