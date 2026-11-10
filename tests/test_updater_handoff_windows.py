@@ -76,7 +76,7 @@ release = {"_update_asset": {
     "size": len(package),
     "digest": hashlib.sha256(package).hexdigest(),
 }}
-updater.download_and_launch(release, target, 0)
+updater.download_and_launch(release, target, 0, handoff_timeout=20)
 """
     path.write_text(source, encoding="utf-8")
 
