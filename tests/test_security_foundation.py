@@ -170,6 +170,22 @@ class SecurityFoundationTests(unittest.TestCase):
         self.assertTrue(verify_admin_pin(self.live, "admin", "19462"))
         self.assertFalse(verify_admin_pin(self.live, "admin", "58319"))
 
+    def test_unknown_recovery_username_counts_as_failed_attempt(self):
+        from security_foundation import (
+            create_admin_recovery_code, reset_admin_password_with_recovery_code
+        )
+        code = create_admin_recovery_code(self.live, "admin")
+        with self.assertRaises(PermissionError):
+            reset_admin_password_with_recovery_code(
+                self.live, code, "new-secure-password",
+                username="not-an-administrator"
+            )
+        with sqlite3.connect(self.live) as conn:
+            failures = conn.execute(
+                "SELECT Failures FROM LoginGuard WHERE GuardID=1"
+            ).fetchone()[0]
+        self.assertEqual(failures, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
