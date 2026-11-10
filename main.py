@@ -732,10 +732,10 @@ class App:
 		panel.pack(fill=tk.BOTH, expand=True, padx=22, pady=(4, 20))
 		header = tk.Frame(panel, bg=self.colors['panel'])
 		header.pack(fill=tk.X, padx=20, pady=(18, 10))
-		tk.Label(header, text='Equipment register',
-		         font=('Segoe UI', 16, 'bold')).pack(side=tk.LEFT)
+		tk.Label(header, text='Equipment register', background=self.colors['panel'],
+		         foreground=self.colors['fg'], font=('Segoe UI', 16, 'bold')).pack(side=tk.LEFT)
 		tk.Label(header, text='Track cameras, lenses, mixers and studio equipment',
-		         foreground='#a5a8b7').pack(side=tk.LEFT, padx=16, pady=(4, 0))
+		         background=self.colors['panel'], foreground='#a5a8b7').pack(side=tk.LEFT, padx=16, pady=(4, 0))
 		toolbar = tk.Frame(panel, bg=self.colors['panel'])
 		toolbar.pack(fill=tk.X, padx=20, pady=(4, 12))
 		search_var = tk.StringVar()
@@ -840,7 +840,8 @@ class App:
 			cell = tk.Frame(form, bg=self.colors['panel'])
 			cell.grid(row=row, column=col, sticky='ew', padx=(0 if col == 0 else 12, 0),
 			          pady=7)
-			tk.Label(cell, text=label, font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 5))
+			tk.Label(cell, text=label, background=self.colors['panel'],
+			         foreground='#d9dbe5', font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 5))
 			default = record.get(key, '')
 			if key == 'Category' and not default: default = 'Other'
 			if key == 'Quantity' and default == '': default = 1
@@ -1031,7 +1032,7 @@ class App:
 		btns = ttk.Frame(top)
 		btns.pack(pady=8)
 		ttk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
+		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Category','Brand','Model','SerialNumber','Quantity','Condition','Location','Custodian','PurchaseDate','Status','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 		ttk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 		ttk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
 		ttk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
