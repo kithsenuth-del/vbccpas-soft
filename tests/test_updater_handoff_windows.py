@@ -88,7 +88,8 @@ def main():
         target = root / "VBCCPAS Install With Spaces" / "VBCCPAS-Soft.exe"
         target.parent.mkdir()
         target.write_bytes(b"old application placeholder")
-        package_path.write_bytes(make_package(marker))
+        package_bytes = make_package(marker)
+        package_path.write_bytes(package_bytes)
         harness = root / "launcher-parent.py"
         write_parent_harness(harness)
 
@@ -97,6 +98,35 @@ def main():
         env["TEMP"] = str(root)
         env["TMP"] = str(root)
         env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+
+        # First prove the extracted PowerShell payload works when launched
+        # directly. This separates script/argument problems from process
+        # creation and Windows Job Object behaviour in the real handoff.
+        direct_marker = root / "direct-powershell-completed.txt"
+        with zipfile.ZipFile(io.BytesIO(package_bytes)) as archive:
+            direct_script_text = archive.read("updater.ps1").decode("utf-8")
+        direct_script_text = direct_script_text.replace(
+            str(marker).replace("'", "''"),
+            str(direct_marker).replace("'", "''"),
+        )
+        direct_script = root / "direct-smoke.ps1"
+        direct_script.write_text(direct_script_text, encoding="utf-8")
+        powershell = Path(os.environ.get("SystemRoot", r"C:\\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        direct = subprocess.run(
+            [
+                str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-File", str(direct_script),
+                "-ProcessId", "0", "-UpdaterProcessId", "0",
+                "-TargetExe", str(target), "-PackageDirectory", str(root),
+            ],
+            env=env, capture_output=True, text=True, timeout=15, check=False,
+        )
+        if direct.returncode != 0 or not direct_marker.is_file():
+            raise AssertionError(
+                "The PowerShell payload failed when run directly; this is not a handoff problem. "
+                "Exit=" + str(direct.returncode) + "\\n" + direct.stdout + "\\n" + direct.stderr
+            )
+
         result = subprocess.run(
             [sys.executable, str(harness), str(PROJECT_ROOT), str(package_path), str(target)],
             cwd=str(PROJECT_ROOT),
