@@ -1771,6 +1771,11 @@ if __name__ == '__main__':
 		self.show_view('dashboard')
 
 	def recover_admin_password(self):
+		username = simpledialog.askstring(
+			'Administrator recovery', 'Enter your administrator username:',
+			parent=self.root)
+		if not username:
+			return
 		code = simpledialog.askstring(
 			'Administrator recovery',
 			'Enter your one-time administrator recovery code:',
@@ -1807,7 +1812,7 @@ if __name__ == '__main__':
 			messagebox.showerror('PIN mismatch', 'The PINs did not match.', parent=self.root)
 			return
 		try:
-			username = reset_admin_password_with_recovery_code(DB_PATH, code, new_password, new_pin)
+			username = reset_admin_password_with_recovery_code(DB_PATH, code, new_password, new_pin, username.strip())
 			record_security_event(DB_PATH, 'recovery_code', 'administrator_password_recovered',
 			                     username, 'One-time recovery code consumed; password value not recorded')
 			messagebox.showinfo('Password recovered',
