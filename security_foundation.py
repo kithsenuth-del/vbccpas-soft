@@ -393,6 +393,8 @@ def reset_admin_password_with_recovery_code(
             (username,),
         ).fetchone()
         if not row or row[4]:
+            conn.rollback()
+            record_login_failure(path)
             raise PermissionError("The recovery code was not accepted or has already been used.")
         username, salt, stored_digest, iterations, _used = row
         supplied = hashlib.pbkdf2_hmac(
