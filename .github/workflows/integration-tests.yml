@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt -r cloud_api/requirements.txt httpx==0.28.1
       - name: Compile application and tests
-        run: python -m py_compile main.py server.py passkey_auth.py run_server.py test_integration.py database_migrations.py local_sync.py cloud_api/app.py cloud_api/bootstrap_admin.py tests/test_database_migrations.py tests/test_local_sync.py tests/test_cloud_api.py tests/test_passkey_recovery.py tests/test_database_migrations.py
+        run: python -m py_compile main.py server.py passkey_auth.py run_server.py test_integration.py database_migrations.py security_foundation.py local_sync.py cloud_api/app.py cloud_api/bootstrap_admin.py tests/test_database_migrations.py tests/test_local_sync.py tests/test_cloud_api.py tests/test_passkey_recovery.py tests/test_security_foundation.py
       - name: Run isolated web/desktop integration suite
         run: python test_integration.py
       - name: Test safe passkey registration recovery
@@ -32,6 +32,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_cloud_api.py" -v
       - name: Test non-destructive database migration foundation
         run: python -m unittest discover -s tests -p "test_database_migrations.py" -v
+      - name: Test security and verified database recovery
+        run: python -m unittest discover -s tests -p "test_security_foundation.py" -v
       - name: Run existing passkey safety checks
         run: python verify_data_flow.py
       - name: Check dashboard JavaScript syntax
