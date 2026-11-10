@@ -555,34 +555,99 @@ class App:
 		frame.pack(fill=tk.BOTH, expand=True)
 		self.current_view = frame
 		if key == 'dashboard':
-			header = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
-			header.pack(fill=tk.X, padx=16, pady=(16, 12))
-			tk.Label(header, text=f"Welcome back, {self.user['username']}", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 18, 'bold')).pack(anchor='w', padx=20, pady=(16, 4))
-			tk.Label(header, text="A creative studio for student photographers, exhibitions and photo walks.", bg=self.colors['panel'], fg='#cbd5e1', font=('Segoe UI', 10)).pack(anchor='w', padx=20, pady=(0, 16))
+			# Polished Windows workspace dashboard matching the approved VBCCPAS prototype.
+			frame.configure(bg=self.colors['bg'])
+			frame.grid_columnconfigure(0, weight=1)
+			frame.grid_rowconfigure(3, weight=1)
+			
+			def panel(parent, bg=None, **kwargs):
+				return tk.Frame(parent, bg=bg or self.colors['card'], bd=0,
+				                highlightthickness=1, highlightbackground='#30364a', **kwargs)
+			
+			def label(parent, text, size=10, color='#f4f2f8', bold=False, **kwargs):
+				return tk.Label(parent, text=text, bg=parent.cget('bg'), fg=color,
+				                font=('Segoe UI', size, 'bold' if bold else 'normal'), **kwargs)
+			
+			# Top hero banner
+			hero = panel(frame, '#20243a')
+			hero.grid(row=0, column=0, sticky='ew', padx=18, pady=(16, 12))
+			hero.grid_columnconfigure(0, weight=1)
+			label(hero, 'VBCCPAS Soft', 25, '#ffffff', True).grid(row=0, column=0, sticky='w', padx=22, pady=(17, 2))
+			label(hero, 'Together for Our Alma Mater', 12, '#d5d1ff').grid(row=1, column=0, sticky='w', padx=23, pady=(0, 16))
+			label(hero, datetime.now().strftime('%A, %d %B %Y'), 9, '#aeb4ca').grid(row=0, column=1, rowspan=2, sticky='e', padx=22)
+			
+			# Live summary figures from the existing local database.
+			conn = sqlite3.connect(DB_PATH)
+			cur = conn.cursor()
+			def safe_count(query):
+				try:
+					cur.execute(query)
+					return int(cur.fetchone()[0] or 0)
+				except sqlite3.Error:
+					return 0
+			mcount = safe_count('SELECT COUNT(*) FROM Members')
+			ecount = safe_count('SELECT COUNT(*) FROM Events')
+			icount = safe_count('SELECT COUNT(*) FROM Inventory')
+			bcount = safe_count('SELECT COUNT(*) FROM BorrowedItems WHERE Returned=0')
+			conn.close()
+			
 			stats = tk.Frame(frame, bg=self.colors['bg'])
-			stats.pack(fill=tk.X, padx=16, pady=6)
-			mcount = self.count_members()
-			bcount = self.count_borrowed()
+			stats.grid(row=1, column=0, sticky='ew', padx=12, pady=4)
+			for col in range(4): stats.grid_columnconfigure(col, weight=1, uniform='stat')
+			stat_data = [
+				('MEMBERS', f'{mcount:,}', 'Registered society members', '#3478e5'),
+				('EVENTS', f'{ecount:,}', 'Events recorded', '#7454d6'),
+				('EQUIPMENT', f'{icount:,}', 'Inventory items', '#159b78'),
+				('ON LOAN', f'{bcount:,}', 'Items currently borrowed', '#c98732'),
+			]
+			for col, (title, value, hint, accent) in enumerate(stat_data):
+				card = panel(stats, '#20263a')
+				card.grid(row=0, column=col, sticky='nsew', padx=6, pady=5, ipady=7)
+				label(card, title, 9, '#b9bfd2', True).pack(anchor='w', padx=14, pady=(11, 3))
+				label(card, value, 23, accent, True).pack(anchor='w', padx=14)
+				label(card, hint, 8, '#a5abc0').pack(anchor='w', padx=14, pady=(2, 9))
+			
+			# Main workspace: quick actions and upcoming event.
+			workspace = tk.Frame(frame, bg=self.colors['bg'])
+			workspace.grid(row=2, column=0, sticky='nsew', padx=18, pady=(12, 12))
+			workspace.grid_columnconfigure(0, weight=3)
+			workspace.grid_columnconfigure(1, weight=2)
+			
+			actions = panel(workspace, '#1c2233')
+			actions.grid(row=0, column=0, sticky='nsew', padx=(0, 8))
+			label(actions, 'Quick Actions', 14, '#ffffff', True).pack(anchor='w', padx=18, pady=(16, 4))
+			label(actions, 'Jump straight into the most-used society tools.', 9, '#aeb4c7').pack(anchor='w', padx=18, pady=(0, 12))
+			action_grid = tk.Frame(actions, bg='#1c2233')
+			action_grid.pack(fill=tk.X, padx=12, pady=(0, 14))
+			for col in range(3): action_grid.grid_columnconfigure(col, weight=1, uniform='action')
+			for i, (caption, destination) in enumerate([
+				('＋  Add Member', 'members'), ('▦  Create Event', 'events'),
+				('▤  View Reports', 'reports'), ('◈  Inventory', 'inventory'),
+				('⇄  Borrowing', 'borrow'), ('✓  Attendance', 'attendance')
+			]):
+				btn = ttk.Button(action_grid, text=caption,
+				                 command=lambda target=destination: self.show_view(target),
+				                 style='Rounded.TButton')
+				btn.grid(row=i//3, column=i%3, sticky='ew', padx=5, pady=5, ipady=8)
+			
+			upcoming = panel(workspace, '#1c2233')
+			upcoming.grid(row=0, column=1, sticky='nsew', padx=(8, 0))
+			label(upcoming, 'Upcoming Event', 14, '#ffffff', True).pack(anchor='w', padx=18, pady=(16, 10))
 			next_event = self.get_next_event()
-			for title, value, color, subtitle in [
-				('Society Members', str(mcount), self.colors['accent1'], 'Registered members'),
-				('Currently Borrowed', str(bcount), self.colors['accent2'], 'Outstanding items'),
-				('Next Event', f"{next_event[0]} ({next_event[1].strftime('%Y-%m-%d')})" if next_event else 'No upcoming events', self.colors['accent3'], 'Upcoming schedule')
-			]:
-				card = tk.Frame(stats, bg=self.colors['card'], bd=1, highlightthickness=1, highlightbackground='#334155', width=260, height=120)
-				card.pack(side=tk.LEFT, padx=8)
-				card.pack_propagate(False)
-				tk.Label(card, text=title, bg=self.colors['card'], fg='#cbd5e1', font=('Segoe UI', 10)).place(x=16, y=16)
-				tk.Label(card, text=value, bg=self.colors['card'], fg=color, font=('Segoe UI', 18, 'bold')).place(x=16, y=42)
-				tk.Label(card, text=subtitle, bg=self.colors['card'], fg='#64748b', font=('Segoe UI', 9)).place(x=16, y=88)
-			panel = tk.Frame(frame, bg=self.colors['panel'], bd=1, highlightthickness=1, highlightbackground='#334155')
-			panel.pack(fill=tk.BOTH, expand=True, padx=16, pady=(12, 16))
-			tk.Label(panel, text="Quick actions", bg=self.colors['panel'], fg='#f8fafc', font=('Segoe UI', 12, 'bold')).pack(anchor='w', padx=18, pady=(16, 8))
-			tk.Label(panel, text="Use the sidebar to open members, events, inventory, borrowing, attendance, reports, and security modules.", bg=self.colors['panel'], fg='#cbd5e1', justify=tk.LEFT).pack(anchor='w', padx=18, pady=(0, 10))
-			buttons = tk.Frame(panel, bg=self.colors['panel'])
-			buttons.pack(anchor='w', padx=18, pady=6)
-			ttk.Button(buttons, text='Open Members', command=lambda: self.show_view('members'), style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
-			ttk.Button(buttons, text='Open Events', command=lambda: self.show_view('events'), style='Rounded.TButton').pack(side=tk.LEFT)
+			if next_event:
+				label(upcoming, next_event[0], 13, '#c6bcff', True, wraplength=300, justify='left').pack(anchor='w', padx=18, pady=(4, 4))
+				label(upcoming, next_event[1].strftime('%A, %d %B %Y'), 10, '#d2d5e2').pack(anchor='w', padx=18)
+			else:
+				label(upcoming, 'No upcoming events scheduled', 11, '#d2d5e2').pack(anchor='w', padx=18, pady=(8, 4))
+			label(upcoming, 'Manage your society calendar and event details.', 9, '#a5abc0', wraplength=300, justify='left').pack(anchor='w', padx=18, pady=(10, 12))
+			ttk.Button(upcoming, text='Open Events', command=lambda: self.show_view('events'),
+			           style='Rounded.TButton').pack(anchor='w', padx=18, pady=(0, 16))
+			
+			# Compact footer/status strip
+			status = panel(frame, '#171c2a')
+			status.grid(row=3, column=0, sticky='ew', padx=18, pady=(0, 16))
+			label(status, '●  Local database ready', 9, '#8fd3ad', True).pack(side=tk.LEFT, padx=16, pady=10)
+			label(status, 'VBCCPAS Soft  •  Windows desktop workspace', 9, '#9da5ba').pack(side=tk.RIGHT, padx=16, pady=10)
 		elif key == 'members':
 			self.view_members(frame)
 		elif key == 'events':
