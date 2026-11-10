@@ -1376,8 +1376,9 @@ class App:
 			('Members', 'Registered member directory', lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])),
 			('Events', 'Society events and schedules', lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes'])),
 			('Inventory', 'Complete photographic and media asset register', lambda: self.export_table('Inventory', ['ItemID','Category','Name','AssetTag','Brand','Model','SerialNumber','ItemCondition','Quantity','PurchaseDate','PurchaseCost','StorageLocation','Notes'])),
-			('Borrowing', 'Equipment loans and returns', lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned'])),
-			('Attendance', 'Member attendance records', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
+			('Borrowing', 'Loan history, due dates and return conditions', lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ExpectedReturnDate','ActualReturnDate','ReturnDate','Returned','ReturnCondition','ReturnNotes'])),
+			('Maintenance', 'Equipment inspections, servicing and repair costs', lambda: self.export_table('MaintenanceRecords', ['MaintenanceID','ItemID','ServiceDate','WorkType','Description','Cost','PerformedBy','NextDueDate'])),
+			('Attendance', 'Member attendance and absence records', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
 		]
 		grid = tk.Frame(parent, bg=self.colors['bg'])
 		grid.pack(fill=tk.BOTH, expand=True, padx=18, pady=8)
