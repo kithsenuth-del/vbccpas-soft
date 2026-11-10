@@ -18,8 +18,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def make_package(marker_path):
+def make_package(marker_path, child_marker_path):
     escaped_marker = str(marker_path).replace("'", "''")
+    escaped_child_marker = str(child_marker_path).replace("'", "''")
     script = (
         "param([int]$ProcessId = 0, "
         "[Parameter(Mandatory=$true)][string]$TargetExe, "
@@ -32,7 +33,16 @@ def make_package(marker_path):
         "Add-Content -LiteralPath (Join-Path $logDir 'update.log') -Value 'Update completed successfully'\n"
         "Set-Content -LiteralPath '" + escaped_marker
         + "' -Value 'HANDOFF_SURVIVED_PARENT_EXIT' -Encoding ASCII\n"
-        "if ($ScheduledTaskName) { try { $svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $svc.GetFolder('\').DeleteTask($ScheduledTaskName, 0) } catch { } }\n"
+        "if ($ScheduledTaskName) {\n"
+        "  $childScript = Join-Path $PackageDirectory 'handoff-child.ps1'\n"
+        "  $childBody = \"Start-Sleep -Seconds 8\" + [Environment]::NewLine + \"Set-Content -LiteralPath '" + escaped_child_marker
+        + "' -Value 'CHILD_SURVIVED_TASK_EXIT' -Encoding ASCII\"\n"
+        "  Set-Content -LiteralPath $childScript -Value $childBody -Encoding UTF8\n"
+        "  $powershell = Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'\n"
+        "  $childArgs = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"' + $childScript + '\"'\n"
+        "  Start-Process -FilePath $powershell -ArgumentList $childArgs -WindowStyle Hidden\n"
+        "  try { $svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $svc.GetFolder('\').DeleteTask($ScheduledTaskName, 0) } catch { }\n"
+        "}\n"
     )
     files = {
         "VBCCPAS-Soft.exe": b"placeholder target application",
@@ -94,7 +104,7 @@ def main():
         target = root / "VBCCPAS Install With Spaces" / "VBCCPAS-Soft.exe"
         target.parent.mkdir()
         target.write_bytes(b"old application placeholder")
-        package_bytes = make_package(marker)
+        package_bytes = make_package(marker, root / "child-survived-task-exit.txt")
         package_path.write_bytes(package_bytes)
         harness = root / "launcher-parent.py"
         write_parent_harness(harness)
@@ -149,7 +159,8 @@ def main():
             )
 
         deadline = time.monotonic() + 30
-        while time.monotonic() < deadline and not marker.is_file():
+        child_marker = root / "child-survived-task-exit.txt"
+        while time.monotonic() < deadline and not (marker.is_file() and child_marker.is_file()):
             time.sleep(0.25)
 
         launch_log = local_app_data / "VBCCPAS" / "updater-launch.log"
@@ -164,6 +175,8 @@ def main():
             )
         if marker.read_text(encoding="ascii").strip() != "HANDOFF_SURVIVED_PARENT_EXIT":
             raise AssertionError("PowerShell handoff marker contents were incorrect.")
+        if not child_marker.is_file() or child_marker.read_text(encoding="ascii").strip() != "CHILD_SURVIVED_TASK_EXIT":
+            raise AssertionError("A process launched by the scheduled updater did not survive task completion.")
         if "Windows rejected breakaway launch" in launch_text:
             if "Scheduled Task started PowerShell outside the updater job" not in launch_text:
                 raise AssertionError("The launcher did not start the scheduled-task fallback after breakaway was denied.")
