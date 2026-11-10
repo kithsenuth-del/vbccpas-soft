@@ -9,6 +9,7 @@ on:
       - feature/unified-windows-ui
       - feature/photographic-arts-theme
       - feature/one-click-windows-launcher
+      - feature/windows-installer-uninstaller
       - main
   pull_request:
     branches:
