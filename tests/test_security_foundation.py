@@ -43,8 +43,9 @@ class SecurityFoundationTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_password_policy(self):
-        self.assertFalse(validate_password("short")[0])
-        self.assertFalse(validate_password(" " * 12)[0])
+        self.assertFalse(validate_password("1234567")[0])
+        self.assertTrue(validate_password("12345678")[0])
+        self.assertFalse(validate_password(" " * 8)[0])
         self.assertTrue(validate_password("a secure phrase 2026")[0])
         self.assertFalse(validate_password("x" * 129)[0])
 
