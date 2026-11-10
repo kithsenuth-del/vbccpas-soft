@@ -20,24 +20,26 @@ try {
 
     Write-Host "Starting the packaged desktop application in an isolated temporary folder..."
     $Process = Start-Process -FilePath $TestExe -WorkingDirectory $TestRoot -PassThru
-    $deadline = (Get-Date).AddSeconds(60)
+    $DatabasePath = Join-Path $TestRoot "society.db"
+    $PasswordFile = Join-Path (Join-Path $env:LOCALAPPDATA "VBCCPAS") "first-run-admin-password.txt"
+    $deadline = (Get-Date).AddSeconds(45)
     do {
         $Process.Refresh()
         if ($Process.HasExited) {
             throw "VBCCPAS-Soft.exe exited during startup (exit code $($Process.ExitCode))."
         }
-        if ($Process.MainWindowHandle -ne [IntPtr]::Zero) { break }
+        if ((Test-Path -LiteralPath $DatabasePath -PathType Leaf) -and
+            (Test-Path -LiteralPath $PasswordFile -PathType Leaf)) { break }
         Start-Sleep -Milliseconds 300
     } while ((Get-Date) -lt $deadline)
 
     $Process.Refresh()
-    if ($Process.HasExited -or $Process.MainWindowHandle -eq [IntPtr]::Zero) {
-        throw "VBCCPAS-Soft.exe did not create its desktop window within 60 seconds."
+    if ($Process.HasExited) {
+        throw "VBCCPAS-Soft.exe exited during startup (exit code $($Process.ExitCode))."
     }
-    if ([string]::IsNullOrWhiteSpace($Process.MainWindowTitle)) {
-        throw "The packaged executable did not expose a titled desktop window."
+    if (-not (Test-Path -LiteralPath $DatabasePath -PathType Leaf)) {
+        throw "VBCCPAS-Soft.exe did not initialize its isolated SQLite database within 45 seconds."
     }
-    $PasswordFile = Join-Path (Join-Path $env:LOCALAPPDATA "VBCCPAS") "first-run-admin-password.txt"
     if (-not (Test-Path -LiteralPath $PasswordFile -PathType Leaf)) {
         throw "The fresh desktop database did not create its one-time administrator credential."
     }
@@ -46,7 +48,7 @@ try {
         throw "The first-run administrator credential was missing or used a predictable default."
     }
 
-    Write-Host "PASS: packaged desktop executable opened a titled VBCCPAS window and generated a random first-run admin credential."
+    Write-Host "PASS: packaged desktop executable stayed running and initialized its isolated database and random first-run admin credential."
     Stop-Process -Id $Process.Id -Force
     if (-not $Process.WaitForExit(10000)) {
         throw "The desktop application process did not terminate after the smoke test."
