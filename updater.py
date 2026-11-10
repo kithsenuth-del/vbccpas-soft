@@ -209,7 +209,7 @@ def _log_handoff(message):
         pass
 
 
-def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False):
+def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False, handoff_timeout=600):
     """Download a verified complete package and hand installation to PowerShell."""
     asset = release.get("_update_asset")
     if not asset:
@@ -318,7 +318,7 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
             # remains responsive while the handoff completes.
             _log_handoff("Breakaway is unavailable; keeping the updater alive until PowerShell completes.")
             try:
-                completion_code = child.wait(timeout=600.0)
+                completion_code = child.wait(timeout=float(handoff_timeout))
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError(
                     "The PowerShell installer has not completed after 10 minutes. "
