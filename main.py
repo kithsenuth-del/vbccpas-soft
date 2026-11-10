@@ -444,7 +444,7 @@ class App:
 		self.root.clipboard_append(recovery_code)
 		messagebox.showwarning(
 			'Save your administrator recovery code',
-			'Your one-time recovery code has been copied to the clipboard. Save it somewhere secure and offline. It will not be shown again.\\n\\n' + recovery_code,
+			'Your one-time recovery code has been copied to the clipboard. Save it somewhere secure and offline. It will not be shown again.\n\n' + recovery_code,
 			parent=self.root)
 		return True
 
@@ -1747,7 +1747,7 @@ class App:
 			record_security_event(DB_PATH, self.user['username'], 'administrator_recovery_code_rotated',
 			                     self.user['username'], 'New one-time recovery code generated; verifier only stored')
 			messagebox.showwarning('Save your new recovery code',
-				'This replaces any previous recovery code. The new code has been copied to the clipboard. Save it securely and offline; it will not be shown again.\\n\\n' + code,
+				'This replaces any previous recovery code. The new code has been copied to the clipboard. Save it securely and offline; it will not be shown again.\n\n' + code,
 				parent=self.root)
 		except Exception as exc:
 			messagebox.showerror('Could not generate recovery code', str(exc), parent=self.root)
