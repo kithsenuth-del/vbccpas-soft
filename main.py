@@ -203,6 +203,35 @@ def setup_database():
 		FirstLogin BOOLEAN DEFAULT 1
 	)
 	''')
+	def module_heading(self, parent, title, subtitle, actions=None):
+		"""Consistent page heading and toolbar for the Windows workspace."""
+		header = tk.Frame(parent, bg=self.colors['bg'])
+		header.pack(fill=tk.X, padx=18, pady=(18, 12))
+		tk.Label(header, text=title, font=('Segoe UI', 22, 'bold')).pack(anchor='w')
+		tk.Label(header, text=subtitle, foreground='#aeb4c7').pack(anchor='w', pady=(3, 10))
+		if actions:
+			bar = tk.Frame(header, bg=self.colors['bg'])
+			bar.pack(fill=tk.X, pady=(5, 0))
+			for caption, command in actions:
+				ttk.Button(bar, text=caption, command=command, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+		return header
+
+	def module_table(self, parent, columns, widths=None):
+		"""Create a consistent inset table surface for all record modules."""
+		surface = tk.Frame(parent, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
+		surface.pack(fill=tk.BOTH, expand=True, padx=18, pady=(0, 18))
+		inner = ttk.Frame(surface)
+		inner.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+		tree = ttk.Treeview(inner, columns=columns, show='headings')
+		for col in columns:
+			tree.heading(col, text=col.replace('ID', ' ID').replace('Date', ' Date'))
+			tree.column(col, width=(widths or {}).get(col, 145), minwidth=90, stretch=True, anchor='w')
+		scroll = ttk.Scrollbar(inner, orient='vertical', command=tree.yview)
+		tree.configure(yscrollcommand=scroll.set)
+		tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+		scroll.pack(side=tk.RIGHT, fill=tk.Y)
+		return tree
+
 	# Members
 	cur.execute('''
 	CREATE TABLE IF NOT EXISTS Members (
@@ -665,29 +694,24 @@ class App:
 
 	# Members
 	def view_members(self, parent):
-		top = parent
-		tb = ttk.Frame(top)
-		tb.pack(fill=tk.X, pady=(0,6))
-		left = ttk.Frame(tb)
-		left.pack(side=tk.LEFT)
-		right = ttk.Frame(tb)
-		right.pack(side=tk.RIGHT)
-		ttk.Button(left, text='Add Member', command=self.add_member_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
-		ttk.Button(left, text='Export CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])).pack(side=tk.LEFT, padx=6)
-		cols = ('MemberID','Name','Class','Roll','Email')
-		tree = ttk.Treeview(top, columns=cols, show='headings')
-		for c in cols:
-			tree.heading(c, text=c)
-			tree.column(c, width=140)
-		tree.pack(fill=tk.BOTH, expand=True)
+		self.module_heading(parent, 'Members', 'Manage registered society members and their details.', [
+			('＋  Add Member', self.add_member_dialog),
+			('↓  Export CSV', lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']))
+		])
+		tree = self.module_table(parent, ('MemberID','Name','Class','Roll','Email'),
+		                         {'MemberID':95, 'Name':240, 'Class':120, 'Roll':120, 'Email':240})
 		self.populate_members(tree)
-		def on_delete():
-			sel = tree.selection()
-			if not sel: return
-			mid = tree.item(sel[0])['values'][0]
-			if messagebox.askyesno('Delete','Remove member?'):
-				conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('DELETE FROM Members WHERE MemberID=?',(mid,));conn.commit();conn.close();self.populate_members(tree)
-		ttk.Button(right, text='Delete Selected', command=on_delete).pack()
+		def delete_selected():
+			selection = tree.selection()
+			if not selection:
+				messagebox.showwarning('Select member', 'Choose a member first.')
+				return
+			member_id = tree.item(selection[0])['values'][0]
+			if messagebox.askyesno('Delete member', 'Remove this member record?'):
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('DELETE FROM Members WHERE MemberID=?', (member_id,))
+				self.populate_members(tree)
+		ttk.Button(parent, text='Delete Selected', command=delete_selected).pack(anchor='e', padx=22, pady=(0, 14))
 	def add_member_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Member')
 		f=ttk.Frame(d, padding=12);f.pack()
@@ -702,17 +726,15 @@ class App:
 
 	# Events
 	def view_events(self, parent):
-		top=parent
-		tb=ttk.Frame(top);tb.pack(fill=tk.X)
-		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
-		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
-		ttk.Button(left,text='Add Event',command=self.add_event_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
-		cols=('EventID','Title','Date','Location')
-		tree=ttk.Treeview(top,columns=cols,show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
-		tree.pack(fill=tk.BOTH,expand=True)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT EventID,Title,Date,Location FROM Events');rows=cur.fetchall();conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
+		self.module_heading(parent, 'Events', 'Plan society activities, exhibitions and photo walks.', [
+			('＋  Add Event', self.add_event_dialog)
+		])
+		tree = self.module_table(parent, ('EventID','Title','Date','Location'),
+		                         {'EventID':95, 'Title':260, 'Date':180, 'Location':220})
+		with sqlite3.connect(DB_PATH) as conn:
+			rows = conn.execute('SELECT EventID,Title,Date,Location FROM Events ORDER BY Date DESC').fetchall()
+		for row in rows:
+			tree.insert('', tk.END, values=row)
 	def add_event_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Event')
 		f=ttk.Frame(d, padding=12);f.pack()
@@ -727,17 +749,15 @@ class App:
 
 	# Inventory
 	def view_inventory(self, parent):
-		top=parent
-		tb=ttk.Frame(top);tb.pack(fill=tk.X)
-		left = ttk.Frame(tb); left.pack(side=tk.LEFT)
-		right = ttk.Frame(tb); right.pack(side=tk.RIGHT)
-		ttk.Button(left,text='Add Item',command=self.add_item_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
-		cols=('ItemID','Name','Quantity','Notes')
-		tree=ttk.Treeview(top,columns=cols,show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=160)
-		tree.pack(fill=tk.BOTH,expand=True)
-		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory');rows=cur.fetchall();conn.close()
-		for r in rows: tree.insert('',tk.END,values=r)
+		self.module_heading(parent, 'Equipment & Inventory', 'Track society equipment, available quantities and item notes.', [
+			('＋  Add Item', self.add_item_dialog)
+		])
+		tree = self.module_table(parent, ('ItemID','Name','Quantity','Notes'),
+		                         {'ItemID':95, 'Name':240, 'Quantity':120, 'Notes':300})
+		with sqlite3.connect(DB_PATH) as conn:
+			rows = conn.execute('SELECT ItemID,Name,Quantity,Notes FROM Inventory ORDER BY Name').fetchall()
+		for row in rows:
+			tree.insert('', tk.END, values=row)
 	def add_item_dialog(self):
 		d=tk.Toplevel(self.root);d.title('Add Item')
 		f=ttk.Frame(d, padding=12);f.pack()
@@ -751,18 +771,14 @@ class App:
 
 	# Borrowing
 	def view_borrowing(self, parent):
-		top=parent
-		tb=ttk.Frame(top);tb.pack(fill=tk.X)
-		left=ttk.Frame(tb); left.pack(side=tk.LEFT)
-		ttk.Button(left,text='Borrow Item',command=self.borrow_dialog, style='Rounded.TButton').pack(side=tk.LEFT)
-		ttk.Button(left,text='Return Selected',command=lambda: self.return_selected_borrow(tree)).pack(side=tk.LEFT, padx=6)
-		ttk.Button(left,text='Refresh',command=lambda: self.populate_borrowed(tree)).pack(side=tk.LEFT, padx=6)
-		cols=('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned')
-		tree=ttk.Treeview(top,columns=cols,show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
-		tree.pack(fill=tk.BOTH,expand=True)
+		self.module_heading(parent, 'Borrowing', 'Issue equipment to members and record returns.', [
+			('＋  Borrow Item', self.borrow_dialog),
+			('↻  Refresh', lambda: self.populate_borrowed(tree))
+		])
+		tree = self.module_table(parent, ('BorrowID','Item','Member','BorrowDate','ReturnDate','Returned'),
+		                         {'BorrowID':85, 'Item':180, 'Member':180, 'BorrowDate':170, 'ReturnDate':170, 'Returned':100})
 		self.populate_borrowed(tree)
-
+		ttk.Button(parent, text='Return Selected', command=lambda: self.return_selected_borrow(tree)).pack(anchor='e', padx=22, pady=(0, 14))
 	def populate_borrowed(self, tree):
 		for r in tree.get_children(): tree.delete(r)
 		conn=sqlite3.connect(DB_PATH); cur=conn.cursor()
@@ -823,18 +839,13 @@ class App:
 
 	# Attendance
 	def view_attendance(self, parent):
-		top=parent
-		tb=ttk.Frame(top);tb.pack(fill=tk.X)
-		left=ttk.Frame(tb); left.pack(side=tk.LEFT)
-		ttk.Button(left,text='Mark Attendance',command=self.mark_attendance_dialog).pack(side=tk.LEFT)
-		ttk.Button(left,text='Refresh',command=lambda: self.populate_attendance(tree)).pack(side=tk.LEFT, padx=6)
-		ttk.Button(left,text='Export Attendance CSV',command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp'])).pack(side=tk.LEFT, padx=6)
-		cols=('AttID','Member','Event','Present','Timestamp')
-		tree=ttk.Treeview(top,columns=cols,show='headings')
-		for c in cols: tree.heading(c,text=c); tree.column(c,width=140)
-		tree.pack(fill=tk.BOTH,expand=True)
+		self.module_heading(parent, 'Attendance', 'Record and review member participation in society events.', [
+			('＋  Mark Attendance', self.mark_attendance_dialog),
+			('↓  Export CSV', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
+		])
+		tree = self.module_table(parent, ('AttID','Member','Event','Present','Timestamp'),
+		                         {'AttID':85, 'Member':220, 'Event':240, 'Present':100, 'Timestamp':200})
 		self.populate_attendance(tree)
-
 	def populate_attendance(self, tree):
 		for r in tree.get_children(): tree.delete(r)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute("SELECT a.AttID,m.Name,e.Title,a.Present,a.Timestamp FROM Attendance a LEFT JOIN Members m ON a.MemberID=m.MemberID LEFT JOIN Events e ON a.EventID=e.EventID");rows=cur.fetchall();conn.close()
@@ -860,19 +871,26 @@ class App:
 
 	# Reports & Security
 	def view_reports(self, parent):
-		top=parent
-		ttk.Label(top, text='Reports', font=('Segoe UI', 14, 'bold')).pack(pady=8)
-		btns = ttk.Frame(top)
-		btns.pack(pady=8)
-		ttk.Button(btns, text='Export Members CSV', command=lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		ttk.Button(btns, text='Export Inventory CSV', command=lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		ttk.Button(btns, text='Export Events CSV', command=lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		ttk.Button(btns, text='Export Borrowing CSV', command=lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-		ttk.Button(btns, text='Export Attendance CSV', command=lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']), style='Rounded.TButton').pack(side=tk.LEFT, padx=6)
-
+		self.module_heading(parent, 'Reports & Exports', 'Download clear CSV reports from your society records.')
+		items = [
+			('Members', 'Registered member directory', lambda: self.export_table('Members', ['MemberID','Name','Class','Roll','Email'])),
+			('Events', 'Society events and schedules', lambda: self.export_table('Events', ['EventID','Title','Date','Location','Notes'])),
+			('Inventory', 'Equipment and stock quantities', lambda: self.export_table('Inventory', ['ItemID','Name','Quantity','Notes'])),
+			('Borrowing', 'Equipment loans and returns', lambda: self.export_table('BorrowedItems', ['BorrowID','ItemID','MemberID','BorrowDate','ReturnDate','Returned'])),
+			('Attendance', 'Member attendance records', lambda: self.export_table('Attendance', ['AttID','MemberID','EventID','Present','Timestamp']))
+		]
+		grid = tk.Frame(parent, bg=self.colors['bg'])
+		grid.pack(fill=tk.BOTH, expand=True, padx=18, pady=8)
+		for col in range(2): grid.grid_columnconfigure(col, weight=1, uniform='report')
+		for index, (title, description, command) in enumerate(items):
+			card = tk.Frame(grid, bg=self.colors['card'], highlightthickness=1, highlightbackground='#30364a')
+			card.grid(row=index//2, column=index%2, sticky='ew', padx=7, pady=7, ipady=10)
+			tk.Label(card, text=title, font=('Segoe UI', 13, 'bold')).pack(anchor='w', padx=16, pady=(12, 3))
+			tk.Label(card, text=description, foreground='#aeb4c7').pack(anchor='w', padx=16, pady=(0, 10))
+			ttk.Button(card, text='Export CSV', command=command, style='Rounded.TButton').pack(anchor='w', padx=16, pady=(0, 10))
 	def view_security(self, parent):
 		top=parent
-		ttk.Label(top, text='Security / Users', font=('Segoe UI', 14, 'bold')).pack(pady=8)
+		self.module_heading(top, 'Security & Users', 'Manage application accounts and administrator access.')
 		if self.user.get('role') != 'admin':
 			ttk.Label(top, text='Admin access required to manage users.', style='Warning.TLabel').pack(pady=12)
 			return
@@ -907,7 +925,6 @@ class App:
 		tree.pack(fill=tk.BOTH,expand=True, pady=8)
 		tree.bind('<<TreeviewSelect>>', lambda event: self.load_security_selection(tree, username_var, role_var, member_id_var, selected_user_id))
 		self.populate_users(tree)
-
 	def populate_users(self, tree):
 		for r in tree.get_children(): tree.delete(r)
 		conn=sqlite3.connect(DB_PATH);cur=conn.cursor();cur.execute('SELECT UserID, Username, Role, MemberID FROM Users ORDER BY UserID');rows=cur.fetchall();conn.close()
