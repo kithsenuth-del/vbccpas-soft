@@ -41,7 +41,7 @@ try {
 
     if (-not $SkipPreBuildTests) {
         Write-Host "Running Python compilation checks..."
-        Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py
+        Invoke-Python -m py_compile main.py desktop_app.py server.py passkey_auth.py problem_checker.py updater.py updater_app.py build_info.py database_migrations.py test_integration.py verify_data_flow.py tests/test_passkey_recovery.py tests/test_updater.py tests/test_updater_package.py tests/test_updater_handoff_windows.py
 
         Write-Host "Running isolated integration and safety tests..."
         Invoke-Python tests/test_passkey_recovery.py
@@ -74,6 +74,8 @@ try {
     Write-Host "Simulating a complete Windows update, running-app closure, restart and permission checks..."
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $Root "tests\test_updater_windows.ps1")
     if ($LASTEXITCODE -ne 0) { throw "Windows updater end-to-end simulation failed." }
+    Write-Host "Testing the real Python-to-PowerShell handoff after the launcher exits..."
+    Invoke-Python tests/test_updater_handoff_windows.py
 
     if (Test-Path -LiteralPath $Dist) {
         Remove-Item -LiteralPath $Dist -Recurse -Force
