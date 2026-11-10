@@ -15,7 +15,7 @@ from pathlib import Path
 
 from database_migrations import create_verified_backup, database_inventory
 
-MIN_PASSWORD_LENGTH = 12
+MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 REQUIRED_RESTORE_TABLES = {
     "Users", "Members", "Events", "Inventory",
