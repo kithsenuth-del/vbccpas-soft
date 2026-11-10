@@ -5,7 +5,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $InstallerPath = (Resolve-Path -LiteralPath $InstallerPath).Path
-$TestRoot = Join-Path $env:RUNNER_TEMP ("VBCCPAS-Installer-Test-" + [Guid]::NewGuid().ToString("N"))
+$TempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+$TestRoot = Join-Path $TempRoot ("VBCCPAS-Installer-Test-" + [Guid]::NewGuid().ToString("N"))
 $InstallDir = Join-Path $TestRoot "Installed VBCCPAS Soft"
 
 try {
