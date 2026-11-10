@@ -730,17 +730,33 @@ class App:
 		tree = self.module_table(parent, ('MemberID','Name','Class','Roll','Email'),
 		                         {'MemberID':95, 'Name':240, 'Class':120, 'Roll':120, 'Email':240})
 		self.populate_members(tree)
-		def delete_selected():
+		def selected_member():
 			selection = tree.selection()
 			if not selection:
 				messagebox.showwarning('Select member', 'Choose a member first.')
-				return
-			member_id = tree.item(selection[0])['values'][0]
-			if messagebox.askyesno('Delete member', 'Remove this member record?'):
+				return None
+			return tree.item(selection[0])['values'][0]
+		def edit_selected():
+			member_id = selected_member()
+			if member_id is not None: self.edit_member_dialog(member_id)
+		def delete_selected():
+			member_id = selected_member()
+			if member_id is None: return
+			if not messagebox.askyesno('Delete member', 'Remove this member record? This cannot be undone.'): return
+			try:
 				with sqlite3.connect(DB_PATH) as conn:
+					linked = conn.execute('SELECT (SELECT COUNT(*) FROM Attendance WHERE MemberID=?) + (SELECT COUNT(*) FROM BorrowedItems WHERE MemberID=?)', (member_id, member_id)).fetchone()[0]
+					if linked:
+						messagebox.showwarning('Member has linked records', 'This member has attendance or borrowing history. Keep the record and edit its details instead.')
+						return
 					conn.execute('DELETE FROM Members WHERE MemberID=?', (member_id,))
-				self.populate_members(tree)
-		ttk.Button(parent, text='Delete Selected', command=delete_selected).pack(anchor='e', padx=22, pady=(0, 14))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not delete member', str(exc)); return
+			self.show_view('members')
+		actions = ttk.Frame(parent)
+		actions.pack(fill=tk.X, padx=22, pady=(0, 14))
+		ttk.Button(actions, text='Edit Selected', command=edit_selected, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(actions, text='Delete Selected', command=delete_selected).pack(side=tk.RIGHT)
 	def create_form_dialog(self, title, subtitle, fields, size='560x420'):
 		"""Build a consistent, modal form window for data-entry workflows."""
 		dialog = tk.Toplevel(self.root)
@@ -779,6 +795,31 @@ class App:
 		dialog.grab_set()
 		return dialog, variables, footer
 
+	def edit_member_dialog(self, member_id):
+		with sqlite3.connect(DB_PATH) as conn:
+			row = conn.execute('SELECT Name,Class,Roll,Email FROM Members WHERE MemberID=?', (member_id,)).fetchone()
+		if not row:
+			messagebox.showwarning('Member not found', 'The selected member no longer exists.')
+			self.show_view('members'); return
+		d, fields, footer = self.create_form_dialog('Edit Member', 'Update the member record. Existing history remains linked.',
+			[('name','Full name'),('class','Class / Grade'),('roll','Roll / Index'),('email','Email address')], '580x390')
+		for key, value in zip(('name','class','roll','email'), row): fields[key].set(value or '')
+		def save():
+			name, email = fields['name'].get().strip(), fields['email'].get().strip()
+			if not name:
+				messagebox.showwarning('Required field', 'Enter the member name.', parent=d); return
+			if email and ('@' not in email or '.' not in email.rsplit('@', 1)[-1]):
+				messagebox.showwarning('Invalid email', 'Enter a valid email address or leave it blank.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('UPDATE Members SET Name=?,Class=?,Roll=?,Email=? WHERE MemberID=?',
+						(name, fields['class'].get().strip(), fields['roll'].get().strip(), email, member_id))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not update member', str(exc), parent=d); return
+			d.destroy(); self.show_view('members')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Changes', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
+
 	def add_member_dialog(self):
 		d, fields, footer = self.create_form_dialog('Add Member', 'Enter the member details below.',
 			[('name','Full name'),('class','Class / Grade'),('roll','Roll / Index'),('email','Email address')], '580x390')
@@ -811,6 +852,60 @@ class App:
 			rows = conn.execute('SELECT EventID,Title,Date,Location FROM Events ORDER BY Date DESC').fetchall()
 		for row in rows:
 			tree.insert('', tk.END, values=row)
+		actions = ttk.Frame(parent)
+		actions.pack(fill=tk.X, padx=22, pady=(0, 14))
+		def selected_event():
+			selection = tree.selection()
+			if not selection:
+				messagebox.showwarning('Select event', 'Choose an event first.')
+				return None
+			return tree.item(selection[0])['values'][0]
+		def edit_selected():
+			event_id = selected_event()
+			if event_id is not None: self.edit_event_dialog(event_id)
+		def delete_selected():
+			event_id = selected_event()
+			if event_id is None: return
+			if not messagebox.askyesno('Delete event', 'Remove this event? Events with attendance records cannot be deleted.'): return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					linked = conn.execute('SELECT COUNT(*) FROM Attendance WHERE EventID=?', (event_id,)).fetchone()[0]
+					if linked:
+						messagebox.showwarning('Event has attendance records', 'Keep this event because attendance history is linked to it.')
+						return
+					conn.execute('DELETE FROM Events WHERE EventID=?', (event_id,))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not delete event', str(exc)); return
+			self.show_view('events')
+		ttk.Button(actions, text='Edit Selected', command=edit_selected, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(actions, text='Delete Selected', command=delete_selected).pack(side=tk.RIGHT)
+
+	def edit_event_dialog(self, event_id):
+		with sqlite3.connect(DB_PATH) as conn:
+			row = conn.execute('SELECT Title,Date,Location,Notes FROM Events WHERE EventID=?', (event_id,)).fetchone()
+		if not row:
+			messagebox.showwarning('Event not found', 'The selected event no longer exists.')
+			self.show_view('events'); return
+		d, fields, footer = self.create_form_dialog('Edit Event', 'Update event details. Attendance history remains linked.',
+			[('title','Event title'),('date','Event date (YYYY-MM-DD)'),('location','Location'),('notes','Notes')], '600x430')
+		for key, value in zip(('title','date','location','notes'), row): fields[key].set(value or '')
+		def save():
+			title, date_text = fields['title'].get().strip(), fields['date'].get().strip()
+			if not title:
+				messagebox.showwarning('Required field', 'Enter an event title.', parent=d); return
+			if date_text:
+				try: datetime.strptime(date_text, '%Y-%m-%d')
+				except ValueError:
+					messagebox.showwarning('Invalid date', 'Use YYYY-MM-DD for the event date.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('UPDATE Events SET Title=?,Date=?,Location=?,Notes=? WHERE EventID=?',
+						(title, date_text or None, fields['location'].get().strip(), fields['notes'].get().strip(), event_id))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not update event', str(exc), parent=d); return
+			d.destroy(); self.show_view('events')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Changes', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	def add_event_dialog(self):
 		d, fields, footer = self.create_form_dialog('Create Event', 'Add an event to the society calendar. Use YYYY-MM-DD for the date.',
@@ -881,7 +976,67 @@ class App:
 			for row in rows: tree.insert('', tk.END, values=row)
 		search_var.trace_add('write', refresh)
 		refresh()
-		ttk.Button(parent, text='Refresh Register', command=refresh, style='Rounded.TButton').pack(anchor='e', padx=22, pady=(0, 14))
+		actions = ttk.Frame(parent)
+		actions.pack(fill=tk.X, padx=22, pady=(0, 14))
+		def edit_selected():
+			selection = tree.selection()
+			if not selection:
+				messagebox.showwarning('Select equipment', 'Choose an equipment record first.')
+				return
+			self.edit_item_dialog(tree.item(selection[0])['values'][0])
+		ttk.Button(actions, text='Edit Selected Equipment', command=edit_selected, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(actions, text='Refresh Register', command=refresh).pack(side=tk.RIGHT)
+
+	def edit_item_dialog(self, item_id):
+		with sqlite3.connect(DB_PATH) as conn:
+			row = conn.execute('''SELECT Category,Name,AssetTag,Brand,Model,SerialNumber,ItemCondition,
+				Quantity,PurchaseDate,PurchaseCost,StorageLocation,Notes FROM Inventory WHERE ItemID=?''', (item_id,)).fetchone()
+		if not row:
+			messagebox.showwarning('Equipment not found', 'The selected equipment record no longer exists.')
+			self.show_view('inventory'); return
+		fields_spec = [
+			('category','Equipment category',['Camera','Lens','Audio / Mixer','Microphone','Lighting','Video / Media','Tripod / Support','Computer / Storage','Accessories','Furniture','General']),
+			('name','Item name / description'),('asset_tag','Society asset tag / ID'),('brand','Brand / manufacturer'),
+			('model','Model'),('serial','Serial number'),
+			('condition','Physical condition',['New','Excellent','Good','Fair','Needs repair','Unserviceable']),
+			('quantity','Available quantity'),('purchase_date','Purchase date (YYYY-MM-DD)'),
+			('purchase_cost','Purchase cost (optional)'),('location','Storage / usual location'),
+			('notes','Accessories, specifications or notes')
+		]
+		d, fields, footer = self.create_form_dialog('Edit Equipment Record', 'Update asset details. Quantity represents units currently available for issue.', fields_spec, '700x690')
+		for key, value in zip(('category','name','asset_tag','brand','model','serial','condition','quantity','purchase_date','purchase_cost','location','notes'), row):
+			fields[key].set('' if value is None else str(value))
+		def save():
+			name, quantity_text = fields['name'].get().strip(), fields['quantity'].get().strip()
+			date_text, cost_text = fields['purchase_date'].get().strip(), fields['purchase_cost'].get().strip().replace(',','')
+			if not name:
+				messagebox.showwarning('Required field', 'Enter an item name or description.', parent=d); return
+			try: quantity = int(quantity_text)
+			except ValueError:
+				messagebox.showwarning('Invalid quantity', 'Quantity must be a whole number of zero or greater.', parent=d); return
+			if quantity < 0:
+				messagebox.showwarning('Invalid quantity', 'Quantity cannot be negative.', parent=d); return
+			if date_text:
+				try: datetime.strptime(date_text, '%Y-%m-%d')
+				except ValueError:
+					messagebox.showwarning('Invalid date', 'Use YYYY-MM-DD for the purchase date.', parent=d); return
+			try: cost = float(cost_text) if cost_text else None
+			except ValueError:
+				messagebox.showwarning('Invalid cost', 'Enter a valid purchase cost or leave it blank.', parent=d); return
+			if cost is not None and cost < 0:
+				messagebox.showwarning('Invalid cost', 'Purchase cost cannot be negative.', parent=d); return
+			try:
+				with sqlite3.connect(DB_PATH) as conn:
+					conn.execute('''UPDATE Inventory SET Category=?,Name=?,AssetTag=?,Brand=?,Model=?,SerialNumber=?,
+						ItemCondition=?,Quantity=?,PurchaseDate=?,PurchaseCost=?,StorageLocation=?,Notes=? WHERE ItemID=?''',
+						(fields['category'].get(),name,fields['asset_tag'].get().strip(),fields['brand'].get().strip(),
+						 fields['model'].get().strip(),fields['serial'].get().strip(),fields['condition'].get(),
+						 quantity,date_text or None,cost,fields['location'].get().strip(),fields['notes'].get().strip(),item_id))
+			except sqlite3.Error as exc:
+				messagebox.showerror('Could not update equipment', str(exc), parent=d); return
+			d.destroy(); self.show_view('inventory')
+		ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+		ttk.Button(footer, text='Save Changes', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
 
 	def add_item_dialog(self):
 		fields_spec = [
