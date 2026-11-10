@@ -125,7 +125,11 @@ def restore_database(
     # Stale -wal/-shm sidecars must never be allowed to attach to the restored DB.
     checkpoint = sqlite3.connect(str(destination), timeout=10)
     try:
-        checkpoint.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        checkpoint_result = checkpoint.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if checkpoint_result and checkpoint_result[0] != 0:
+            raise sqlite3.OperationalError(
+                "The active database is busy; close other VBCCPAS windows before restoring."
+            )
     finally:
         checkpoint.close()
 
