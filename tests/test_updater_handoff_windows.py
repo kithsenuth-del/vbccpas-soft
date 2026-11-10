@@ -32,7 +32,7 @@ def make_package(marker_path):
         "Add-Content -LiteralPath (Join-Path $logDir 'update.log') -Value 'Update completed successfully'\n"
         "Set-Content -LiteralPath '" + escaped_marker
         + "' -Value 'HANDOFF_SURVIVED_PARENT_EXIT' -Encoding ASCII\n"
-        "if ($ScheduledTaskName) { try { $svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $svc.GetFolder('\\').DeleteTask($ScheduledTaskName, 0) } catch { } }\n"
+        "if ($ScheduledTaskName) { try { $svc = New-Object -ComObject Schedule.Service; $svc.Connect(); $svc.GetFolder('\').DeleteTask($ScheduledTaskName, 0) } catch { } }\n"
     )
     files = {
         "VBCCPAS-Soft.exe": b"placeholder target application",
@@ -147,7 +147,7 @@ def main():
                 + result.stdout + "\n" + result.stderr
             )
 
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + 30
         while time.monotonic() < deadline and not marker.is_file():
             time.sleep(0.25)
 
