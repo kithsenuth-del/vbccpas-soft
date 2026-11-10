@@ -70,6 +70,13 @@ jobs:
           $shortcut = Join-Path $env:RUNNER_TEMP "VBCCPAS-Soft-test.lnk"
           ./Create-Desktop-Shortcut.ps1 -TargetExe "$PWD/dist/VBCCPAS-Soft.exe" -ShortcutPath $shortcut
           if (-not (Test-Path -LiteralPath $shortcut -PathType Leaf)) { throw "Shortcut was not created." }
+      - name: Run Windows updater recovery regression tests
+        shell: pwsh
+        run: .\tests\test_updater_recovery.ps1
+      - name: Run Windows updater end-to-end installation and rollback tests
+        shell: pwsh
+        timeout-minutes: 15
+        run: .\tests\test_updater_windows.ps1
       - name: Upload verified Windows release package
         uses: actions/upload-artifact@v4
         with:
