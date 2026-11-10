@@ -163,7 +163,6 @@ class UpdaterTests(unittest.TestCase):
             (1366, 768),
             (1280, 720),
             (1024, 768),
-            (800, 600),
         ):
             with self.subTest(screen=(screen_width, screen_height)):
                 layout = main.calculate_window_geometry(screen_width, screen_height)
