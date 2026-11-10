@@ -21,6 +21,8 @@ try {
     New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
     $Backup = Join-Path $BackupDir "preserve-this-backup.db"
     [IO.File]::WriteAllText($Backup, "VBCCPAS-BACKUP-PRESERVATION-TEST")
+    $UserFile = Join-Path $InstallDir "society-notes.txt"
+    [IO.File]::WriteAllText($UserFile, "VBCCPAS-USER-FILE-PRESERVATION-TEST")
 
     $StartMenuShortcut = Join-Path ([Environment]::GetFolderPath("ApplicationData")) "Microsoft\Windows\Start Menu\Programs\VBCCPAS Soft\VBCCPAS Soft.lnk"
     $DesktopShortcut = Join-Path ([Environment]::GetFolderPath("DesktopDirectory")) "VBCCPAS Soft.lnk"
@@ -46,6 +48,9 @@ try {
     if ((Get-Content -LiteralPath $Backup -Raw) -ne "VBCCPAS-BACKUP-PRESERVATION-TEST") {
         throw "The installer overwrote an existing user backup."
     }
+    if ((Get-Content -LiteralPath $UserFile -Raw) -ne "VBCCPAS-USER-FILE-PRESERVATION-TEST") {
+        throw "The installer overwrote an existing user-created file."
+    }
     if (-not (Test-Path -LiteralPath $StartMenuShortcut -PathType Leaf)) {
         throw "The Start Menu shortcut was not created."
     }
@@ -68,6 +73,13 @@ try {
     }
     if ((Get-Content -LiteralPath $Database -Raw) -ne "VBCCPAS-USER-DATA-PRESERVATION-TEST") {
         throw "The society database contents changed during uninstall."
+    }
+    if ((Get-Content -LiteralPath $Backup -Raw) -ne "VBCCPAS-BACKUP-PRESERVATION-TEST") {
+        throw "The backup contents changed during uninstall."
+    }
+    if (-not (Test-Path -LiteralPath $UserFile -PathType Leaf) -or
+        (Get-Content -LiteralPath $UserFile -Raw) -ne "VBCCPAS-USER-FILE-PRESERVATION-TEST") {
+        throw "The uninstaller deleted or changed a user-created file."
     }
     if (Test-Path -LiteralPath $StartMenuShortcut) {
         throw "The uninstaller left the Start Menu shortcut behind."
