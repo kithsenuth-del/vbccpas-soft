@@ -1,5 +1,6 @@
 """Secure GitHub Releases downloader and full-package Windows installer launcher."""
 import hashlib
+import base64
 import io
 import json
 import os
@@ -9,6 +10,7 @@ import subprocess
 import tempfile
 import urllib.parse
 import urllib.request
+import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -209,6 +211,96 @@ def _log_handoff(message):
         pass
 
 
+def _schedule_powershell_update_task(powershell, script, process_id, updater_process_id,
+                                      target, payload, repair_mode, stage, timeout=30):
+    """Run the installer through Task Scheduler when Windows denies job breakaway."""
+    task_name = "VBCCPAS-Update-" + uuid.uuid4().hex
+    script_args = [
+        "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+        "-ExecutionPolicy", "Bypass", "-File", str(script),
+        "-ProcessId", str(int(process_id)),
+        "-UpdaterProcessId", str(int(updater_process_id or 0)),
+        "-TargetExe", str(target),
+        "-PackageDirectory", str(payload),
+        "-ScheduledTaskName", task_name,
+    ]
+    if repair_mode:
+        script_args.append("-RepairMode")
+
+    task_payload = {
+        "TaskName": task_name,
+        "PowerShell": str(powershell),
+        "Arguments": subprocess.list2cmdline(script_args),
+        "WorkingDirectory": str(stage),
+    }
+    encoded_payload = base64.b64encode(
+        json.dumps(task_payload).encode("utf-8")
+    ).decode("ascii")
+    helper_script = r"""
+param([Parameter(Mandatory=$true)][string]$PayloadBase64)
+$ErrorActionPreference = "Stop"
+$data = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadBase64)) | ConvertFrom-Json
+$service = New-Object -ComObject Schedule.Service
+$service.Connect()
+$folder = $service.GetFolder("\\")
+$definition = $service.NewTask(0)
+$definition.RegistrationInfo.Description = "Temporary VBCCPAS update handoff"
+$definition.Settings.Enabled = $true
+$definition.Settings.Hidden = $true
+$definition.Settings.AllowDemandStart = $true
+$definition.Settings.StartWhenAvailable = $true
+$definition.Settings.DisallowStartIfOnBatteries = $false
+$definition.Settings.StopIfGoingOnBatteries = $false
+$definition.Settings.ExecutionTimeLimit = "PT30M"
+$definition.Principal.UserId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$definition.Principal.LogonType = 3
+$definition.Principal.RunLevel = 0
+$trigger = $definition.Triggers.Create(1)
+$trigger.StartBoundary = (Get-Date).AddDays(30).ToString("s")
+$trigger.Enabled = $false
+$action = $definition.Actions.Create(0)
+$action.Path = $data.PowerShell
+$action.Arguments = $data.Arguments
+$action.WorkingDirectory = $data.WorkingDirectory
+$registered = $folder.RegisterTaskDefinition($data.TaskName, $definition, 6, $null, $null, 3, $null)
+$null = $registered.Run($null)
+$deadline = (Get-Date).AddSeconds(15)
+$state = 0
+do {
+    $registered = $folder.GetTask($data.TaskName, 0)
+    $state = $registered.State
+    if ($state -eq 4 -or $state -eq 2) { break }
+    Start-Sleep -Milliseconds 200
+} while ((Get-Date) -lt $deadline)
+if ($state -ne 4 -and $state -ne 2) {
+    try { $folder.DeleteTask($data.TaskName, 0) } catch { }
+    throw "Scheduled updater task did not start. Task state: $state"
+}
+Write-Output ("TASK_STARTED:" + $data.TaskName)
+"""
+    helper_path = Path(stage) / "register-update-task.ps1"
+    helper_path.write_text(helper_script, encoding="utf-8")
+    command = [
+        str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
+        "-ExecutionPolicy", "Bypass", "-File", str(helper_path),
+        "-PayloadBase64", encoded_payload,
+    ]
+    no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    result = subprocess.run(
+        command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+        timeout=float(timeout), creationflags=no_window, check=False,
+    )
+    expected = "TASK_STARTED:" + task_name
+    if result.returncode != 0 or expected not in (result.stdout or ""):
+        detail = (result.stdout or "") + "\\n" + (result.stderr or "")
+        raise RuntimeError(
+            "Windows denied process breakaway and the scheduled updater task could not be started. "
+            "No application files were changed. " + detail.strip()
+        )
+    _log_handoff("Scheduled Task started PowerShell outside the updater job; task=" + task_name)
+    return task_name
+
+
 def download_and_launch(release, target_exe, process_id, updater_process_id=0, repair_mode=False, handoff_timeout=600):
     """Download a verified complete package and hand installation to PowerShell."""
     asset = release.get("_update_asset")
@@ -310,42 +402,26 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                      + "; command=" + subprocess.list2cmdline(command)
                      + "; stage=" + str(stage))
         if breakaway_rejected:
-            # Some Windows hosts forbid CREATE_BREAKAWAY_FROM_JOB. In that
-            # case the child may be terminated when this updater exits. Keep
-            # the updater process alive until PowerShell finishes instead of
-            # returning to the GUI and losing the installation. The caller
-            # runs this function on a worker thread, so the updater window
-            # remains responsive while the handoff completes.
-            _log_handoff("Breakaway is unavailable; keeping the updater alive until PowerShell completes.")
+            # The PowerShell script waits for the GUI updater to exit before
+            # replacing VBCCPAS-Updater.exe. It therefore cannot be kept as a
+            # child while the updater waits. Task Scheduler starts the real
+            # installer outside the updater's Windows Job Object; it can wait
+            # for this process to exit and then safely replace the updater.
+            _log_handoff("Breakaway is unavailable; scheduling the installer outside the updater job.")
             try:
-                completion_code = child.wait(timeout=float(handoff_timeout))
-            except subprocess.TimeoutExpired as exc:
+                child.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                pass
+            else:
                 raise RuntimeError(
-                    "The PowerShell installer has not completed after 10 minutes. "
-                    "Keep the updater open and check %LOCALAPPDATA%\\VBCCPAS\\update.log."
-                ) from exc
-            if not isinstance(completion_code, int):
-                raise RuntimeError("The PowerShell installer returned no usable exit status.")
-            _log_handoff("PowerShell completed while updater remained alive; exit_code="
-                         + str(completion_code))
-            if completion_code == 0:
-                try:
-                    with update_log_path.open("rb") as update_log:
-                        update_log.seek(previous_update_log_size)
-                        new_update_log = update_log.read().decode("utf-8", errors="replace").replace("\x00", "")
-                except OSError:
-                    new_update_log = ""
-                if "Update completed successfully" not in new_update_log:
-                    raise RuntimeError(
-                        "PowerShell exited without recording a successful application update. "
-                        "Check %LOCALAPPDATA%\\VBCCPAS\\update.log and updater-powershell.log."
-                    )
-            if completion_code != 0:
-                raise RuntimeError(
-                    "The PowerShell installer failed with exit code "
-                    + str(completion_code) + ". Check %LOCALAPPDATA%\\VBCCPAS\\update.log "
-                    "and updater-powershell.log."
+                    "The temporary PowerShell process exited before the scheduled-task fallback was started. "
+                    "Check updater-powershell.log."
                 )
+            task_name = _schedule_powershell_update_task(
+                powershell, script, process_id, updater_process_id,
+                target, payload, repair_mode, stage, timeout=handoff_timeout,
+            )
+            _log_handoff("Update delegated to scheduled task; updater may now close; task=" + task_name)
         else:
             # A created PID only proves CreateProcess succeeded. Detect
             # immediate startup/argument failures before the GUI updater exits.
