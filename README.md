@@ -2,20 +2,33 @@
 
 VBCCPAS Soft is a local society-management application for Windows. The unified desktop application contains the existing desktop management modules and can start/open the local browser dashboard from the same interface.
 
-## Run the application (Windows)
+## Install VBCCPAS Soft on Windows
 
-The packaged **VBCCPAS-Soft.exe** opens the desktop application. Sign in with the executive administrator account. The local web server starts from inside the application; use **Web Dashboard** in the sidebar to open the browser dashboard.
+The recommended installation is the signed-in Windows user's own account; administrator permission is not required.
 
-No Command Prompt window or separate server process is needed for normal use.
+1. Download **VBCCPAS-Soft-Setup.exe** from the latest GitHub release.
+2. Double-click the setup file. If Windows displays its normal publisher/security prompt, verify that the file came from this repository before continuing.
+3. Follow the setup wizard and keep the suggested install folder, or choose another folder where your Windows account has write permission.
+4. Optionally select **Create a desktop shortcut**.
+5. Finish setup. You can launch **VBCCPAS Soft** from the Start menu or desktop shortcut.
 
-## One-click desktop shortcut
+The installer places the application in `%LOCALAPPDATA%\Programs\VBCCPAS Soft` by default, so the application can write its local SQLite database without requiring administrator access. The application opens its desktop interface; use **Web Dashboard** in the sidebar to open the integrated local browser dashboard. No separate server or Command Prompt is needed.
 
-1. Extract the complete ZIP to a permanent folder on your Windows computer.
-2. Keep VBCCPAS-Soft.exe, Create-Desktop-Shortcut.ps1, and Setup-VBCCPAS-Shortcut.bat together in that folder.
-3. Double-click Setup-VBCCPAS-Shortcut.bat once. It creates a **VBCCPAS Soft** shortcut on your desktop and launches the application.
-4. After setup, double-click the desktop shortcut whenever you want to launch VBCCPAS Soft.
+### Uninstall VBCCPAS Soft
 
-Do not move or delete the extracted application folder after creating the shortcut; the shortcut points to the EXE in that folder. The EXE can also be opened directly.
+1. Close VBCCPAS Soft.
+2. Open **Windows Settings → Apps → Installed apps** (or **Apps & features** on some Windows versions).
+3. Find **VBCCPAS Soft**, choose **Uninstall**, and follow the prompts. You can also use **Uninstall VBCCPAS Soft** in the Start menu.
+
+**Your society data is deliberately preserved.** The uninstaller removes the installed application files and shortcuts, but does not remove `society.db`, backups, exports, or other user-created files in the installation folder. Reinstalling into the same folder can therefore retain the existing database. If you ever want to remove that data too, first make and verify a separate backup; delete the remaining data folder yourself only after confirming it is no longer needed.
+
+### Portable installation (alternative)
+
+You can still use the portable ZIP if you prefer not to run a setup wizard:
+
+1. Extract the complete **VBCCPAS-Soft-Windows.zip** to a permanent folder where your Windows account has read/write permission.
+2. Double-click **Setup-VBCCPAS-Shortcut.bat** once to create a desktop shortcut and launch the application.
+3. Keep the application folder in place; the shortcut points to the executable inside it.
 
 ## Build from source
 
@@ -23,7 +36,7 @@ On Windows, install **Python 3.11** with the Python launcher (`py`). Node.js is 
 
     .\build_exes.ps1
 
-The build script installs the Python dependencies, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater download/package tests, data-flow safety checks, PowerShell syntax validation, an interrupted-update rollback test, and a Windows end-to-end updater simulation. The Windows simulation checks normal application closure, waiting for the old process, ZIP download/integrity verification, replacement, restart, permission probes, and preservation of society.db, backups, and user-data. The build also verifies every ZIP entry and writes a SHA-256 sidecar. If Node.js is installed, it checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
+The build script installs the Python dependencies, requires Inno Setup 6 to compile the Windows installer, stamps the current Git commit into the executable, runs Python compilation, passkey recovery tests, updater download/package tests, data-flow safety checks, PowerShell syntax validation, an interrupted-update rollback test, and a Windows end-to-end updater simulation. The Windows simulations check normal application closure, waiting for the old process, ZIP download/integrity verification, replacement, restart, permission probes, preservation of society.db/backups/user-data, and setup/uninstall while proving that user data survives uninstall. The build also verifies every ZIP entry and writes a SHA-256 sidecar. If Node.js is installed, it checks the dashboard JavaScript. The isolated web/desktop integration suite runs in the preceding Linux CI job; it is kept out of the local Windows packaging script because its temporary SQLite-file cleanup currently relies on POSIX file-unlink behavior.
 
 A successful build produces:
 
@@ -38,7 +51,7 @@ The build script does not create a shortcut on the build computer by default. To
 
     .\build_exes.ps1 -CreateDesktopShortcut
 
-Distribute the complete `VBCCPAS-Soft-Windows.zip` rather than only the main EXE. Extract it to a permanent folder on the destination computer and run `Setup-VBCCPAS-Shortcut.bat`.
+For normal use, distribute `VBCCPAS-Soft-Setup.exe` and its `.sha256` checksum. The portable ZIP remains available as an alternative.
 
 ## First-time administrator setup
 
