@@ -266,6 +266,85 @@ def clear_login_failures(database_path):
         conn.execute("DELETE FROM LoginGuard WHERE GuardID=1")
 
 
+def validate_admin_pin(pin):
+    """Require a user-chosen five-digit secondary administrator PIN."""
+    import re
+    return isinstance(pin, str) and bool(re.fullmatch(r"[0-9]{5}", pin))
+
+
+def admin_pin_configured(database_path, username="admin"):
+    path = Path(database_path).expanduser().resolve()
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='AdminPin'"
+        ).fetchone()
+        if not exists:
+            return False
+        return conn.execute(
+            "SELECT 1 FROM AdminPin WHERE PinID=1 AND Username=?",
+            (username,),
+        ).fetchone() is not None
+
+
+def set_admin_pin(database_path, username, pin):
+    """Set a five-digit PIN using a salted, deliberately slow verifier."""
+    import hashlib
+    import secrets
+    if not validate_admin_pin(pin):
+        raise ValueError("Administrator PIN must contain exactly five digits.")
+    path = Path(database_path).expanduser().resolve()
+    salt = secrets.token_bytes(16)
+    iterations = 310000
+    digest = hashlib.pbkdf2_hmac("sha256", pin.encode("ascii"), salt, iterations)
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM Users WHERE Username=? AND lower(Role)='admin'",
+            (username,),
+        ).fetchone():
+            raise PermissionError("An administrator account is required to set a PIN.")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS AdminPin (
+                PinID INTEGER PRIMARY KEY CHECK(PinID=1),
+                Username TEXT NOT NULL,
+                Salt BLOB NOT NULL,
+                Digest BLOB NOT NULL,
+                Iterations INTEGER NOT NULL,
+                UpdatedAt TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO AdminPin (PinID, Username, Salt, Digest, Iterations, UpdatedAt)
+            VALUES (1, ?, ?, ?, ?, ?)
+            ON CONFLICT(PinID) DO UPDATE SET
+                Username=excluded.Username, Salt=excluded.Salt,
+                Digest=excluded.Digest, Iterations=excluded.Iterations,
+                UpdatedAt=excluded.UpdatedAt
+        """, (username, salt, digest, iterations, datetime.now(timezone.utc).isoformat()))
+
+
+def verify_admin_pin(database_path, username, pin):
+    """Verify a stored administrator PIN without exposing its verifier."""
+    import hashlib
+    import hmac
+    if not isinstance(pin, str) or not pin.isdigit() or len(pin) != 5:
+        return False
+    path = Path(database_path).expanduser().resolve()
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='AdminPin'"
+        ).fetchone()
+        if not exists:
+            return False
+        row = conn.execute(
+            "SELECT Salt, Digest, Iterations FROM AdminPin WHERE PinID=1 AND Username=?",
+            (username,),
+        ).fetchone()
+    if not row:
+        return False
+    supplied = hashlib.pbkdf2_hmac("sha256", pin.encode("ascii"), row[0], int(row[2]))
+    return hmac.compare_digest(supplied, row[1])
+
+
 def reset_admin_password_with_recovery_code(
     database_path, recovery_code, new_password
 ):
@@ -278,6 +357,8 @@ def reset_admin_password_with_recovery_code(
     valid, reason = validate_password(new_password)
     if not valid:
         raise ValueError(reason)
+    if new_pin is not None and not validate_admin_pin(new_pin):
+        raise ValueError("Administrator PIN must contain exactly five digits.")
     code = re.sub(r"[-\\s]", "", str(recovery_code or "")).upper()
     if not re.fullmatch(r"[0-9A-F]{32}", code):
         record_login_failure(database_path)
@@ -294,6 +375,13 @@ def reset_admin_password_with_recovery_code(
         ).fetchone() else None
         if guard and guard[0] > now:
             raise PermissionError("Too many failed attempts. Wait before trying again.")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS AdminRecovery (
+                RecoveryID INTEGER PRIMARY KEY CHECK(RecoveryID=1),
+                Username TEXT NOT NULL, Salt BLOB NOT NULL, Digest BLOB NOT NULL,
+                Iterations INTEGER NOT NULL, CreatedAt TEXT NOT NULL, UsedAt TEXT
+            )
+        """)
         row = conn.execute(
             "SELECT Username, Salt, Digest, Iterations, UsedAt "
             "FROM AdminRecovery WHERE RecoveryID=1"
@@ -318,6 +406,25 @@ def reset_admin_password_with_recovery_code(
             "UPDATE Users SET Password=? WHERE Username=?",
             (_password_hash_for_recovery(new_password), username),
         )
+        if new_pin is not None:
+            import secrets
+            salt = secrets.token_bytes(16)
+            iterations = 310000
+            digest = hashlib.pbkdf2_hmac("sha256", new_pin.encode("ascii"), salt, iterations)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS AdminPin (
+                    PinID INTEGER PRIMARY KEY CHECK(PinID=1),
+                    Username TEXT NOT NULL, Salt BLOB NOT NULL, Digest BLOB NOT NULL,
+                    Iterations INTEGER NOT NULL, UpdatedAt TEXT NOT NULL
+                )
+            """)
+            conn.execute("""
+                INSERT INTO AdminPin (PinID, Username, Salt, Digest, Iterations, UpdatedAt)
+                VALUES (1, ?, ?, ?, ?, ?)
+                ON CONFLICT(PinID) DO UPDATE SET Username=excluded.Username,
+                    Salt=excluded.Salt, Digest=excluded.Digest,
+                    Iterations=excluded.Iterations, UpdatedAt=excluded.UpdatedAt
+            """, (username, salt, digest, iterations, datetime.now(timezone.utc).isoformat()))
         conn.execute(
             "UPDATE AdminRecovery SET UsedAt=? WHERE RecoveryID=1",
             (datetime.now(timezone.utc).isoformat(),),
