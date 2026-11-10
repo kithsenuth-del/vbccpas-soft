@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import updater
+import updater_app
 
 
 class FakeResponse:
@@ -79,6 +80,19 @@ def complete_package_bytes():
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_updater_window_log_writes_one_record_per_line(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(updater_app.os.environ, {"LOCALAPPDATA": folder}):
+                updater_app._log("first window diagnostic")
+                updater_app._log("second window diagnostic")
+            log_path = Path(folder) / "VBCCPAS" / "updater-launch.log"
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 2)
+            self.assertIn("first window diagnostic", lines[0])
+            self.assertIn("second window diagnostic", lines[1])
+
     def test_handoff_log_writes_one_record_per_line(self):
         import tempfile
         from unittest.mock import patch
