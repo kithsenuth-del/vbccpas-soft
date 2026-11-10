@@ -155,3 +155,188 @@ def restore_database(
             pass
         raise
     return safety_backup
+
+
+# Administrator recovery codes are generated once, displayed once, and stored
+# only as salted PBKDF2 verifiers. They are independent of the account password.
+RECOVERY_HASH_ITERATIONS = 310000
+LOGIN_FAILURE_LIMIT = 5
+LOGIN_LOCK_BASE_SECONDS = 300
+LOGIN_LOCK_MAX_SECONDS = 3600
+
+
+def create_admin_recovery_code(database_path, username="admin"):
+    """Rotate and return a one-time administrator recovery code."""
+    import hashlib
+    import secrets
+
+    code = secrets.token_hex(16).upper()
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", code.encode("ascii"), salt, RECOVERY_HASH_ITERATIONS
+    )
+    with sqlite3.connect(str(Path(database_path).expanduser().resolve()), timeout=10) as conn:
+        admin = conn.execute(
+            "SELECT 1 FROM Users WHERE Username=? AND lower(Role)='admin'",
+            (username,),
+        ).fetchone()
+        if not admin:
+            raise PermissionError("An administrator account is required to create a recovery code.")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS AdminRecovery (
+                RecoveryID INTEGER PRIMARY KEY CHECK(RecoveryID=1),
+                Username TEXT NOT NULL,
+                Salt BLOB NOT NULL,
+                Digest BLOB NOT NULL,
+                Iterations INTEGER NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UsedAt TEXT
+            )
+        """)
+        conn.execute("""
+            INSERT INTO AdminRecovery
+                (RecoveryID, Username, Salt, Digest, Iterations, CreatedAt, UsedAt)
+            VALUES (1, ?, ?, ?, ?, ?, NULL)
+            ON CONFLICT(RecoveryID) DO UPDATE SET
+                Username=excluded.Username, Salt=excluded.Salt,
+                Digest=excluded.Digest, Iterations=excluded.Iterations,
+                CreatedAt=excluded.CreatedAt, UsedAt=NULL
+        """, (username, salt, digest, RECOVERY_HASH_ITERATIONS,
+              datetime.now(timezone.utc).isoformat()))
+    return code
+
+
+def login_lock_remaining(database_path):
+    """Return remaining global desktop-login lockout seconds, or zero."""
+    path = Path(database_path).expanduser().resolve()
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS LoginGuard (
+                GuardID INTEGER PRIMARY KEY CHECK(GuardID=1),
+                Failures INTEGER NOT NULL DEFAULT 0,
+                LockedUntil REAL NOT NULL DEFAULT 0,
+                UpdatedAt TEXT NOT NULL
+            )
+        """)
+        row = conn.execute(
+            "SELECT LockedUntil FROM LoginGuard WHERE GuardID=1"
+        ).fetchone()
+    return max(0, int((row[0] if row else 0) - __import__("time").time() + 0.999))
+
+
+def record_login_failure(database_path):
+    """Record a failed password/recovery attempt and apply escalating lockout."""
+    import time
+    path = Path(database_path).expanduser().resolve()
+    now = time.time()
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS LoginGuard (
+                GuardID INTEGER PRIMARY KEY CHECK(GuardID=1),
+                Failures INTEGER NOT NULL DEFAULT 0,
+                LockedUntil REAL NOT NULL DEFAULT 0,
+                UpdatedAt TEXT NOT NULL
+            )
+        """)
+        row = conn.execute(
+            "SELECT Failures, LockedUntil FROM LoginGuard WHERE GuardID=1"
+        ).fetchone()
+        failures, locked_until = row if row else (0, 0)
+        if locked_until > now:
+            return max(1, int(locked_until - now + 0.999))
+        failures += 1
+        lock_seconds = 0
+        if failures >= LOGIN_FAILURE_LIMIT:
+            exponent = min(failures - LOGIN_FAILURE_LIMIT, 4)
+            lock_seconds = min(LOGIN_LOCK_BASE_SECONDS * (2 ** exponent),
+                               LOGIN_LOCK_MAX_SECONDS)
+        conn.execute("""
+            INSERT INTO LoginGuard (GuardID, Failures, LockedUntil, UpdatedAt)
+            VALUES (1, ?, ?, ?)
+            ON CONFLICT(GuardID) DO UPDATE SET
+                Failures=excluded.Failures, LockedUntil=excluded.LockedUntil,
+                UpdatedAt=excluded.UpdatedAt
+        """, (failures, now + lock_seconds, datetime.now(timezone.utc).isoformat()))
+    return lock_seconds
+
+
+def clear_login_failures(database_path):
+    path = Path(database_path).expanduser().resolve()
+    with sqlite3.connect(str(path), timeout=10) as conn:
+        conn.execute("DELETE FROM LoginGuard WHERE GuardID=1")
+
+
+def reset_admin_password_with_recovery_code(
+    database_path, recovery_code, new_password
+):
+    """Consume the one-time recovery code and replace the admin password."""
+    import hashlib
+    import hmac
+    import re
+    import time
+
+    valid, reason = validate_password(new_password)
+    if not valid:
+        raise ValueError(reason)
+    code = re.sub(r"[-\\s]", "", str(recovery_code or "")).upper()
+    if not re.fullmatch(r"[0-9A-F]{32}", code):
+        record_login_failure(database_path)
+        raise PermissionError("The recovery code was not accepted.")
+    path = Path(database_path).expanduser().resolve()
+    conn = sqlite3.connect(str(path), timeout=10)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        now = time.time()
+        guard = conn.execute(
+            "SELECT LockedUntil FROM LoginGuard WHERE GuardID=1"
+        ).fetchone() if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='LoginGuard'"
+        ).fetchone() else None
+        if guard and guard[0] > now:
+            raise PermissionError("Too many failed attempts. Wait before trying again.")
+        row = conn.execute(
+            "SELECT Username, Salt, Digest, Iterations, UsedAt "
+            "FROM AdminRecovery WHERE RecoveryID=1"
+        ).fetchone()
+        if not row or row[4]:
+            raise PermissionError("The recovery code was not accepted or has already been used.")
+        username, salt, stored_digest, iterations, _used = row
+        supplied = hashlib.pbkdf2_hmac(
+            "sha256", code.encode("ascii"), salt, int(iterations)
+        )
+        if not hmac.compare_digest(supplied, stored_digest):
+            conn.rollback()
+            record_login_failure(path)
+            raise PermissionError("The recovery code was not accepted.")
+        admin = conn.execute(
+            "SELECT 1 FROM Users WHERE Username=? AND lower(Role)='admin'",
+            (username,),
+        ).fetchone()
+        if not admin:
+            raise PermissionError("The administrator account could not be verified.")
+        conn.execute(
+            "UPDATE Users SET Password=? WHERE Username=?",
+            (_password_hash_for_recovery(new_password), username),
+        )
+        conn.execute(
+            "UPDATE AdminRecovery SET UsedAt=? WHERE RecoveryID=1",
+            (datetime.now(timezone.utc).isoformat(),),
+        )
+        conn.execute("DELETE FROM LoginGuard WHERE GuardID=1")
+        conn.commit()
+        return username
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _password_hash_for_recovery(password):
+    import hashlib
+    import secrets
+    salt = secrets.token_bytes(16)
+    iterations = 310000
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return "pbkdf2_sha256$" + str(iterations) + "$" + salt.hex() + "$" + digest.hex()
