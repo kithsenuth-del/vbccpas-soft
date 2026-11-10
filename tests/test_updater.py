@@ -81,6 +81,76 @@ def complete_package_bytes():
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_fresh_database_uses_random_recoverable_admin_password(self):
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        previous_password = main.INITIAL_ADMIN_PASSWORD
+        previous_password_file = main.INITIAL_ADMIN_PASSWORD_FILE
+        with tempfile.TemporaryDirectory() as folder:
+            local_app_data = Path(folder) / "local"
+            database_path = Path(folder) / "society.db"
+            try:
+                main.INITIAL_ADMIN_PASSWORD = None
+                main.INITIAL_ADMIN_PASSWORD_FILE = None
+                with patch.object(main, "DB_PATH", str(database_path)), patch.dict(
+                    main.os.environ,
+                    {"LOCALAPPDATA": str(local_app_data), "VBCCPAS_ADMIN_PASSWORD": ""},
+                ):
+                    main.setup_database()
+                    password_file = Path(main.get_initial_admin_password_file())
+                    generated_password = password_file.read_text(encoding="utf-8")
+                    self.assertTrue(generated_password)
+                    self.assertNotEqual(generated_password, "admin123")
+                    self.assertEqual(main.INITIAL_ADMIN_PASSWORD, generated_password)
+
+                    with sqlite3.connect(database_path) as connection:
+                        stored_hash = connection.execute(
+                            "SELECT Password FROM Users WHERE Username='admin'"
+                        ).fetchone()[0]
+                    self.assertTrue(main.verify_password(generated_password, stored_hash))
+
+                    # If the first-run dialog is dismissed before sign-in,
+                    # the same temporary credential is redisplayed next time.
+                    main.INITIAL_ADMIN_PASSWORD = None
+                    main.setup_database()
+                    self.assertEqual(main.INITIAL_ADMIN_PASSWORD, generated_password)
+                    main.clear_initial_admin_password_file()
+                    self.assertFalse(password_file.exists())
+            finally:
+                main.INITIAL_ADMIN_PASSWORD = previous_password
+                main.INITIAL_ADMIN_PASSWORD_FILE = previous_password_file
+
+    def test_managed_admin_password_override_is_not_displayed_or_saved(self):
+        import sqlite3
+        import tempfile
+        from unittest.mock import patch
+
+        previous_password = main.INITIAL_ADMIN_PASSWORD
+        previous_password_file = main.INITIAL_ADMIN_PASSWORD_FILE
+        with tempfile.TemporaryDirectory() as folder:
+            local_app_data = Path(folder) / "local"
+            database_path = Path(folder) / "society.db"
+            try:
+                main.INITIAL_ADMIN_PASSWORD = None
+                main.INITIAL_ADMIN_PASSWORD_FILE = None
+                with patch.object(main, "DB_PATH", str(database_path)), patch.dict(
+                    main.os.environ,
+                    {"LOCALAPPDATA": str(local_app_data), "VBCCPAS_ADMIN_PASSWORD": "Managed-Secret-Only"},
+                ):
+                    main.setup_database()
+                    with sqlite3.connect(database_path) as connection:
+                        stored_hash = connection.execute(
+                            "SELECT Password FROM Users WHERE Username='admin'"
+                        ).fetchone()[0]
+                    self.assertTrue(main.verify_password("Managed-Secret-Only", stored_hash))
+                    self.assertIsNone(main.INITIAL_ADMIN_PASSWORD)
+                    self.assertFalse(Path(main.get_initial_admin_password_file()).exists())
+            finally:
+                main.INITIAL_ADMIN_PASSWORD = previous_password
+                main.INITIAL_ADMIN_PASSWORD_FILE = previous_password_file
+
     def test_main_window_geometry_fits_common_windows_workspaces(self):
         for screen_width, screen_height in (
             (1920, 1080),
