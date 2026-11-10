@@ -186,7 +186,7 @@ try {
     $InnoCompiler = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
     if (-not $InnoCompiler) {
         $ProgramFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
-        $DefaultInnoCompiler = Join-Path $ProgramFilesX86 "Inno Setup\ISCC.exe"
+        $DefaultInnoCompiler = Join-Path $ProgramFilesX86 "Inno Setup 6\ISCC.exe"
         if (Test-Path -LiteralPath $DefaultInnoCompiler -PathType Leaf) {
             $InnoCompiler = $DefaultInnoCompiler
         }
