@@ -271,6 +271,11 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         log_root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
         log_root.mkdir(parents=True, exist_ok=True)
         output_path = log_root / "updater-powershell.log"
+        update_log_path = log_root / "update.log"
+        try:
+            previous_update_log_size = update_log_path.stat().st_size
+        except OSError:
+            previous_update_log_size = 0
         _log_handoff("Launching PowerShell; executable=" + str(powershell)
                      + "; script=" + str(script)
                      + "; target=" + str(target)
@@ -323,6 +328,18 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
                 raise RuntimeError("The PowerShell installer returned no usable exit status.")
             _log_handoff("PowerShell completed while updater remained alive; exit_code="
                          + str(completion_code))
+            if completion_code == 0:
+                try:
+                    with update_log_path.open("rb") as update_log:
+                        update_log.seek(previous_update_log_size)
+                        new_update_log = update_log.read().decode("utf-8", errors="replace")
+                except OSError:
+                    new_update_log = ""
+                if "Update completed successfully" not in new_update_log:
+                    raise RuntimeError(
+                        "PowerShell exited without recording a successful application update. "
+                        "Check %LOCALAPPDATA%\\VBCCPAS\\update.log and updater-powershell.log."
+                    )
             if completion_code != 0:
                 raise RuntimeError(
                     "The PowerShell installer failed with exit code "
