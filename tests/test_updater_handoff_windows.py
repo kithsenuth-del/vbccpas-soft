@@ -130,7 +130,13 @@ def main():
             raise AssertionError("PowerShell handoff marker contents were incorrect.")
         if "remains running after startup check" not in launch_text:
             raise AssertionError("The launcher did not record the expected two-second running-child check.")
-        print("PASS: PowerShell completed its staged work after the Python updater launcher exited.")
+        if "PowerShell launched with CREATE_BREAKAWAY_FROM_JOB." not in launch_text:
+            raise AssertionError(
+                "The Windows launcher did not successfully request CREATE_BREAKAWAY_FROM_JOB. "
+                "The regression test must verify the intended mitigation, not only a fallback launch."
+            )
+        time.sleep(1)
+        print("PASS: PowerShell completed its staged work after the Python updater launcher exited using CREATE_BREAKAWAY_FROM_JOB.")
 
 
 if __name__ == "__main__":
