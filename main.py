@@ -249,6 +249,19 @@ def setup_database():
 	for column_name, column_type in inventory_columns.items():
 		if column_name.lower() not in current_inventory_columns:
 			cur.execute(f'ALTER TABLE Inventory ADD COLUMN {column_name} {column_type}')
+	# Equipment maintenance and repair history.
+	cur.execute('''
+	CREATE TABLE IF NOT EXISTS MaintenanceRecords (
+		MaintenanceID INTEGER PRIMARY KEY AUTOINCREMENT,
+		ItemID INTEGER NOT NULL,
+		ServiceDate TEXT NOT NULL,
+		WorkType TEXT NOT NULL,
+		Description TEXT,
+		Cost REAL,
+		PerformedBy TEXT,
+		NextDueDate TEXT
+	)
+	''')
 	# Borrowed
 	cur.execute('''
 	CREATE TABLE IF NOT EXISTS BorrowedItems (
@@ -984,8 +997,71 @@ class App:
 				messagebox.showwarning('Select equipment', 'Choose an equipment record first.')
 				return
 			self.edit_item_dialog(tree.item(selection[0])['values'][0])
+		def maintenance_selected():
+			selection = tree.selection()
+			if not selection:
+				messagebox.showwarning('Select equipment', 'Choose an equipment record to view its maintenance history.')
+				return
+			self.open_maintenance_window(tree.item(selection[0])['values'][0])
 		ttk.Button(actions, text='Edit Selected Equipment', command=edit_selected, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(actions, text='Maintenance / Repairs', command=maintenance_selected).pack(side=tk.LEFT, padx=(8,0))
 		ttk.Button(actions, text='Refresh Register', command=refresh).pack(side=tk.RIGHT)
+
+	def open_maintenance_window(self, item_id):
+		with sqlite3.connect(DB_PATH) as conn:
+			item = conn.execute('SELECT Name FROM Inventory WHERE ItemID=?', (item_id,)).fetchone()
+		if not item:
+			messagebox.showwarning('Equipment not found', 'This equipment record no longer exists.')
+			return
+		window = tk.Toplevel(self.root)
+		window.title(f'Maintenance history — {item[0]}')
+		window.configure(bg=self.colors['bg'])
+		window.geometry('900x470')
+		window.transient(self.root)
+		self.module_heading(window, f'Maintenance — {item[0]}', 'Record inspections, cleaning, preventive maintenance and repairs.')
+		tree = self.module_table(window, ('Date','Work type','Description','Cost','Performed by','Next due'),
+			{'Date':110,'Work type':150,'Description':260,'Cost':100,'Performed by':130,'Next due':110})
+		def refresh_history():
+			for child in tree.get_children(): tree.delete(child)
+			with sqlite3.connect(DB_PATH) as conn:
+				rows = conn.execute('''SELECT ServiceDate,WorkType,Description,Cost,PerformedBy,NextDueDate
+					FROM MaintenanceRecords WHERE ItemID=? ORDER BY ServiceDate DESC,MaintenanceID DESC''', (item_id,)).fetchall()
+			for row in rows: tree.insert('', tk.END, values=row)
+		def add_record():
+			d, fields, footer = self.create_form_dialog('Add Maintenance Record', 'Record service or repair work for this equipment.',
+				[('date','Service date (YYYY-MM-DD)'),('type','Work type',['Inspection','Cleaning','Preventive maintenance','Repair','Calibration','Other']),
+				 ('description','Work performed / findings'),('cost','Cost (optional)'),('person','Performed by'),('next_due','Next service due (YYYY-MM-DD)')], '680x500')
+			fields['type'].set('Inspection')
+			def save():
+				service_date, next_due = fields['date'].get().strip(), fields['next_due'].get().strip()
+				try:
+					datetime.strptime(service_date, '%Y-%m-%d')
+					if next_due: datetime.strptime(next_due, '%Y-%m-%d')
+				except ValueError:
+					messagebox.showwarning('Invalid date', 'Enter dates in YYYY-MM-DD format.', parent=d); return
+				cost_text = fields['cost'].get().strip().replace(',','')
+				try: cost = float(cost_text) if cost_text else None
+				except ValueError:
+					messagebox.showwarning('Invalid cost', 'Enter a valid non-negative cost.', parent=d); return
+				if cost is not None and cost < 0:
+					messagebox.showwarning('Invalid cost', 'Cost cannot be negative.', parent=d); return
+				try:
+					with sqlite3.connect(DB_PATH) as conn:
+						conn.execute('''INSERT INTO MaintenanceRecords
+							(ItemID,ServiceDate,WorkType,Description,Cost,PerformedBy,NextDueDate)
+							VALUES (?,?,?,?,?,?,?)''',
+							(item_id,service_date,fields['type'].get(),fields['description'].get().strip(),
+							 cost,fields['person'].get().strip(),next_due or None))
+				except sqlite3.Error as exc:
+					messagebox.showerror('Could not save maintenance record', str(exc), parent=d); return
+				d.destroy(); refresh_history()
+			ttk.Button(footer, text='Cancel', command=d.destroy).pack(side=tk.RIGHT, padx=(8,0))
+			ttk.Button(footer, text='Save Record', command=save, style='Rounded.TButton').pack(side=tk.RIGHT)
+		toolbar = ttk.Frame(window)
+		toolbar.pack(fill=tk.X, padx=22, pady=(0,16))
+		ttk.Button(toolbar, text='＋  Add Service / Repair', command=add_record, style='Rounded.TButton').pack(side=tk.LEFT)
+		ttk.Button(toolbar, text='Close', command=window.destroy).pack(side=tk.RIGHT)
+		refresh_history()
 
 	def edit_item_dialog(self, item_id):
 		with sqlite3.connect(DB_PATH) as conn:
