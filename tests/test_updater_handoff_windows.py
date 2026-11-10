@@ -111,7 +111,7 @@ def main():
         )
         direct_script = root / "direct-smoke.ps1"
         direct_script.write_text(direct_script_text, encoding="utf-8")
-        powershell = Path(os.environ.get("SystemRoot", r"C:\\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+        powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
         direct = subprocess.run(
             [
                 str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive",
