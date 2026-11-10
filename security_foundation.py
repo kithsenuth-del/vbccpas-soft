@@ -195,12 +195,12 @@ def create_admin_recovery_code(database_path, username="admin"):
         """)
         conn.execute("""
             INSERT INTO AdminRecovery
-                (RecoveryID, Username, Salt, Digest, Iterations, CreatedAt, UsedAt)
-            VALUES (1, ?, ?, ?, ?, ?, NULL)
-            ON CONFLICT(RecoveryID) DO UPDATE SET
-                Username=excluded.Username, Salt=excluded.Salt,
-                Digest=excluded.Digest, Iterations=excluded.Iterations,
-                CreatedAt=excluded.CreatedAt, UsedAt=NULL
+                (Username, Salt, Digest, Iterations, CreatedAt, UsedAt)
+            VALUES (?, ?, ?, ?, ?, NULL)
+            ON CONFLICT(Username) DO UPDATE SET
+                Salt=excluded.Salt, Digest=excluded.Digest,
+                Iterations=excluded.Iterations, CreatedAt=excluded.CreatedAt,
+                UsedAt=NULL
         """, (username, salt, digest, RECOVERY_HASH_ITERATIONS,
               datetime.now(timezone.utc).isoformat()))
     return code
@@ -281,7 +281,7 @@ def admin_pin_configured(database_path, username="admin"):
         if not exists:
             return False
         return conn.execute(
-            "SELECT 1 FROM AdminPin WHERE PinID=1 AND Username=?",
+            "SELECT 1 FROM AdminPin WHERE Username=?",
             (username,),
         ).fetchone() is not None
 
@@ -313,12 +313,11 @@ def set_admin_pin(database_path, username, pin):
             )
         """)
         conn.execute("""
-            INSERT INTO AdminPin (PinID, Username, Salt, Digest, Iterations, UpdatedAt)
-            VALUES (1, ?, ?, ?, ?, ?)
-            ON CONFLICT(PinID) DO UPDATE SET
-                Username=excluded.Username, Salt=excluded.Salt,
-                Digest=excluded.Digest, Iterations=excluded.Iterations,
-                UpdatedAt=excluded.UpdatedAt
+            INSERT INTO AdminPin (Username, Salt, Digest, Iterations, UpdatedAt)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(Username) DO UPDATE SET
+                Salt=excluded.Salt, Digest=excluded.Digest,
+                Iterations=excluded.Iterations, UpdatedAt=excluded.UpdatedAt
         """, (username, salt, digest, iterations, datetime.now(timezone.utc).isoformat()))
 
 
@@ -336,7 +335,7 @@ def verify_admin_pin(database_path, username, pin):
         if not exists:
             return False
         row = conn.execute(
-            "SELECT Salt, Digest, Iterations FROM AdminPin WHERE PinID=1 AND Username=?",
+            "SELECT Salt, Digest, Iterations FROM AdminPin WHERE Username=?",
             (username,),
         ).fetchone()
     if not row:
@@ -384,7 +383,8 @@ def reset_admin_password_with_recovery_code(
         """)
         row = conn.execute(
             "SELECT Username, Salt, Digest, Iterations, UsedAt "
-            "FROM AdminRecovery WHERE RecoveryID=1"
+            "FROM AdminRecovery WHERE Username=?",
+            (username,),
         ).fetchone()
         if not row or row[4]:
             raise PermissionError("The recovery code was not accepted or has already been used.")
@@ -426,8 +426,8 @@ def reset_admin_password_with_recovery_code(
                     Iterations=excluded.Iterations, UpdatedAt=excluded.UpdatedAt
             """, (username, salt, digest, iterations, datetime.now(timezone.utc).isoformat()))
         conn.execute(
-            "UPDATE AdminRecovery SET UsedAt=? WHERE RecoveryID=1",
-            (datetime.now(timezone.utc).isoformat(),),
+            "UPDATE AdminRecovery SET UsedAt=? WHERE Username=?",
+            (datetime.now(timezone.utc).isoformat(), username),
         )
         conn.execute("DELETE FROM LoginGuard WHERE GuardID=1")
         conn.commit()
