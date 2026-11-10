@@ -243,6 +243,14 @@ $data = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadBase
 $service = New-Object -ComObject Schedule.Service
 $service.Connect()
 $folder = $service.GetFolder("\")
+foreach ($existingTask in @($folder.GetTasks(0))) {
+    if ($existingTask.Name -like "VBCCPAS-Update-*") {
+        if ($existingTask.State -eq 4 -or $existingTask.State -eq 2) {
+            throw ("Another VBCCPAS scheduled update is still active: " + $existingTask.Name)
+        }
+        try { $folder.DeleteTask($existingTask.Name, 0) } catch { }
+    }
+}
 $definition = $service.NewTask(0)
 $definition.RegistrationInfo.Description = "Temporary VBCCPAS update handoff"
 $definition.Settings.Enabled = $true
