@@ -772,7 +772,7 @@ class App:
 		def load_rows(*_):
 			for row in tree.get_children():
 				tree.delete(row)
-				term = search_var.get().strip().lower()
+			term = search_var.get().strip().lower()
 			conn = sqlite3.connect(DB_PATH)
 			cur = conn.cursor()
 			cur.execute('''SELECT ItemID, Name, Category, Brand, Model, SerialNumber,
