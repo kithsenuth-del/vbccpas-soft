@@ -553,9 +553,9 @@ try {
     $message += [Environment]::NewLine + 'Update log: ' + $logPath
     $message += [Environment]::NewLine + [Environment]::NewLine + $failureMessage
     if (-not $Quiet) { Show-UpdateError $message }
-    Remove-ScheduledUpdateTask
     if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
         Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
+    Remove-ScheduledUpdateTask
     exit 1
 }
