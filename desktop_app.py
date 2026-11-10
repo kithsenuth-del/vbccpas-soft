@@ -38,7 +38,7 @@ class UnifiedApp(desktop.App):
                 command=lambda selected=key: self.show_view(selected),
                 style="Sidebar.TButton",
             )
-            button.pack(fill=tk.X, padx=12, pady=6)
+            button.pack(before=self.sidebar_title, fill=tk.X, padx=12, pady=6)
             self.side_buttons[key] = button
 
     def try_login(self):
