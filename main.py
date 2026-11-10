@@ -1,6 +1,6 @@
 
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import sqlite3
 import hashlib
 import hmac
@@ -10,6 +10,7 @@ import csv
 import sys
 from datetime import datetime
 from database_migrations import create_verified_backup
+from security_foundation import validate_password, record_security_event, restore_database
 
 if getattr(sys, 'frozen', False):
 	BASE_DIR = os.path.dirname(sys.executable)
@@ -1389,6 +1390,77 @@ class App:
 			tk.Label(card, text=title, font=('Segoe UI', 13, 'bold')).pack(anchor='w', padx=16, pady=(12, 3))
 			tk.Label(card, text=description, foreground='#aeb4c7').pack(anchor='w', padx=16, pady=(0, 10))
 			ttk.Button(card, text='Export CSV', command=command, style='Rounded.TButton').pack(anchor='w', padx=16, pady=(0, 10))
+		# Database recovery controls are separate from CSV exports.
+		recovery = tk.Frame(parent, bg=self.colors['bg'])
+		recovery.pack(fill=tk.X, padx=18, pady=(4, 18))
+		tk.Button(recovery, text='Create verified database backup',
+		          command=self.create_database_backup, style='Rounded.TButton').pack(side=tk.LEFT, padx=(0, 8))
+		tk.Button(recovery, text='Restore from backup',
+		          command=self.restore_database_backup, style='Rounded.TButton').pack(side=tk.LEFT)
+
+	def _confirm_admin_password(self):
+		if self.user.get('role') != 'admin':
+			messagebox.showerror('Administrator required', 'Only the executive administrator can perform this action.')
+			return False
+		password = simpledialog.askstring(
+			'Confirm administrator identity',
+			'Enter your current administrator password to continue:',
+			parent=self.root, show='*')
+		if password is None:
+			return False
+		with sqlite3.connect(DB_PATH) as conn:
+			row = conn.execute('SELECT Password FROM Users WHERE Username=? AND Role=?',
+			                   (self.user.get('username'), 'admin')).fetchone()
+		if not row or not verify_password(password, row[0]):
+			messagebox.showerror('Verification failed', 'The administrator password was not accepted.')
+			return False
+		return True
+
+	def create_database_backup(self):
+		if not self._confirm_admin_password():
+			return
+		directory = filedialog.askdirectory(
+			title='Choose a folder for the verified database backup',
+			mustexist=True, parent=self.root)
+		if not directory:
+			return
+		try:
+			backup = create_verified_backup(DB_PATH, directory)
+			record_security_event(DB_PATH, self.user['username'], 'database_backup_created',
+			                     backup.name, 'SQLite integrity, schema and row counts verified')
+			messagebox.showinfo('Backup completed', 'Verified backup created successfully:\n' + str(backup))
+		except Exception as exc:
+			messagebox.showerror('Backup failed', str(exc))
+
+	def restore_database_backup(self):
+		if not self._confirm_admin_password():
+			return
+		backup = filedialog.askopenfilename(
+			title='Select a VBCCPAS database backup',
+			filetypes=[('SQLite database', '*.db'), ('All files', '*.*')],
+			parent=self.root)
+		if not backup:
+			return
+		if not messagebox.askyesno(
+			'Confirm database restore',
+			'This replaces the current society database. A verified safety backup of the current database will be created first. Continue?',
+			icon='warning', parent=self.root):
+			return
+		try:
+			safety_backup = restore_database(backup, DB_PATH)
+			# Record the restore in the newly restored database; the pre-restore
+			# database is preserved in the safety backup returned above.
+			record_security_event(DB_PATH, self.user['username'], 'database_restored',
+			                     os.path.basename(backup),
+			                     'Pre-restore safety backup: ' + safety_backup.name)
+			messagebox.showinfo('Restore completed',
+				'Backup restored and validated. Previous database preserved at:\n' + str(safety_backup) +
+				'\n\nThe application will now refresh its dashboard.')
+			self.show_view('dashboard')
+		except Exception as exc:
+			messagebox.showerror('Restore failed', str(exc))
+
+
 	def view_security(self, parent):
 		self.module_heading(parent, 'Security & Users', 'Manage application accounts and administrator access.')
 		if self.user.get('role') != 'admin':
