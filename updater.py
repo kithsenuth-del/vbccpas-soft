@@ -363,11 +363,6 @@ def download_and_launch(release, target_exe, process_id, updater_process_id=0, r
         log_root = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "VBCCPAS"
         log_root.mkdir(parents=True, exist_ok=True)
         output_path = log_root / "updater-powershell.log"
-        update_log_path = log_root / "update.log"
-        try:
-            previous_update_log_size = update_log_path.stat().st_size
-        except OSError:
-            previous_update_log_size = 0
         _log_handoff("Launching PowerShell; executable=" + str(powershell)
                      + "; script=" + str(script)
                      + "; target=" + str(target)
